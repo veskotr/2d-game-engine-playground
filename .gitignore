@@ -1,0 +1,64 @@
+# =========================
+# Build folders (CMake)
+# =========================
+build/
+cmake-build-*/
+out/
+cmake-out/
+
+# =========================
+# CMake cache & generated files
+# =========================
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+*_deps/
+
+# =========================
+# Visual Studio / MSVC
+# =========================
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.log
+*.tlog
+ipch/
+.vs/
+
+# =========================
+# VSCode
+# =========================
+.vscode/ipch/
+.vscode/*.log
+
+# =========================
+# Debug / runtime output
+# =========================
+*.exe
+*.pdb
+*.ilk
+*.obj
+*.o
+
+# =========================
+# OS junk
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Dependencies (FetchContent build artifacts)
+# =========================
+build/*/_deps/
+cmake-build-*/_deps/
+
+# =========================
+# Asset runtime outputs (optional, if you add later)
+# =========================
+bin/
+dist/

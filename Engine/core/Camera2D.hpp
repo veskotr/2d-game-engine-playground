@@ -7,6 +7,8 @@ class Camera2D
 public:
     Camera2D(float width, float height);
 
+    void setViewport(float width, float height);
+
     void setPosition(const glm::vec2& pos);
     void move(const glm::vec2& delta);
 

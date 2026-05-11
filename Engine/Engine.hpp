@@ -9,6 +9,7 @@ class Engine
 {
 public:
     Engine(const EngineConfig &config);
+    ~Engine();
 
     Result<bool> init();
     void run();

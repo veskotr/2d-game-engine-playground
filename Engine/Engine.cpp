@@ -1,9 +1,17 @@
 #include "Engine.hpp"
 #include "core/Log.hpp"
+#include "core/Resources.hpp"
 
 Engine::Engine(const EngineConfig &config)
     : config(config)
 {
+}
+
+Engine::~Engine()
+{
+    Resources::clear();
+    renderer.shutdown();
+    window.destroy();
 }
 
 Result<bool> Engine::init()
@@ -12,6 +20,10 @@ Result<bool> Engine::init()
     if (!windowResult.ok())
         return Result<bool>::error(windowResult.error());
 
+    camera.setViewport(
+        static_cast<float>(window.getWidth()),
+        static_cast<float>(window.getHeight()));
+
     auto rendererResult = renderer.init();
     if (!rendererResult.ok())
         return Result<bool>::error(rendererResult.error());
@@ -19,6 +31,11 @@ Result<bool> Engine::init()
     Input::init(window.getNative());
 
     renderer.setCamera(&camera);
+    renderer.setShader(Resources::create<Shader>(
+                           "quad",
+                           "assets/shaders/quad.vert",
+                           "assets/shaders/quad.frag")
+                           .get());
 
     return Result<bool>::success(true);
 }
@@ -27,12 +44,20 @@ void Engine::run()
 {
     while (!window.shouldClose())
     {
+        Input::update();
+
         timer.tick();
 
         float dt = timer.getDeltaTime();
 
         window.pollEvents();
-        Input::update();
+
+        if (window.consumeResize())
+        {
+            camera.setViewport(
+                static_cast<float>(window.getWidth()),
+                static_cast<float>(window.getHeight()));
+        }
 
         if (Input::isKeyDown(GLFW_KEY_ESCAPE))
             break;
@@ -58,7 +83,6 @@ void Engine::run()
         quadCmd.size = glm::vec2(32.0f, 32.0f);
         renderer.submit(quadCmd);
 
-        
         QuadCommand quadCmd1;
         quadCmd1.position = glm::vec2(64.0f, 64.0f);
         quadCmd1.size = glm::vec2(32.0f, 32.0f);

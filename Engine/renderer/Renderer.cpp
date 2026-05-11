@@ -1,59 +1,48 @@
 #include "Renderer.hpp"
-#include <glad/gl.h>
 #include "core/GLDebug.hpp"
 #include "core/Log.hpp"
-
-static bool checkShader(uint32_t shader);
+#include <glad/gl.h>
 
 Result<bool> Renderer::init()
 {
     createQuad();
 
-    const char *vs = R"(
-    #version 460 core
-    layout(location = 0) in vec2 aPos;
-
-    uniform mat4 uVP;
-    uniform vec2 uPos;
-    uniform vec2 uSize;
-
-    void main()
-    {
-        vec2 world = aPos * uSize + uPos;
-        gl_Position = uVP * vec4(world, 0.0, 1.0);
-    }
-)";
-
-    const char *fs = R"(
-        #version 460 core
-        out vec4 FragColor;
-
-        void main()
-        {
-            FragColor = vec4(0.2, 0.8, 1.0, 1.0);
-        }
-    )";
-
-    shader = compileShader(vs, fs);
-    if (!checkShader(shader))
-    {
-        return Result<bool>::error("Failed to compile shader");
-    }
-
     return Result<bool>::success(true);
 }
 
-void Renderer::submit(const QuadCommand& cmd)
+void Renderer::shutdown()
+{
+    if (VBO != 0)
+    {
+        GL_CALL(glDeleteBuffers(1, &VBO));
+        VBO = 0;
+    }
+
+    if (VAO != 0)
+    {
+        GL_CALL(glDeleteVertexArrays(1, &VAO));
+        VAO = 0;
+    }
+
+    queue.clear();
+}
+
+void Renderer::setShader(Shader *s)
+{
+    shader = s;
+}
+
+void Renderer::submit(const QuadCommand &cmd)
 {
     queue.emplace_back(cmd);
 }
 
-void Renderer::submit(const LineCommand& cmd)
+void Renderer::submit(const LineCommand &cmd)
 {
     queue.emplace_back(cmd);
 }
 
-void Renderer::submit(const TextCommand& cmd)
+void Renderer::submit(const TextCommand &cmd)
 {
     queue.emplace_back(cmd);
 }
@@ -66,10 +55,10 @@ void Renderer::beginFrame()
 
 void Renderer::endFrame()
 {
-    for (auto& cmd : queue)
+    for (auto &cmd : queue)
     {
-        std::visit([this](auto&& c)
-        {
+        std::visit([this](auto &&c)
+                   {
             using T = std::decay_t<decltype(c)>;
 
             if constexpr (std::is_same_v<T, QuadCommand>)
@@ -83,30 +72,24 @@ void Renderer::endFrame()
             else if constexpr (std::is_same_v<T, TextCommand>)
             {
                 // drawText(c);
-            }
-        }, cmd);
+            } }, cmd);
     }
 
     queue.clear();
 }
 
-void Renderer::drawQuad(const QuadCommand& c)
+void Renderer::drawQuad(const QuadCommand &c)
 {
-    GL_CALL(glUseProgram(shader));
+    if (!shader)
+        return;
+
+    shader->bind();
 
     if (camera)
-    {
-        glm::mat4 vp = camera->getViewProjection();
-        GL_CALL(glUniformMatrix4fv(
-            glGetUniformLocation(shader, "uVP"),
-            1,
-            GL_FALSE,
-            &vp[0][0]
-        ));
-    }
+        shader->setMat4("uVP", camera->getViewProjection());
 
-    GL_CALL(glUniform2f(glGetUniformLocation(shader, "uPos"), c.position.x, c.position.y));
-    GL_CALL(glUniform2f(glGetUniformLocation(shader, "uSize"), c.size.x, c.size.y));
+    shader->setVec2("uPos", c.position);
+    shader->setVec2("uSize", c.size);
 
     GL_CALL(glBindVertexArray(VAO));
     GL_CALL(glDrawArrays(GL_TRIANGLES, 0, 6));
@@ -149,6 +132,8 @@ uint32_t Renderer::compileShader(const char *vs, const char *fs)
         char log[1024];
         glGetShaderInfoLog(vertex, 1024, nullptr, log);
         Log::error("Vertex shader error: {}", log);
+        glDeleteShader(vertex);
+        return 0;
     }
 
     uint32_t fragment = glCreateShader(GL_FRAGMENT_SHADER);
@@ -161,6 +146,9 @@ uint32_t Renderer::compileShader(const char *vs, const char *fs)
         char log[1024];
         glGetShaderInfoLog(fragment, 1024, nullptr, log);
         Log::error("Fragment shader error: {}", log);
+        glDeleteShader(vertex);
+        glDeleteShader(fragment);
+        return 0;
     }
 
     uint32_t program = glCreateProgram();
@@ -174,6 +162,10 @@ uint32_t Renderer::compileShader(const char *vs, const char *fs)
         char log[1024];
         glGetProgramInfoLog(program, 1024, nullptr, log);
         Log::error("Program link error: {}", log);
+        glDeleteProgram(program);
+        glDeleteShader(vertex);
+        glDeleteShader(fragment);
+        return 0;
     }
 
     glDeleteShader(vertex);
@@ -182,23 +174,7 @@ uint32_t Renderer::compileShader(const char *vs, const char *fs)
     return program;
 }
 
-void Renderer::setCamera(const Camera2D* cam)
+void Renderer::setCamera(const Camera2D *cam)
 {
     camera = cam;
-}
-
-static bool checkShader(uint32_t shader)
-{
-    int success;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-
-    if (!success)
-    {
-        char log[1024];
-        glGetShaderInfoLog(shader, 1024, nullptr, log);
-        Log::error("Shader compile error: {}", log);
-        return false;
-    }
-
-    return true;
 }

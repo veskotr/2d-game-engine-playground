@@ -8,6 +8,8 @@ target_sources(engine
         core/Window.cpp
         core/Camera2D.cpp
         core/Timer.cpp
+        renderer/Shader.cpp
+        core/Resources.cpp
 )
 
 target_include_directories(engine

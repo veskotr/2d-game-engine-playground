@@ -2,7 +2,7 @@
 
 #ifdef ENGINE_DEBUG
 #include <glad/gl.h>
-#include "Log.h"
+#include "Log.hpp"
 
 inline void GLCheck(const char* file, int line)
 {

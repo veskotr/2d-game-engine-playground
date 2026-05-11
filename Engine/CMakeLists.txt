@@ -2,7 +2,12 @@ add_library(engine)
 
 target_sources(engine
     PRIVATE
-        engine.cpp
+        Engine.cpp
+        input/Input.cpp
+        renderer/Renderer.cpp
+        core/Window.cpp
+        core/Camera2D.cpp
+        core/Timer.cpp
 )
 
 target_include_directories(engine

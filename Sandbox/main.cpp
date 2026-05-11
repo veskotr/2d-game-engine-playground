@@ -1,46 +1,25 @@
-#include <glad/gl.h>
-#include "GLFW/glfw3.h"
-#include <iostream>
+#define ENGINE_DEBUG
 
-int main(int argc, char *argv[])
+#include "Engine.hpp"
+#include "core/Log.hpp"
+int main()
 {
-  std::cout << "Hello, World!" << std::endl;
+  EngineConfig config;
 
-  GLFWwindow *window;
-  if (!glfwInit())
+  config.width = 480;
+  config.height = 270;
+  config.vsync = true;
+  config.title = "Sandbox Game";
+  config.screenMode = ScreenMode::Windowed;
+
+  Engine engine(config);
+
+  auto initResult = engine.init();
+  if (!initResult.ok())
   {
-    return -1;
+      Log::error("Failed to initialize engine: {}", initResult.error());
+      return -1;
   }
 
-  window = glfwCreateWindow(640, 480, "Hello World", NULL, NULL);
-  if (!window)
-  {
-    glfwTerminate();
-    return -1;
-  }
-
-  glfwMakeContextCurrent(window);
-
-  
-    int version = gladLoadGL(glfwGetProcAddress);
-    if (version == 0) {
-        printf("Failed to initialize OpenGL context\n");
-        return -1;
-    }
-
-    // Successfully loaded OpenGL
-    printf("Loaded OpenGL %d.%d\n", GLAD_VERSION_MAJOR(version), GLAD_VERSION_MINOR(version));
-
-  while (!glfwWindowShouldClose(window))
-  {
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glfwSwapBuffers(window);
-    glfwPollEvents();
-  }
-
-  glfwDestroyWindow(window);
-  glfwTerminate();
-
-  return 0;
+  engine.run();
 }

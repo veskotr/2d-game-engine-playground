@@ -61,7 +61,7 @@ FetchContent_MakeAvailable(box2d)
 # =========================
 add_library(stb_image INTERFACE)
 target_include_directories(stb_image INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/stb
+    ${CMAKE_SOURCE_DIR}/External/stb
 )
 
 # =========================
@@ -89,3 +89,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glad)
 glad_add_library(glad_gl_core_43 STATIC REPRODUCIBLE LOADER API gl:core=4.3)
+
+# =========================
+# Lua
+# =========================
+
+include(FetchContent)
+
+FetchContent_Declare(
+    lua
+    GIT_REPOSITORY "https://github.com/marovira/lua"
+    GIT_TAG "5.4.8"
+)
+
+FetchContent_MakeAvailable(lua)

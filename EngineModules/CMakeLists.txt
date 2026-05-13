@@ -1,0 +1,7 @@
+add_subdirectory(Core)
+add_subdirectory(Platform)
+add_subdirectory(Renderer)
+add_subdirectory(Resources)
+add_subdirectory(Scene)
+add_subdirectory(Scripting)
+add_subdirectory(Engine)

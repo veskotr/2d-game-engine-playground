@@ -1,7 +1,14 @@
 #define ENGINE_DEBUG
 
-#include "Engine.hpp"
-#include "core/Log.hpp"
+#include <sle/engine/Engine.hpp>
+#include <sle/core/Log.hpp>
+#include <sle/resources/Resources.hpp>
+#include <sle/renderer/Texture.hpp>
+
+using namespace sle;
+using namespace sle::core;
+using namespace sle::renderer;
+
 int main()
 {
   EngineConfig config;
@@ -21,5 +28,13 @@ int main()
       return -1;
   }
 
+  // Example: Load a texture and assign it to an object
+  // auto texture = Resources::create<Texture>("player", "assets/textures/player.png");
+  // if (texture) {
+  //     auto player = engine.getScene().createObject();
+  //     auto* sprite = player->addComponent<SpriteRenderer>();
+  //     sprite->textureId = texture->getID();
+  // }
+
   engine.run();
-}
+} 

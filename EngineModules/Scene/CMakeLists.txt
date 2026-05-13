@@ -13,6 +13,7 @@ target_link_libraries(sle_scene
     PUBLIC
         sle::core
         sle::resources
+        sle::renderer
 )
 
 add_library(sle::scene ALIAS sle_scene)

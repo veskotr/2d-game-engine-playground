@@ -44,17 +44,22 @@ namespace sle::renderer
 
     void Renderer::submit(const QuadCommand &cmd)
     {
-        queue.emplace_back(cmd);
+        BatchKey key{
+            cmd.layer,
+            cmd.shader_id,
+            cmd.texture_id};
+
+        batches[key].push_back(cmd);
     }
 
     void Renderer::submit(const LineCommand &cmd)
     {
-        queue.emplace_back(cmd);
+        // queue.emplace_back(cmd);
     }
 
     void Renderer::submit(const TextCommand &cmd)
     {
-        queue.emplace_back(cmd);
+        // queue.emplace_back(cmd);
     }
 
     void Renderer::beginFrame()
@@ -65,27 +70,88 @@ namespace sle::renderer
 
     void Renderer::endFrame()
     {
-        for (auto &cmd : queue)
-        {
-            std::visit([this](auto &&c)
-                       {
-            using T = std::decay_t<decltype(c)>;
+        // optional: sort keys by layer first
+        std::vector<std::pair<BatchKey, std::vector<QuadCommand> *>> ordered;
 
-            if constexpr (std::is_same_v<T, QuadCommand>)
-            {
-                drawQuad(c);
-            }
-            else if constexpr (std::is_same_v<T, LineCommand>)
-            {
-                // drawLine(c);
-            }
-            else if constexpr (std::is_same_v<T, TextCommand>)
-            {
-                // drawText(c);
-            } }, cmd);
+        ordered.reserve(batches.size());
+
+        for (auto &[key, vec] : batches)
+            ordered.push_back({key, &vec});
+
+        std::sort(ordered.begin(), ordered.end(),
+                  [](auto &a, auto &b)
+                  {
+                      return a.first.layer < b.first.layer;
+                  });
+
+        for (auto &[key, cmds] : ordered)
+        {
+            drawBatch(key, *cmds);
         }
 
-        queue.clear();
+        batches.clear();
+    }
+
+    void Renderer::drawBatch(const BatchKey &key, const std::vector<QuadCommand> &cmds)
+    {
+        if (cmds.empty())
+            return;
+
+        // bind state ONCE per batch
+        if (key.shader_id != currentShader)
+        {
+            bindShader(key.shader_id);
+            currentShader = key.shader_id;
+        }
+
+        if (key.texture_id != currentTexture)
+        {
+            bindTexture(key.texture_id);
+            currentTexture = key.texture_id;
+        }
+
+        // build GPU buffer (THIS is where batching actually happens)
+        std::vector<float> vertexBuffer;
+        vertexBuffer.reserve(cmds.size() * 6 * 9); // quad expansion
+
+        for (const auto &c : cmds)
+        {
+            appendQuad(vertexBuffer, c);
+        }
+
+        uploadAndDraw(vertexBuffer);
+    }
+
+    void Renderer::appendQuad(std::vector<float> &vb, const QuadCommand &c)
+    {
+        glm::mat4 m = c.modelMatrix;
+
+        glm::vec4 corners[4] =
+            {
+                m * glm::vec4(-1.0f, -1.0f, 0, 1),
+                m * glm::vec4(1.0f, -1.0f, 0, 1),
+                m * glm::vec4(1.0f, 1.0f, 0, 1),
+                m * glm::vec4(-1.0f, 1.0f, 0, 1)};
+
+        auto push = [&](int i)
+        {
+            vb.push_back(corners[i].x);
+            vb.push_back(corners[i].y);
+
+            vb.push_back(c.color.r);
+            vb.push_back(c.color.g);
+            vb.push_back(c.color.b);
+            vb.push_back(c.color.a);
+        };
+
+        // triangle 1
+        push(0);
+        push(1);
+        push(2);
+        // triangle 2
+        push(2);
+        push(3);
+        push(0);
     }
 
     void Renderer::drawQuad(const QuadCommand &c)
@@ -103,13 +169,14 @@ namespace sle::renderer
         shader->setVec4("uColor", c.color);
 
         int slot = 0;
-        GL_CALL(glActiveTexture(GL_TEXTURE0 + slot));
-
-        uint32_t tex = (c.texture != 0)
-                           ? c.texture
-                           : defaultWhiteTexture->getID();
-
-        GL_CALL(glBindTexture(GL_TEXTURE_2D, tex));
+        if (c.texture != 0)
+        {
+            c.texture->bind(slot);
+        }
+        else if (defaultWhiteTexture)
+        {
+            defaultWhiteTexture->bind(slot);
+        }
         shader->setInt("uTexture", slot);
 
         GL_CALL(glBindVertexArray(VAO));

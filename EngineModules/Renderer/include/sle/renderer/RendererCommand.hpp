@@ -7,10 +7,13 @@ namespace sle::renderer {
 
 struct QuadCommand
 {
-    glm::vec2 position;
-    glm::vec2 size;
-    glm::vec4 color = glm::vec4(1.0f);  // Default to white
-    uint32_t texture = 0;
+    glm::mat4 modelMatrix;
+    glm::vec4 color = glm::vec4(1.0f);
+
+    uint32_t texture_id = 0;
+    uint32_t shader_id  = 0;
+
+    uint32_t layer = 0;
     float z = 0.0f;
 };
 

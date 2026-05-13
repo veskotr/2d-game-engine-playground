@@ -3,6 +3,7 @@ add_library(sle_renderer STATIC
     src/Renderer.cpp
     src/Shader.cpp
     src/Texture.cpp
+    src/RenderSystem.cpp
 )
 
 target_include_directories(sle_renderer

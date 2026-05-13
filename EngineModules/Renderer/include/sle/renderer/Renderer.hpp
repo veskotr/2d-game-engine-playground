@@ -6,6 +6,7 @@
 #include <sle/core/Result.hpp>
 #include <memory>
 #include <vector>
+#include <BatchKey.hpp>
 
 namespace sle::renderer {
 
@@ -29,14 +30,15 @@ private:
     const sle::core::Camera2D *camera = nullptr;
     uint32_t VAO = 0;
     uint32_t VBO = 0;
-    std::shared_ptr<Shader> shader;
+    std::shared_ptr<Shader> defaultShader;
     std::shared_ptr<Texture> defaultWhiteTexture;
-    std::vector<RenderCommand> queue;
+    std::unordered_map<BatchKey, std::vector<QuadCommand>, BatchKeyHash> batches;
 
     void createQuad();
     void createDefaultTexture();
     uint32_t compileShader(const char *vs, const char *fs);
     void drawQuad(const QuadCommand &c);
+    void bindDefaultTexture(int slot);
 };
 
 } // namespace sle::renderer

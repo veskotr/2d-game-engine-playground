@@ -2,6 +2,7 @@
 
 #include <string>
 #include <cstdint>
+#include <glm/glm.hpp>
 
 namespace sle::renderer {
 
@@ -22,11 +23,15 @@ public:
 
     void setID(uint32_t id) { textureID = id; }
 
+    glm::vec4 getUV() const { return uv; }
+    void setUV(const glm::vec4& uvRect) { uv = uvRect; }
+
 private:
     uint32_t textureID = 0;
     int width = 0;
     int height = 0;
     int channels = 0;
+    glm::vec4 uv;
 };
 
 } // namespace sle::renderer

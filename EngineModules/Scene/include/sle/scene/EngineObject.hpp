@@ -6,13 +6,12 @@
 
 namespace sle::entity {
 
-class Registry;
 class Scene;
 
 class EngineObject
 {
 public:
-    EngineObject(Scene* scene, Registry* registry, Entity entity);
+    EngineObject(Scene* scene, Entity entity);
     ~EngineObject();
 
     // hierarchy
@@ -38,7 +37,6 @@ private:
     friend class Scene;
 
     Scene* scene;
-    Registry* registry;
     Entity entity;
 
     EngineObject* parent = nullptr;

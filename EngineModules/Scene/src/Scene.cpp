@@ -1,207 +1,117 @@
-#include <sle/scene/Scene.hpp>
 #include <algorithm>
+#include <sle/scene/Scene.hpp>
 
-namespace sle::entity {
-
-Scene::~Scene()
+namespace sle::entity
 {
-    destroy();
-}
 
-EngineObject* Scene::createObject()
-{
-    return createObject(nullptr);
-}
-
-EngineObject* Scene::createObject(EngineObject* parent)
-{
-    Entity entity = registry.createEntity();
-    auto object = std::make_unique<EngineObject>(this, &registry, entity);
-    auto* ptr = object.get();
-
-    ptr->parent = parent;
-
-    if (parent)
+    Scene::~Scene()
     {
-        parent->children.emplace_back(std::move(object));
-    }
-    else
-    {
-        roots.emplace_back(std::move(object));
+        destroy();
     }
 
-    objects[entity.getID()] = ptr;
-
-    if (initialized)
+    Entity Scene::createEntity()
     {
-        initializeObject(ptr, parent ? parent->effectiveEnabled : true);
-    }
-    else
-    {
-        ptr->initialized = false;
-        ptr->effectiveEnabled = (parent ? parent->effectiveEnabled : true) && ptr->enabled;
+        Entity entity = registry.createEntity();
+        roots.push_back(entity);
+        return entity;
     }
 
-    return ptr;
-}
-
-void Scene::initializeObject(EngineObject* object, bool parentEffective)
-{
-    if (!object || object->initialized)
-        return;
-
-    object->initialized = true;
-    object->effectiveEnabled = parentEffective && object->enabled;
-
-    if (object->onCreate)
-        object->onCreate(*object);
-
-    if (object->effectiveEnabled && object->onEnable)
-        object->onEnable(*object);
-
-    for (auto& child : object->children)
+    void Scene::destroyEntity(Entity entity)
     {
-        initializeObject(child.get(), object->effectiveEnabled);
+        if (!entity.valid())
+            return;
+
+        destroyEntityInternal(entity);
     }
-}
 
-void Scene::refreshEnabledState(EngineObject* object, bool parentEffective)
-{
-    if (!object)
-        return;
-
-    bool previousEffective = object->effectiveEnabled;
-    object->effectiveEnabled = parentEffective && object->enabled;
-
-    if (object->initialized && previousEffective != object->effectiveEnabled)
+    void Scene::destroyEntityInternal(Entity entity)
     {
-        if (object->effectiveEnabled)
+        // Destroy all descendants first (copy to avoid modifying the map while iterating)
+        auto it = childrenMap.find(entity.getID());
+        if (it != childrenMap.end())
         {
-            if (object->onEnable)
-                object->onEnable(*object);
+            std::vector<Entity> childrenCopy = it->second;
+            for (Entity child : childrenCopy)
+                destroyEntityInternal(child);
+
+            childrenMap.erase(entity.getID());
+        }
+
+        registry.destroyEntity(entity);
+
+        detachFromParent(entity);
+        parentMap.erase(entity.getID());
+    }
+
+    void Scene::detachFromParent(Entity entity)
+    {
+        auto parentIt = parentMap.find(entity.getID());
+        if (parentIt != parentMap.end())
+        {
+            // Remove from parent's children list
+            auto& siblings = childrenMap[parentIt->second.getID()];
+            siblings.erase(
+                std::remove_if(siblings.begin(), siblings.end(),
+                    [&entity](Entity e) { return e.getID() == entity.getID(); }),
+                siblings.end());
         }
         else
         {
-            if (object->onDisable)
-                object->onDisable(*object);
+            // Remove from roots
+            roots.erase(
+                std::remove_if(roots.begin(), roots.end(),
+                    [&entity](Entity e) { return e.getID() == entity.getID(); }),
+                roots.end());
         }
     }
 
-    for (auto& child : object->children)
+    void Scene::setParent(Entity child, Entity parent)
     {
-        refreshEnabledState(child.get(), object->effectiveEnabled);
-    }
-}
+        if (!child.valid())
+            return;
 
-bool Scene::isObjectActive(const EngineObject* object) const
-{
-    return object && object->isActive();
-}
+        detachFromParent(child);
 
-void Scene::unregisterObject(EngineObject* object)
-{
-    if (!object)
-        return;
-
-    objects.erase(object->getEntity().getID());
-}
-
-void Scene::destroyObject(EngineObject* object)
-{
-    if (!object)
-        return;
-
-    while (!object->children.empty())
-    {
-        destroyObject(object->children.back().get());
-    }
-
-    if (object->initialized && object->onDestroy)
-        object->onDestroy(*object);
-
-    registry.destroyEntity(object->getEntity());
-    unregisterObject(object);
-
-    auto removeFrom = [object](std::vector<std::unique_ptr<EngineObject>>& container)
-    {
-        auto it = std::remove_if(container.begin(), container.end(), [object](const std::unique_ptr<EngineObject>& candidate)
+        if (parent.valid())
         {
-            return candidate.get() == object;
-        });
-
-        if (it != container.end())
-        {
-            container.erase(it, container.end());
-            return true;
-        }
-
-        return false;
-    };
-
-    if (object->parent)
-    {
-        removeFrom(object->parent->children);
-    }
-    else
-    {
-        removeFrom(roots);
-    }
-}
-
-void Scene::setEnabled(EngineObject* object, bool value)
-{
-    if (!object)
-        return;
-
-    bool previousEffective = object->effectiveEnabled;
-    object->enabled = value;
-    object->effectiveEnabled = (object->parent ? object->parent->effectiveEnabled : true) && object->enabled;
-
-    if (object->initialized && previousEffective != object->effectiveEnabled)
-    {
-        if (object->effectiveEnabled)
-        {
-            if (object->onEnable)
-                object->onEnable(*object);
+            parentMap[child.getID()] = parent;
+            childrenMap[parent.getID()].push_back(child);
         }
         else
         {
-            if (object->onDisable)
-                object->onDisable(*object);
+            parentMap.erase(child.getID());
+            roots.push_back(child);
         }
     }
 
-    for (auto& child : object->children)
+    Entity Scene::getParent(Entity entity) const
     {
-        refreshEnabledState(child.get(), object->effectiveEnabled);
-    }
-}
+        auto it = parentMap.find(entity.getID());
+        if (it == parentMap.end())
+            return Entity{};
 
-void Scene::init()
-{
-    if (initialized)
-        return;
-
-    for (auto& obj : roots)
-    {
-        initializeObject(obj.get(), true);
+        return it->second;
     }
 
-    initialized = true;
-}
-
-void Scene::destroy()
-{
-    if (!initialized && roots.empty())
-        return;
-
-    while (!roots.empty())
+    const std::vector<Entity>& Scene::getChildren(Entity entity) const
     {
-        destroyObject(roots.back().get());
+        auto it = childrenMap.find(entity.getID());
+        if (it == childrenMap.end())
+            return emptyChildren;
+
+        return it->second;
     }
 
-    objects.clear();
-    initialized = false;
-}
+    void Scene::destroy()
+    {
+        // Work from a snapshot so destroyEntityInternal can mutate roots safely
+        std::vector<Entity> rootsCopy = roots;
+        for (Entity root : rootsCopy)
+            destroyEntityInternal(root);
+
+        roots.clear();
+        parentMap.clear();
+        childrenMap.clear();
+    }
 
 } // namespace sle::entity

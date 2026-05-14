@@ -4,7 +4,7 @@ namespace sle::entity {
 
 Entity Registry::createEntity()
 {
-    return Entity(nextEntityID++, this);
+    return Entity(nextEntityID++);
 }
 
 void Registry::destroyEntity(Entity entity)

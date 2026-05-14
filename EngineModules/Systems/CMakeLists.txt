@@ -1,5 +1,9 @@
 add_library(sle_engine STATIC
-    src/Engine.cpp
+    src/Runtime.cpp
+    src/TransformSystem.cpp
+    src/ScriptSystem.cpp
+    src/PhysicsSystem.cpp
+    src/RenderSystem.cpp
 )
 
 target_include_directories(sle_engine

@@ -1,6 +1,6 @@
 #define ENGINE_DEBUG
 
-#include <sle/engine/Engine.hpp>
+#include <sle/engine/Runtime.hpp>
 #include <sle/core/Log.hpp>
 #include <sle/resources/Resources.hpp>
 #include <sle/renderer/Texture.hpp>
@@ -19,7 +19,7 @@ int main()
   config.title = "Sandbox Game";
   config.screenMode = ScreenMode::Windowed;
 
-  Engine engine(config);
+  Runtime engine(config);
 
   auto initResult = engine.init();
   if (!initResult.ok())

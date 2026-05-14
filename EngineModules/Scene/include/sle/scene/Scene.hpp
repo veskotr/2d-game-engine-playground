@@ -1,57 +1,57 @@
 #pragma once
 #include <sle/scene/Registry.hpp>
-#include <sle/scene/EngineObject.hpp>
-#include <memory>
+#include <sle/scene/Entity.hpp>
 #include <unordered_map>
 #include <vector>
+#include <sle/core/EventBus.hpp>
 
 namespace sle::entity {
 
+// Scene is purely structural: it owns entity lifetime and the parent-child
+// hierarchy. All component data lives in Registry.
 class Scene
 {
 public:
     Scene() = default;
     ~Scene();
 
-    // create high-level engine object
-    EngineObject* createObject();
+    // Entity lifetime
+    Entity createEntity();
+    void destroyEntity(Entity entity);  // destroys entity and all its descendants
 
-    // internal ECS access
+    // Hierarchy
+    // Pass an invalid Entity as parent to make the child a root.
+    void setParent(Entity child, Entity parent);
+    Entity getParent(Entity entity) const;
+    const std::vector<Entity>& getChildren(Entity entity) const;
+    const std::vector<Entity>& getRoots() const { return roots; }
+
+    // ECS component access
     Registry& getRegistry() { return registry; }
+
+    // Event bus for decoupled communication between systems within this scene.
+    core::EventBus& getEventBus() { return eventBus; }
 
     template <typename T1, typename T2, typename Func>
     void view(Func func)
     {
-        registry.view<T1, T2>([this, &func](Entity entity, T1& first, T2& second)
-        {
-            auto it = objects.find(entity.getID());
-            if (it == objects.end() || !isObjectActive(it->second))
-                return;
-
-            func(entity, first, second);
-        });
+        registry.view<T1, T2>(func);
     }
 
-    // lifecycle
-    void init();
+    // Destroys all entities and clears all hierarchy data.
     void destroy();
 
 private:
-    friend class EngineObject;
-
-    EngineObject* createObject(EngineObject* parent);
-    void destroyObject(EngineObject* object);
-    void setEnabled(EngineObject* object, bool value);
-
-    void initializeObject(EngineObject* object, bool parentEffective);
-    void refreshEnabledState(EngineObject* object, bool parentEffective);
-    bool isObjectActive(const EngineObject* object) const;
-    void unregisterObject(EngineObject* object);
+    void destroyEntityInternal(Entity entity);
+    void detachFromParent(Entity entity);
 
     Registry registry;
-    std::vector<std::unique_ptr<EngineObject>> roots;
-    std::unordered_map<uint32_t, EngineObject*> objects;
-    bool initialized = false;
+    core::EventBus eventBus;
+    std::unordered_map<uint32_t, Entity> parentMap;                    // entityID -> parent (absent = root)
+    std::unordered_map<uint32_t, std::vector<Entity>> childrenMap;     // entityID -> children
+    std::vector<Entity> roots;
+
+    inline static const std::vector<Entity> emptyChildren{};
 };
 
 } // namespace sle::entity

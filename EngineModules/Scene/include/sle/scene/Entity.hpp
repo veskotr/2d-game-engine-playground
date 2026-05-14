@@ -3,21 +3,19 @@
 
 namespace sle::entity {
 
-class Registry;
-
 class Entity
 {
 public:
     Entity() = default;
-    Entity(uint32_t id, Registry* registry)
-        : id(id), registry(registry) {}
+    explicit Entity(uint32_t id) : m_id(id) {}
 
-    uint32_t getID() const { return id; }
-    bool valid() const { return registry != nullptr; }
+    uint32_t getID() const { return m_id; }
+    bool valid() const { return m_id != 0; }
+
+    bool operator==(const Entity&) const = default;
 
 private:
-    uint32_t id = 0;
-    Registry* registry = nullptr;
+    uint32_t m_id = 0;
 };
 
 } // namespace sle::entity

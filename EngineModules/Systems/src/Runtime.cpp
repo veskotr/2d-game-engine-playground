@@ -1,10 +1,9 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <sle/core/Log.hpp>
-#include <sle/engine/Engine.hpp>
+#include <sle/engine/Runtime.hpp>
+#include <sle/engine/Context.hpp>
 #include <sle/resources/Resources.hpp>
-#include <sle/scene/components/SpriteRenderer.hpp>
-#include <sle/scene/components/Transform.hpp>
 
 namespace sle
 {
@@ -14,12 +13,12 @@ namespace sle
     using namespace sle::renderer;
     using namespace sle::input;
 
-    Engine::Engine(const sle::core::EngineConfig &config)
+    Runtime::Runtime(const sle::core::EngineConfig &config)
         : config(config)
     {
     }
 
-    Engine::~Engine()
+    Runtime::~Runtime()
     {
         scene.destroy();
         // Clear resources BEFORE destroying window (while GL context is still valid)
@@ -28,7 +27,7 @@ namespace sle
         window.destroy();
     }
 
-    Result<bool> Engine::init()
+    Result<bool> Runtime::init()
     {
         auto windowResult = window.create(config);
         if (!windowResult.ok())
@@ -45,24 +44,12 @@ namespace sle
         Input::init(window.getNative());
 
         renderer.setCamera(&camera);
-        auto shader = Resources::create<Shader>(
-            "quad",
-            "assets/shaders/quad.vert",
-            "assets/shaders/quad.frag");
-
-        if (!shader)
-            return Result<bool>::error("Failed to load quad shader");
-
-        renderer.setShader(shader);
-        scene.init();
 
         return Result<bool>::success(true);
     }
 
-    void Engine::run()
+    void Runtime::run()
     {
-        auto texture = Resources::create<Texture>("player", "assets/textures/tile2.png");
-
         while (!window.shouldClose())
         {
             Input::update();
@@ -97,32 +84,30 @@ namespace sle
 
             camera.move(move * 32.0f * dt);
 
+            // Construct per-frame context with all system dependencies.
+            Context ctx{scene, scene.getRegistry(), scene.getEventBus(), renderer, dt};
+
+            // === FRAME START ===
+            // Clear accumulated events from previous frame.
+            ctx.eventBus.clear();
+
+            // === LOGIC UPDATE PHASE ===
+            // 1. Resolve world-space transforms (required by all other systems).
+            transformSystem.update(ctx);
+
+            // 2. Update scripted entities (placeholder for Lua integration).
+            scriptSystem.update(ctx);
+
+            // 3. Step physics simulation and resolve collisions (placeholder for Box2D).
+            physicsSystem.update(ctx);
+
+            // === RENDER PHASE ===
             renderer.beginFrame();
 
-            QuadCommand quadCmd;
-            quadCmd.position = glm::vec2(0.0f, 0.0f);
-            quadCmd.size = glm::vec2(32.0f, 32.0f);
-            quadCmd.texture = texture;
-            renderer.submit(quadCmd);
-
-            QuadCommand quadCmd1;
-            quadCmd1.position = glm::vec2(64.0f, 64.0f);
-            quadCmd1.size = glm::vec2(32.0f, 32.0f);
-            quadCmd1.texture = texture;
-            renderer.submit(quadCmd1);
+            // 4. Submit sprite renders for all entities with transforms.
+            renderSystem.update(ctx);
 
             sle::core::Log::info("FPS: {:.2f}", 1.0f / dt);
-
-            scene.view<sle::components::Transform, sle::components::SpriteRenderer>(
-                [this](sle::entity::Entity, sle::components::Transform &transform, sle::components::SpriteRenderer &sprite)
-                {
-                    sle::renderer::QuadCommand cmd{};
-                    cmd.position = transform.position;
-                    cmd.size = sprite.size * transform.scale;
-                    cmd.color = sprite.color;
-                    cmd.texture = sprite.texture;
-                    renderer.submit(cmd);
-                });
 
             renderer.endFrame();
 

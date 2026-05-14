@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <glad/gl.h>
 #include <sle/core/Log.hpp>
 #include <sle/renderer/GLDebug.hpp>
@@ -6,6 +7,14 @@
 namespace sle::renderer
 {
 
+    static const float vertices[] = {
+        // pos
+        -0.5f, -0.5f, // bottom left
+        0.5f, -0.5f,  // bottom right
+        0.5f, 0.5f,   // top right
+        -0.5f, 0.5f   // top left
+    };
+
     using sle::core::Camera2D;
     using sle::core::Log;
     using sle::core::Result;
@@ -13,19 +22,28 @@ namespace sle::renderer
     Result<bool> Renderer::init()
     {
         createQuad();
-        createDefaultTexture();
 
         return Result<bool>::success(true);
     }
 
     void Renderer::shutdown()
     {
-        shader.reset();
-
-        if (VBO != 0)
+        if (quadVBO != 0)
         {
-            GL_CALL(glDeleteBuffers(1, &VBO));
-            VBO = 0;
+            GL_CALL(glDeleteBuffers(1, &quadVBO));
+            quadVBO = 0;
+        }
+
+        if (quadIBO != 0)
+        {
+            GL_CALL(glDeleteBuffers(1, &quadIBO));
+            quadIBO = 0;
+        }
+
+        if (instanceVBO != 0)
+        {
+            GL_CALL(glDeleteBuffers(1, &instanceVBO));
+            instanceVBO = 0;
         }
 
         if (VAO != 0)
@@ -34,12 +52,7 @@ namespace sle::renderer
             VAO = 0;
         }
 
-        queue.clear();
-    }
-
-    void Renderer::setShader(std::shared_ptr<Shader> s)
-    {
-        shader = s;
+        batches.clear();
     }
 
     void Renderer::submit(const QuadCommand &cmd)
@@ -64,7 +77,7 @@ namespace sle::renderer
 
     void Renderer::beginFrame()
     {
-        GL_CALL(glClearColor(0.1f, 0.1f, 0.15f, 1.0f));
+        GL_CALL(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
         GL_CALL(glClear(GL_COLOR_BUFFER_BIT));
     }
 
@@ -92,199 +105,90 @@ namespace sle::renderer
         batches.clear();
     }
 
-    void Renderer::drawBatch(const BatchKey &key, const std::vector<QuadCommand> &cmds)
+    void Renderer::drawBatch(const BatchKey &key,
+                             const std::vector<QuadCommand> &cmds)
     {
         if (cmds.empty())
             return;
 
-        // bind state ONCE per batch
-        if (key.shader_id != currentShader)
-        {
-            bindShader(key.shader_id);
-            currentShader = key.shader_id;
-        }
+        bindShader(key.shader_id);
+        bindTexture(key.texture_id);
 
-        if (key.texture_id != currentTexture)
-        {
-            bindTexture(key.texture_id);
-            currentTexture = key.texture_id;
-        }
-
-        // build GPU buffer (THIS is where batching actually happens)
-        std::vector<float> vertexBuffer;
-        vertexBuffer.reserve(cmds.size() * 6 * 9); // quad expansion
+        std::vector<QuadInstance> instances;
+        instances.reserve(cmds.size());
 
         for (const auto &c : cmds)
         {
-            appendQuad(vertexBuffer, c);
+            QuadInstance inst;
+            inst.model = c.modelMatrix;
+            inst.color = c.color;
+            instances.push_back(inst);
         }
 
-        uploadAndDraw(vertexBuffer);
-    }
+        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0,
+                        instances.size() * sizeof(QuadInstance),
+                        instances.data());
 
-    void Renderer::appendQuad(std::vector<float> &vb, const QuadCommand &c)
-    {
-        glm::mat4 m = c.modelMatrix;
-
-        glm::vec4 corners[4] =
-            {
-                m * glm::vec4(-1.0f, -1.0f, 0, 1),
-                m * glm::vec4(1.0f, -1.0f, 0, 1),
-                m * glm::vec4(1.0f, 1.0f, 0, 1),
-                m * glm::vec4(-1.0f, 1.0f, 0, 1)};
-
-        auto push = [&](int i)
-        {
-            vb.push_back(corners[i].x);
-            vb.push_back(corners[i].y);
-
-            vb.push_back(c.color.r);
-            vb.push_back(c.color.g);
-            vb.push_back(c.color.b);
-            vb.push_back(c.color.a);
-        };
-
-        // triangle 1
-        push(0);
-        push(1);
-        push(2);
-        // triangle 2
-        push(2);
-        push(3);
-        push(0);
-    }
-
-    void Renderer::drawQuad(const QuadCommand &c)
-    {
-        if (!shader)
-            return;
-
-        shader->bind();
-
-        if (camera)
-            shader->setMat4("uVP", camera->getViewProjection());
-
-        shader->setVec2("uPos", c.position);
-        shader->setVec2("uSize", c.size);
-        shader->setVec4("uColor", c.color);
-
-        int slot = 0;
-        if (c.texture != 0)
-        {
-            c.texture->bind(slot);
-        }
-        else if (defaultWhiteTexture)
-        {
-            defaultWhiteTexture->bind(slot);
-        }
-        shader->setInt("uTexture", slot);
-
-        GL_CALL(glBindVertexArray(VAO));
-        GL_CALL(glDrawArrays(GL_TRIANGLES, 0, 6));
+        glBindVertexArray(VAO);
+        glDrawElementsInstanced(
+            GL_TRIANGLES,
+            6,
+            GL_UNSIGNED_INT,
+            nullptr,
+            instances.size());
     }
 
     void Renderer::createQuad()
     {
-        float vertices[] = {
-            // positions        // UVs
-            -1.0f, -1.0f, 0.0f, 0.0f,
-            1.0f, -1.0f, 1.0f, 0.0f,
-            1.0f, 1.0f, 1.0f, 1.0f,
 
-            1.0f, 1.0f, 1.0f, 1.0f,
-            -1.0f, 1.0f, 0.0f, 1.0f,
-            -1.0f, -1.0f, 0.0f, 0.0f};
+        uint32_t indices[] = {0, 1, 2, 2, 3, 0};
 
-        GL_CALL(glGenVertexArrays(1, &VAO));
-        GL_CALL(glGenBuffers(1, &VBO));
+        glGenVertexArrays(1, &VAO);
+        glBindVertexArray(VAO);
 
-        GL_CALL(glBindVertexArray(VAO));
+        // static quad VBO
+        glGenBuffers(1, &quadVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-        GL_CALL(glBindBuffer(GL_ARRAY_BUFFER, VBO));
-        GL_CALL(glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW));
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
+        glEnableVertexAttribArray(0);
 
-        // Position attribute
-        GL_CALL(glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0));
-        GL_CALL(glEnableVertexAttribArray(0));
+        // index buffer
+        glGenBuffers(1, &quadIBO);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quadIBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-        // UV attribute
-        GL_CALL(glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float))));
-        GL_CALL(glEnableVertexAttribArray(1));
-    }
+        // instance buffer
+        glGenBuffers(1, &instanceVBO);
 
-    void Renderer::createDefaultTexture()
-    {
-        defaultWhiteTexture = std::make_shared<Texture>();
+        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+        glBufferData(GL_ARRAY_BUFFER, 10000 * sizeof(QuadInstance), nullptr, GL_DYNAMIC_DRAW);
 
-        uint32_t textureID;
-        GL_CALL(glGenTextures(1, &textureID));
-        GL_CALL(glBindTexture(GL_TEXTURE_2D, textureID));
+        std::size_t vec4Size = sizeof(glm::vec4);
 
-        uint8_t white[] = {255, 255, 255, 255};
-
-        GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT));
-        GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT));
-        GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
-        GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-
-        GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white));
-
-        defaultWhiteTexture->setID(textureID);
-    }
-
-    uint32_t Renderer::compileShader(const char *vs, const char *fs)
-    {
-        uint32_t vertex = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertex, 1, &vs, nullptr);
-        glCompileShader(vertex);
-
-        int success;
-        glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
-        if (!success)
+        // mat4 = 4 vec4 attributes
+        for (int i = 0; i < 4; i++)
         {
-            char log[1024];
-            glGetShaderInfoLog(vertex, 1024, nullptr, log);
-            Log::error("Vertex shader error: {}", log);
-            glDeleteShader(vertex);
-            return 0;
+            glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE,
+                                  sizeof(QuadInstance), (void *)(i * vec4Size));
+            glEnableVertexAttribArray(2 + i);
+            glVertexAttribDivisor(2 + i, 1);
         }
 
-        uint32_t fragment = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragment, 1, &fs, nullptr);
-        glCompileShader(fragment);
+        // color attribute
+        glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE,
+                              sizeof(QuadInstance), (void *)(sizeof(glm::mat4)));
+        glEnableVertexAttribArray(6);
+        glVertexAttribDivisor(6, 1);
 
-        glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
-        if (!success)
-        {
-            char log[1024];
-            glGetShaderInfoLog(fragment, 1024, nullptr, log);
-            Log::error("Fragment shader error: {}", log);
-            glDeleteShader(vertex);
-            glDeleteShader(fragment);
-            return 0;
-        }
-
-        uint32_t program = glCreateProgram();
-        glAttachShader(program, vertex);
-        glAttachShader(program, fragment);
-        glLinkProgram(program);
-
-        glGetProgramiv(program, GL_LINK_STATUS, &success);
-        if (!success)
-        {
-            char log[1024];
-            glGetProgramInfoLog(program, 1024, nullptr, log);
-            Log::error("Program link error: {}", log);
-            glDeleteProgram(program);
-            glDeleteShader(vertex);
-            glDeleteShader(fragment);
-            return 0;
-        }
-
-        glDeleteShader(vertex);
-        glDeleteShader(fragment);
-
-        return program;
+        // uv rect attribute (vec4)
+        glVertexAttribPointer(7, 4, GL_FLOAT, GL_FALSE,
+                              sizeof(QuadInstance),
+                              (void *)(sizeof(glm::mat4) + sizeof(glm::vec4)));
+        glEnableVertexAttribArray(7);
+        glVertexAttribDivisor(7, 1);
     }
 
     void Renderer::setCamera(const Camera2D *cam)

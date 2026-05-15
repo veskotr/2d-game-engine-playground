@@ -9,9 +9,16 @@ This folder contains complete specification and implementation guides for SLE's 
 | Document | Purpose | Audience | Length |
 |----------|---------|----------|--------|
 | **ARCHITECTURE.md** | Complete design specification addressing all architectural requirements | Architects, Technical Leads | ~8000 words |
+| **IMPLEMENTATION_OVERVIEW.md** | Current-state map of the engine and recent implementations | All contributors | ~3000 words |
+| **SCENE_ECS_CURRENT.md** | Current Scene, ECS, transform, and hierarchy model | All contributors | ~2000 words |
+| **SCRIPTING_CURRENT.md** | Current Lua VM, API, and script lifecycle implementation | All contributors | ~2500 words |
+| **RENDERING_CURRENT.md** | Current render pipeline, culling, batching, and GPU streaming | All contributors | ~2200 words |
+| **OPTIMIZATIONS_CURRENT.md** | Summary of implemented engine optimizations 1-6 | All contributors | ~1800 words |
 | **SCRIPTING_IMPLEMENTATION_GUIDE.md** | Concrete C++ patterns and code templates for implementation | Developers | ~4000 words |
 | **COMPONENT_SYSTEM_GUIDE.md** | Component design patterns and extension guidelines | Component Developers | ~3500 words |
 | **LUA_IMPLEMENTATION_QUICKSTART.md** | Step-by-step implementation checklist with tasks and tests | Team Leads, Sprint Planning | ~2000 words |
+| **IMPLEMENTATION_REFERENCE.md** | Current-state truth and near-term implementation decisions for scripting and demo readiness | All contributors | ~1500 words |
+| **MINIMAL_LUA_API.md** | Locked minimal Lua API v1 surface for immediate implementation | Scripting Implementers | ~1000 words |
 
 ---
 
@@ -20,6 +27,13 @@ This folder contains complete specification and implementation guides for SLE's 
 **Question:** Where do I start?
 
 - **"I need to understand the overall architecture"** → Read **ARCHITECTURE.md** sections 1-5
+- **"I need the current engine state"** → Read **IMPLEMENTATION_OVERVIEW.md**
+- **"I need Scene/ECS details"** → Read **SCENE_ECS_CURRENT.md**
+- **"I need scripting details"** → Read **SCRIPTING_CURRENT.md**
+- **"I need rendering details"** → Read **RENDERING_CURRENT.md**
+- **"I need the implemented optimization summary"** → Read **OPTIMIZATIONS_CURRENT.md**
+- **"I need the current truth before coding"** → Read **IMPLEMENTATION_REFERENCE.md** first
+- **"I need exact API names to implement now"** → Read **MINIMAL_LUA_API.md**
 - **"I need to implement the Lua layer"** → Use **LUA_IMPLEMENTATION_QUICKSTART.md**
 - **"I need C++ code patterns"** → See **SCRIPTING_IMPLEMENTATION_GUIDE.md** sections 1-2
 - **"I need to add a new component"** → Follow **COMPONENT_SYSTEM_GUIDE.md** section 3
@@ -47,6 +61,51 @@ This folder contains complete specification and implementation guides for SLE's 
 - Implementation priority roadmap (5 phases)
 - Design validation checklist (12 items)
 
+### IMPLEMENTATION_OVERVIEW.md
+
+**What it covers:**
+- Current frame loop and runtime orchestration
+- How Scene, Systems, Renderer, Resources, and Scripting fit together
+- Current Lua API surface exposed by the engine
+- What the recent optimization work changed and why
+- Where to read the concrete implementation files
+
+**When to read:**
+- When you want the current codebase truth instead of the older target-state docs
+- When you need to understand how the recent implementations fit together
+
+### SCENE_ECS_CURRENT.md
+
+**What it covers:**
+- entity, registry, and hierarchy responsibilities
+- current component set and their roles
+- transform pipeline and dirty propagation
+- how the recent script and optimization work depend on Scene
+
+### SCRIPTING_CURRENT.md
+
+**What it covers:**
+- ScriptEngine responsibilities and lifecycle
+- ScriptApi / ScriptApiImpl current surface
+- Lua binding structure and namespaces
+- how scripts load resources and interact with entities
+
+### RENDERING_CURRENT.md
+
+**What it covers:**
+- RenderSystem command generation
+- culling before submit
+- Renderer batching and GPU upload strategy
+- current state of the OpenGL path
+
+### OPTIMIZATIONS_CURRENT.md
+
+**What it covers:**
+- what each optimization changed
+- why it exists
+- which files implement it
+- how the timings relate to the changes
+
 **Key Sections:**
 - Section 2: Lua VM strategy (single VM with per-entity scripts)
 - Section 3: ScriptComponent design
@@ -59,6 +118,22 @@ This folder contains complete specification and implementation guides for SLE's 
 - Why single VM over per-scene? (Section 2.2)
 - How to handle entity destruction during script execution? (Section 7.2)
 - How to avoid breaking ECS encapsulation? (Section 6)
+
+---
+
+### IMPLEMENTATION_REFERENCE.md
+
+**What it covers:**
+- Current implementation reality vs intended architecture
+- Script API v1 scope for a first demo
+- Lua global access model for input/window/camera
+- Ownership boundaries and file ownership for upcoming scripting work
+- Acceptance criteria for demo readiness
+
+**When to read:**
+- Before starting any scripting implementation task
+- Before adding or changing ScriptApi surface
+- Before making architecture-sensitive runtime changes
 
 ---
 

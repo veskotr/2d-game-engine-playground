@@ -10,11 +10,14 @@ public:
     Camera2D(float width, float height);
 
     void setViewport(float width, float height);
+    glm::vec2 getViewportSize() const;
 
     void setPosition(const glm::vec2& pos);
     void move(const glm::vec2& delta);
+    glm::vec2 getPosition() const;
 
     void setZoom(float zoom);
+    float getZoom() const;
 
     const glm::mat4& getViewMatrix() const;
     const glm::mat4& getProjectionMatrix() const;
@@ -23,6 +26,8 @@ public:
 private:
     glm::vec2 position{0.0f, 0.0f};
     float zoom = 1.0f;
+    float viewportWidth = 0.0f;
+    float viewportHeight = 0.0f;
 
     glm::mat4 view{1.0f};
     glm::mat4 projection{1.0f};

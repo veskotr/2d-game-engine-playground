@@ -1,5 +1,6 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <chrono>
 #include <sle/core/Log.hpp>
 #include <sle/engine/Runtime.hpp>
 #include <sle/engine/Context.hpp>
@@ -15,11 +16,74 @@ namespace sle
 
     Runtime::Runtime(const sle::core::EngineConfig &config)
         : config(config)
+        , scriptApi(*this)
     {
+    }
+
+    bool Runtime::registerScene(const std::string& sceneName, SceneManager::SceneBuilder builder)
+    {
+        return sceneManager.registerScene(sceneName, std::move(builder));
+    }
+
+    bool Runtime::hasScene(const std::string& sceneName) const
+    {
+        return sceneManager.hasScene(sceneName);
+    }
+
+    Result<bool> Runtime::loadScene(const std::string& sceneName)
+    {
+        auto result = sceneManager.loadScene(sceneName, *this, scene);
+        if (result.ok())
+            Log::info("Loaded scene: {}", sceneName);
+
+        return result;
+    }
+
+    Result<bool> Runtime::requestSceneSwitch(const std::string& sceneName)
+    {
+        return sceneManager.requestSceneSwitch(sceneName);
+    }
+
+    float Runtime::getDeltaTime() const
+    {
+        return timer.getDeltaTime();
+    }
+
+    glm::vec2 Runtime::getWindowSize() const
+    {
+        return {
+            static_cast<float>(window.getWidth()),
+            static_cast<float>(window.getHeight())};
+    }
+
+    glm::vec2 Runtime::getCameraPosition() const
+    {
+        return camera.getPosition();
+    }
+
+    void Runtime::setCameraPosition(const glm::vec2& position)
+    {
+        camera.setPosition(position);
+    }
+
+    void Runtime::moveCamera(const glm::vec2& delta)
+    {
+        camera.move(delta);
+    }
+
+    float Runtime::getCameraZoom() const
+    {
+        return camera.getZoom();
+    }
+
+    void Runtime::setCameraZoom(float zoom)
+    {
+        camera.setZoom(zoom);
     }
 
     Runtime::~Runtime()
     {
+        scriptEngine.shutdown();
         scene.destroy();
         // Clear resources BEFORE destroying window (while GL context is still valid)
         Resources::clear();
@@ -41,6 +105,24 @@ namespace sle
         if (!rendererResult.ok())
             return Result<bool>::error(rendererResult.error());
 
+        defaultQuadShader = Resources::create<Shader>(
+            "default_quad_shader",
+            "assets/shaders/quad.vert",
+            "assets/shaders/quad.frag");
+        if (!defaultQuadShader)
+        {
+            return Result<bool>::error("Failed to load default quad shader resource");
+        }
+
+        renderSystem.setDefaultShaderID(defaultQuadShader->getID());
+        renderSystem.setDefaultTextureID(0);
+
+        if (!scriptEngine.init(&scriptApi))
+        {
+            return Result<bool>::error("Failed to initialize ScriptEngine");
+        }
+        scriptSystem.setScriptEngine(&scriptEngine);
+
         Input::init(window.getNative());
 
         renderer.setCamera(&camera);
@@ -50,13 +132,33 @@ namespace sle
 
     void Runtime::run()
     {
+        using Clock = std::chrono::high_resolution_clock;
+        using Ms = std::chrono::duration<double, std::milli>;
+
+        float fpsLogAccumulator = 0.0f;
+        int fpsFrameCount = 0;
+        double transformMsAccum = 0.0;
+        double scriptMsAccum = 0.0;
+        double physicsMsAccum = 0.0;
+        double renderSubmitMsAccum = 0.0;
+        double renderFlushMsAccum = 0.0;
+        double swapMsAccum = 0.0;
+
         while (!window.shouldClose())
         {
+            auto switchResult = sceneManager.processPendingSwitch(*this, scene);
+            if (!switchResult.ok())
+            {
+                Log::error("Failed to switch pending scene: {}", switchResult.error());
+            }
+
             Input::update();
 
             timer.tick();
 
             float dt = timer.getDeltaTime();
+            fpsLogAccumulator += dt;
+            ++fpsFrameCount;
 
             window.pollEvents();
 
@@ -70,22 +172,8 @@ namespace sle
             if (Input::isKeyDown(GLFW_KEY_ESCAPE))
                 break;
 
-            // camera control (temporary here, later move to game layer)
-            glm::vec2 move(0.0f);
-
-            if (Input::isKeyDown(GLFW_KEY_W))
-                move.y += 1.0f;
-            if (Input::isKeyDown(GLFW_KEY_S))
-                move.y -= 1.0f;
-            if (Input::isKeyDown(GLFW_KEY_A))
-                move.x -= 1.0f;
-            if (Input::isKeyDown(GLFW_KEY_D))
-                move.x += 1.0f;
-
-            camera.move(move * 32.0f * dt);
-
             // Construct per-frame context with all system dependencies.
-            Context ctx{scene, scene.getRegistry(), scene.getEventBus(), renderer, dt};
+            Context ctx{scene, scene.getRegistry(), scene.getEventBus(), renderer, camera, dt};
 
             // === FRAME START ===
             // Clear accumulated events from previous frame.
@@ -93,25 +181,60 @@ namespace sle
 
             // === LOGIC UPDATE PHASE ===
             // 1. Resolve world-space transforms (required by all other systems).
+            auto t0 = Clock::now();
             transformSystem.update(ctx);
+            auto t1 = Clock::now();
 
             // 2. Update scripted entities (placeholder for Lua integration).
             scriptSystem.update(ctx);
+            auto t2 = Clock::now();
 
             // 3. Step physics simulation and resolve collisions (placeholder for Box2D).
             physicsSystem.update(ctx);
+            auto t3 = Clock::now();
 
             // === RENDER PHASE ===
             renderer.beginFrame();
 
             // 4. Submit sprite renders for all entities with transforms.
             renderSystem.update(ctx);
-
-            sle::core::Log::info("FPS: {:.2f}", 1.0f / dt);
+            auto t4 = Clock::now();
 
             renderer.endFrame();
+            auto t5 = Clock::now();
 
             window.swapBuffers();
+            auto t6 = Clock::now();
+
+            transformMsAccum += Ms(t1 - t0).count();
+            scriptMsAccum += Ms(t2 - t1).count();
+            physicsMsAccum += Ms(t3 - t2).count();
+            renderSubmitMsAccum += Ms(t4 - t3).count();
+            renderFlushMsAccum += Ms(t5 - t4).count();
+            swapMsAccum += Ms(t6 - t5).count();
+
+            if (fpsLogAccumulator >= 1.0f)
+            {
+                const float fps = static_cast<float>(fpsFrameCount) / fpsLogAccumulator;
+                const double frameCount = static_cast<double>(fpsFrameCount);
+                sle::core::Log::info(
+                    "FPS: {:.2f} | avg ms: transform {:.3f}, script {:.3f}, physics {:.3f}, render-submit {:.3f}, render-flush {:.3f}, swap {:.3f}",
+                    fps,
+                    transformMsAccum / frameCount,
+                    scriptMsAccum / frameCount,
+                    physicsMsAccum / frameCount,
+                    renderSubmitMsAccum / frameCount,
+                    renderFlushMsAccum / frameCount,
+                    swapMsAccum / frameCount);
+                fpsLogAccumulator = 0.0f;
+                fpsFrameCount = 0;
+                transformMsAccum = 0.0;
+                scriptMsAccum = 0.0;
+                physicsMsAccum = 0.0;
+                renderSubmitMsAccum = 0.0;
+                renderFlushMsAccum = 0.0;
+                swapMsAccum = 0.0;
+            }
         }
     }
 

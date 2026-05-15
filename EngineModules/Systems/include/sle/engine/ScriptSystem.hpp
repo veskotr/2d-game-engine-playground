@@ -1,5 +1,10 @@
 #pragma once
 
+#include <cstdint>
+#include <unordered_set>
+
+namespace sle::scripting { class ScriptEngine; }
+
 namespace sle {
 
 struct Context;
@@ -9,7 +14,12 @@ struct Context;
 class ScriptSystem
 {
 public:
+    void setScriptEngine(sle::scripting::ScriptEngine* engine) { scriptEngine = engine; }
     void update(Context& ctx);
+
+private:
+    sle::scripting::ScriptEngine* scriptEngine = nullptr;
+    std::unordered_set<uint32_t> activeScriptEntities;
 };
 
 } // namespace sle

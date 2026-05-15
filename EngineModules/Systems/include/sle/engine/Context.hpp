@@ -3,6 +3,7 @@
 namespace sle::entity { class Scene; class Registry; }
 namespace sle::core { class EventBus; }
 namespace sle::renderer { class Renderer; }
+namespace sle::core { class Camera2D; }
 
 namespace sle {
 
@@ -15,6 +16,7 @@ struct Context
     sle::entity::Registry&   registry;
     sle::core::EventBus&     eventBus;
     sle::renderer::Renderer& renderer;
+    const sle::core::Camera2D& camera;
     float                    dt;
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 #include <sle/engine/Context.hpp>
+#include <cstdint>
 
 namespace sle {
 
@@ -9,7 +10,13 @@ namespace sle {
 class RenderSystem
 {
 public:
+    void setDefaultShaderID(uint32_t shaderID) { defaultShaderID = shaderID; }
+    void setDefaultTextureID(uint32_t textureID) { defaultTextureID = textureID; }
     void update(Context& ctx);
+
+private:
+    uint32_t defaultShaderID = 0;
+    uint32_t defaultTextureID = 0;
 };
 
 } // namespace sle

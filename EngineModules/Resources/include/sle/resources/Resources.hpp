@@ -83,4 +83,21 @@ std::shared_ptr<T> Resources::create(const std::string& id, Args&&... args)
     return resource;
 }
 
+template<typename T>
+std::shared_ptr<T> Resources::get(const std::string& id)
+{
+    auto& p = pool<T>();
+    if (auto it = p.data.find(id); it != p.data.end())
+        return it->second;
+
+    return nullptr;
+}
+
+template<typename T>
+void Resources::unload(const std::string& id)
+{
+    auto& p = pool<T>();
+    p.data.erase(id);
+}
+
 } // namespace sle::core

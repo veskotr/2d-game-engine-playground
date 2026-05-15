@@ -28,9 +28,16 @@ public:
 
     // ECS component access
     Registry& getRegistry() { return registry; }
+    const Registry& getRegistry() const { return registry; }
 
     // Event bus for decoupled communication between systems within this scene.
     core::EventBus& getEventBus() { return eventBus; }
+
+    template <typename T, typename Func>
+    void view(Func func)
+    {
+        registry.view<T>(func);
+    }
 
     template <typename T1, typename T2, typename Func>
     void view(Func func)
@@ -44,6 +51,7 @@ public:
 private:
     void destroyEntityInternal(Entity entity);
     void detachFromParent(Entity entity);
+    void markTransformBranchDirty(Entity entity);
 
     Registry registry;
     core::EventBus eventBus;

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <sle/scene/Scene.hpp>
+#include <sle/scene/components/Transform.hpp>
 
 namespace sle::entity
 {
@@ -82,6 +83,8 @@ namespace sle::entity
             parentMap.erase(child.getID());
             roots.push_back(child);
         }
+
+        markTransformBranchDirty(child);
     }
 
     Entity Scene::getParent(Entity entity) const
@@ -112,6 +115,15 @@ namespace sle::entity
         roots.clear();
         parentMap.clear();
         childrenMap.clear();
+    }
+
+    void Scene::markTransformBranchDirty(Entity entity)
+    {
+        if (auto* transform = registry.getComponent<components::TransformComponent>(entity))
+            transform->markDirty();
+
+        for (Entity child : getChildren(entity))
+            markTransformBranchDirty(child);
     }
 
 } // namespace sle::entity

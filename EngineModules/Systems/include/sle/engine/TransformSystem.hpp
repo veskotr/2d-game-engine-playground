@@ -19,13 +19,6 @@ class TransformSystem
 {
 public:
     void update(Context& ctx);
-
-private:
-    static void processEntity(
-        sle::entity::Entity                        entity,
-        const components::WorldTransformComponent& parentWorld,
-        sle::entity::Registry&                     registry,
-        sle::entity::Scene&                        scene);
 };
 
 } // namespace sle

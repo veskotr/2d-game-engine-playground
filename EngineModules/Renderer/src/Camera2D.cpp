@@ -11,11 +11,19 @@ Camera2D::Camera2D(float width, float height)
 
 void Camera2D::setViewport(float width, float height)
 {
+    viewportWidth = width;
+    viewportHeight = height;
+
     projection = glm::ortho(
         0.0f, width,
         0.0f, height,
         -1.0f, 1.0f
     );
+}
+
+glm::vec2 Camera2D::getViewportSize() const
+{
+    return {viewportWidth, viewportHeight};
 }
 
 void Camera2D::setPosition(const glm::vec2& pos)
@@ -30,10 +38,20 @@ void Camera2D::move(const glm::vec2& delta)
     updateView();
 }
 
+glm::vec2 Camera2D::getPosition() const
+{
+    return position;
+}
+
 void Camera2D::setZoom(float z)
 {
     zoom = z;
     updateView();
+}
+
+float Camera2D::getZoom() const
+{
+    return zoom;
 }
 
 void Camera2D::updateView()

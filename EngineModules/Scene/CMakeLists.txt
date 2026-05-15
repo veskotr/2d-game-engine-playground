@@ -1,6 +1,5 @@
 add_library(sle_scene STATIC
     src/Registry.cpp
-    src/EngineObject.cpp
     src/Scene.cpp
 )
 

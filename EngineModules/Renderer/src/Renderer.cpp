@@ -7,12 +7,24 @@
 namespace sle::renderer
 {
 
+    namespace {
+        constexpr std::size_t kInitialInstanceCapacity = 10000;
+
+        std::size_t nextPow2(std::size_t value)
+        {
+            std::size_t p = 1;
+            while (p < value)
+                p <<= 1;
+            return p;
+        }
+    }
+
     static const float vertices[] = {
-        // pos
-        -0.5f, -0.5f, // bottom left
-        0.5f, -0.5f,  // bottom right
-        0.5f, 0.5f,   // top right
-        -0.5f, 0.5f   // top left
+        // pos      // uv
+        -0.5f, -0.5f, 0.0f, 0.0f, // bottom left
+        0.5f, -0.5f, 1.0f, 0.0f,  // bottom right
+        0.5f, 0.5f, 1.0f, 1.0f,   // top right
+        -0.5f, 0.5f, 0.0f, 1.0f   // top left
     };
 
     using sle::core::Camera2D;
@@ -22,6 +34,9 @@ namespace sle::renderer
     Result<bool> Renderer::init()
     {
         createQuad();
+
+        GL_CALL(glEnable(GL_BLEND));
+        GL_CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 
         return Result<bool>::success(true);
     }
@@ -40,11 +55,16 @@ namespace sle::renderer
             quadIBO = 0;
         }
 
-        if (instanceVBO != 0)
+        for (uint32_t& instanceVBO : instanceVBOs)
         {
+            if (instanceVBO == 0)
+                continue;
+
             GL_CALL(glDeleteBuffers(1, &instanceVBO));
             instanceVBO = 0;
         }
+
+        instanceBufferCapacity = 0;
 
         if (VAO != 0)
         {
@@ -77,32 +97,42 @@ namespace sle::renderer
 
     void Renderer::beginFrame()
     {
+        activeInstanceVBOIndex = (activeInstanceVBOIndex + 1) % instanceVBOs.size();
+
         GL_CALL(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
         GL_CALL(glClear(GL_COLOR_BUFFER_BIT));
     }
 
     void Renderer::endFrame()
     {
-        // optional: sort keys by layer first
-        std::vector<std::pair<BatchKey, std::vector<QuadCommand> *>> ordered;
-
-        ordered.reserve(batches.size());
+        orderedBatches.clear();
+        orderedBatches.reserve(batches.size());
 
         for (auto &[key, vec] : batches)
-            ordered.push_back({key, &vec});
+        {
+            if (!vec.empty())
+                orderedBatches.push_back({key, &vec});
+        }
 
-        std::sort(ordered.begin(), ordered.end(),
+        std::sort(orderedBatches.begin(), orderedBatches.end(),
                   [](auto &a, auto &b)
                   {
-                      return a.first.layer < b.first.layer;
+                      if (a.first.layer != b.first.layer)
+                          return a.first.layer < b.first.layer;
+
+                      if (a.first.shader_id != b.first.shader_id)
+                          return a.first.shader_id < b.first.shader_id;
+
+                      return a.first.texture_id < b.first.texture_id;
                   });
 
-        for (auto &[key, cmds] : ordered)
+        for (auto &[key, cmds] : orderedBatches)
         {
             drawBatch(key, *cmds);
         }
 
-        batches.clear();
+        for (auto& [_, vec] : batches)
+            vec.clear();
     }
 
     void Renderer::drawBatch(const BatchKey &key,
@@ -114,29 +144,98 @@ namespace sle::renderer
         bindShader(key.shader_id);
         bindTexture(key.texture_id);
 
-        std::vector<QuadInstance> instances;
-        instances.reserve(cmds.size());
+        instanceStaging.resize(cmds.size());
 
-        for (const auto &c : cmds)
+        for (std::size_t i = 0; i < cmds.size(); ++i)
         {
-            QuadInstance inst;
+            const auto& c = cmds[i];
+            QuadInstance& inst = instanceStaging[i];
             inst.model = c.modelMatrix;
             inst.color = c.color;
-            instances.push_back(inst);
+            inst.uvRect = c.uvRect;
         }
 
-        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                        instances.size() * sizeof(QuadInstance),
-                        instances.data());
+        const std::size_t total = instanceStaging.size();
+        if (total == 0)
+            return;
+
+        if (total > instanceBufferCapacity)
+        {
+            instanceBufferCapacity = nextPow2(total);
+            for (uint32_t instanceVBO : instanceVBOs)
+            {
+                glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+                glBufferData(
+                    GL_ARRAY_BUFFER,
+                    static_cast<GLsizeiptr>(instanceBufferCapacity * sizeof(QuadInstance)),
+                    nullptr,
+                    GL_STREAM_DRAW);
+            }
+        }
+
+        const uint32_t activeInstanceVBO = instanceVBOs[activeInstanceVBOIndex];
+        glBindBuffer(GL_ARRAY_BUFFER, activeInstanceVBO);
+
+        // Orphan old contents so the driver can allocate fresh storage and avoid sync stalls.
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(instanceBufferCapacity * sizeof(QuadInstance)),
+            nullptr,
+            GL_STREAM_DRAW);
+
+        glBufferSubData(
+            GL_ARRAY_BUFFER,
+            0,
+            static_cast<GLsizeiptr>(total * sizeof(QuadInstance)),
+            instanceStaging.data());
 
         glBindVertexArray(VAO);
+
+        const std::size_t vec4Size = sizeof(glm::vec4);
+        for (int i = 0; i < 4; i++)
+        {
+            glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE,
+                                  sizeof(QuadInstance), (void *)(i * vec4Size));
+        }
+        glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE,
+                              sizeof(QuadInstance), (void *)(sizeof(glm::mat4)));
+        glVertexAttribPointer(7, 4, GL_FLOAT, GL_FALSE,
+                              sizeof(QuadInstance),
+                              (void *)(sizeof(glm::mat4) + sizeof(glm::vec4)));
         glDrawElementsInstanced(
             GL_TRIANGLES,
             6,
             GL_UNSIGNED_INT,
             nullptr,
-            instances.size());
+            static_cast<GLsizei>(total));
+    }
+
+    void Renderer::bindShader(uint32_t shader_id)
+    {
+        GL_CALL(glUseProgram(shader_id));
+
+        if (shader_id == 0)
+            return;
+
+        const glm::mat4 vp = camera ? camera->getViewProjection() : glm::mat4(1.0f);
+
+        const GLint vpLoc = glGetUniformLocation(shader_id, "uVP");
+        if (vpLoc != -1)
+        {
+            GL_CALL(glUniformMatrix4fv(vpLoc, 1, GL_FALSE, &vp[0][0]));
+        }
+
+        const GLint texLoc = glGetUniformLocation(shader_id, "uTexture");
+        if (texLoc != -1)
+        {
+            GL_CALL(glUniform1i(texLoc, 0));
+        }
+    }
+
+    void Renderer::bindTexture(uint32_t texture_id)
+    {
+        GL_CALL(glActiveTexture(GL_TEXTURE0));
+        GL_CALL(glBindTexture(GL_TEXTURE_2D, texture_id));
     }
 
     void Renderer::createQuad()
@@ -152,19 +251,31 @@ namespace sle::renderer
         glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
         glEnableVertexAttribArray(0);
+
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+        glEnableVertexAttribArray(1);
 
         // index buffer
         glGenBuffers(1, &quadIBO);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quadIBO);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-        // instance buffer
-        glGenBuffers(1, &instanceVBO);
+        // instance buffers (double-buffered)
+        glGenBuffers(static_cast<GLsizei>(instanceVBOs.size()), instanceVBOs.data());
+        instanceBufferCapacity = kInitialInstanceCapacity;
+        activeInstanceVBOIndex = 0;
 
-        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-        glBufferData(GL_ARRAY_BUFFER, 10000 * sizeof(QuadInstance), nullptr, GL_DYNAMIC_DRAW);
+        for (uint32_t instanceVBO : instanceVBOs)
+        {
+            glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+            glBufferData(
+                GL_ARRAY_BUFFER,
+                static_cast<GLsizeiptr>(instanceBufferCapacity * sizeof(QuadInstance)),
+                nullptr,
+                GL_STREAM_DRAW);
+        }
 
         std::size_t vec4Size = sizeof(glm::vec4);
 

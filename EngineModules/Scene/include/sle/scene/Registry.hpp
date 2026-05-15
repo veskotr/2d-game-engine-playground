@@ -2,6 +2,7 @@
 #include <sle/scene/ComponentPool.hpp>
 #include <sle/scene/Entity.hpp>
 #include <memory>
+#include <unordered_set>
 #include <typeindex>
 #include <unordered_map>
 
@@ -12,6 +13,7 @@ class Registry
 public:
     Entity createEntity();
     void destroyEntity(Entity entity);
+    bool hasEntity(Entity entity) const;
 
     // Construct or replace component T on entity. Returns a reference to the component.
     template <typename T, typename... Args>
@@ -31,12 +33,17 @@ public:
     template <typename T>
     void removeComponent(Entity entity);
 
+    // Iterates all entities that have component T, calling func(Entity, T&).
+    template <typename T, typename Func>
+    void view(Func func);
+
     // Iterates all entities that have both T1 and T2, calling func(Entity, T1&, T2&).
     template <typename T1, typename T2, typename Func>
     void view(Func func);
 
 private:
     uint32_t nextEntityID = 1;
+    std::unordered_set<uint32_t> aliveEntities;
     std::unordered_map<std::type_index, std::unique_ptr<IComponentPool>> pools;
 
     // Returns the pool for T, creating it if it does not yet exist.
@@ -132,6 +139,17 @@ void Registry::removeComponent(Entity entity)
 }
 
 // --- view ---
+
+template <typename T, typename Func>
+void Registry::view(Func func)
+{
+    auto* p = findPool<T>();
+    if (!p)
+        return;
+
+    for (auto& [entityID, comp] : p->entries())
+        func(Entity(entityID), comp);
+}
 
 template <typename T1, typename T2, typename Func>
 void Registry::view(Func func)

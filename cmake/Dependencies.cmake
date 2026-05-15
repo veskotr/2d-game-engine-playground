@@ -103,3 +103,14 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(lua)
+
+if(MSVC)
+    foreach(lua_target IN ITEMS liblua lua)
+        if(TARGET ${lua_target})
+            set_property(
+                TARGET ${lua_target}
+                PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+            )
+        endif()
+    endforeach()
+endif()

@@ -26,6 +26,16 @@ struct LineCommand
     glm::vec4 color;
     float thickness = 1.0f;
     float z = 0.0f;
+    uint32_t layer = 0;
+};
+
+struct PointCommand
+{
+    glm::vec2 position;
+    glm::vec4 color;
+    float size = 3.0f;
+    float z = 0.0f;
+    uint32_t layer = 0;
 };
 
 struct TextCommand
@@ -63,6 +73,7 @@ struct BatchKeyHash
 using RenderCommand = std::variant<
     QuadCommand,
     LineCommand,
+    PointCommand,
     TextCommand
 >;
 

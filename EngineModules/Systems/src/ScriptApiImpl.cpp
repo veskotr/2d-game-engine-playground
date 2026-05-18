@@ -7,9 +7,58 @@
 #include <sle/renderer/Texture.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
 #include <sle/scene/components/Transform.hpp>
+#include <sle/scene/components/RigidBodyComponent.hpp>
+#include <sle/physics/PhysicsWorld.hpp>
+#include <box2d/b2_world.h>
+#include <box2d/b2_contact.h>
+#include <box2d/b2_fixture.h>
+#include <algorithm>
+#include <utility>
 #include <vector>
 
 namespace sle {
+
+namespace {
+
+class FirstHitRayCastCallback : public b2RayCastCallback
+{
+public:
+    bool hasHit = false;
+    sle::scripting::PhysicsRaycastHit hit{};
+
+    float ReportFixture(b2Fixture* fixture, const b2Vec2& point, const b2Vec2& normal, float fraction) override
+    {
+        hasHit = true;
+        hit.entityId = static_cast<uint32_t>(fixture->GetBody()->GetUserData().pointer);
+        hit.point = {point.x, point.y};
+        hit.normal = {normal.x, normal.y};
+        hit.fraction = fraction;
+
+        // Clip the ray to this hit so Box2D finds the closest intersection.
+        return fraction;
+    }
+};
+
+class AllHitsRayCastCallback : public b2RayCastCallback
+{
+public:
+    std::vector<sle::scripting::PhysicsRaycastHit> hits;
+
+    float ReportFixture(b2Fixture* fixture, const b2Vec2& point, const b2Vec2& normal, float fraction) override
+    {
+        sle::scripting::PhysicsRaycastHit hit;
+        hit.entityId = static_cast<uint32_t>(fixture->GetBody()->GetUserData().pointer);
+        hit.point = {point.x, point.y};
+        hit.normal = {normal.x, normal.y};
+        hit.fraction = fraction;
+        hits.push_back(hit);
+
+        // Continue raycast to collect all hits.
+        return 1.0f;
+    }
+};
+
+} // namespace
 
 float ScriptApiImpl::getDeltaTime() const
 {
@@ -242,6 +291,252 @@ void ScriptApiImpl::warn(const std::string& message)
 void ScriptApiImpl::error(const std::string& message)
 {
     sle::core::Log::error("[Script] {}", message);
+}
+
+bool ScriptApiImpl::addForce(sle::scripting::ScriptEntityRef entity, float forceX, float forceY)
+{
+    if (!isEntityAlive(entity))
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+
+    auto* rigidBody = registry.getComponent<components::RigidBodyComponent>(rawEntity);
+    if (!rigidBody || rigidBody->box2dBodyId == 0)
+        return false;
+
+    auto* physicsWorld = runtime.getPhysicsWorld();
+    if (!physicsWorld)
+        return false;
+
+    physicsWorld->applyForce(rigidBody->box2dBodyId, {forceX, forceY});
+    return true;
+}
+
+bool ScriptApiImpl::addImpulse(sle::scripting::ScriptEntityRef entity, float impulseX, float impulseY)
+{
+    if (!isEntityAlive(entity))
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+
+    auto* rigidBody = registry.getComponent<components::RigidBodyComponent>(rawEntity);
+    if (!rigidBody || rigidBody->box2dBodyId == 0)
+        return false;
+
+    auto* physicsWorld = runtime.getPhysicsWorld();
+    if (!physicsWorld)
+        return false;
+
+    physicsWorld->applyImpulse(rigidBody->box2dBodyId, {impulseX, impulseY});
+    return true;
+}
+
+bool ScriptApiImpl::setVelocity(sle::scripting::ScriptEntityRef entity, float velocityX, float velocityY)
+{
+    if (!isEntityAlive(entity))
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+
+    auto* rigidBody = registry.getComponent<components::RigidBodyComponent>(rawEntity);
+    if (!rigidBody || rigidBody->box2dBodyId == 0)
+        return false;
+
+    auto* physicsWorld = runtime.getPhysicsWorld();
+    if (!physicsWorld)
+        return false;
+
+    rigidBody->velocity = {velocityX, velocityY};
+    physicsWorld->setBodyVelocity(rigidBody->box2dBodyId, rigidBody->velocity);
+    return true;
+}
+
+bool ScriptApiImpl::getVelocity(sle::scripting::ScriptEntityRef entity, glm::vec2& outVelocity) const
+{
+    if (!isEntityAlive(entity))
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+
+    auto* rigidBody = registry.getComponent<components::RigidBodyComponent>(rawEntity);
+    if (!rigidBody)
+        return false;
+
+    outVelocity = rigidBody->velocity;
+    return true;
+}
+
+bool ScriptApiImpl::setAngularVelocity(sle::scripting::ScriptEntityRef entity, float angularVelocity)
+{
+    if (!isEntityAlive(entity))
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+
+    auto* rigidBody = registry.getComponent<components::RigidBodyComponent>(rawEntity);
+    if (!rigidBody || rigidBody->box2dBodyId == 0)
+        return false;
+
+    auto* physicsWorld = runtime.getPhysicsWorld();
+    if (!physicsWorld)
+        return false;
+
+    rigidBody->angularVelocity = angularVelocity;
+    physicsWorld->setBodyAngularVelocity(rigidBody->box2dBodyId, angularVelocity);
+    return true;
+}
+
+float ScriptApiImpl::getAngularVelocity(sle::scripting::ScriptEntityRef entity) const
+{
+    if (!isEntityAlive(entity))
+        return 0.0f;
+
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+
+    auto* rigidBody = registry.getComponent<components::RigidBodyComponent>(rawEntity);
+    if (!rigidBody)
+        return 0.0f;
+
+    return rigidBody->angularVelocity;
+}
+
+bool ScriptApiImpl::setGravityScale(sle::scripting::ScriptEntityRef entity, float gravityScale)
+{
+    if (!isEntityAlive(entity))
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+
+    auto* rigidBody = registry.getComponent<components::RigidBodyComponent>(rawEntity);
+    if (!rigidBody || rigidBody->box2dBodyId == 0)
+        return false;
+
+    auto* physicsWorld = runtime.getPhysicsWorld();
+    if (!physicsWorld)
+        return false;
+
+    rigidBody->gravityScale = gravityScale;
+    physicsWorld->setBodyGravityScale(rigidBody->box2dBodyId, gravityScale);
+    return true;
+}
+
+bool ScriptApiImpl::isTouching(sle::scripting::ScriptEntityRef entity) const
+{
+    if (!isEntityAlive(entity))
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+
+    auto* rigidBody = registry.getComponent<components::RigidBodyComponent>(rawEntity);
+    if (!rigidBody || rigidBody->box2dBodyId == 0)
+        return false;
+
+    auto* physicsWorld = runtime.getPhysicsWorld();
+    if (!physicsWorld)
+        return false;
+
+    // Check if body has any active contacts
+    b2World* world = physicsWorld->getRawWorld();
+    if (!world)
+        return false;
+
+    // Iterate through all bodies and contacts
+    for (b2Contact* contact = world->GetContactList(); contact; contact = contact->GetNext())
+    {
+        if (!contact->IsTouching())
+            continue;
+
+        b2Body* bodyA = contact->GetFixtureA()->GetBody();
+        b2Body* bodyB = contact->GetFixtureB()->GetBody();
+
+        uint32_t idA = static_cast<uint32_t>(bodyA->GetUserData().pointer);
+        uint32_t idB = static_cast<uint32_t>(bodyB->GetUserData().pointer);
+
+        if (idA == entity.id || idB == entity.id)
+            return true;
+    }
+
+    return false;
+}
+
+bool ScriptApiImpl::raycastFirst(const glm::vec2& start, const glm::vec2& end, sle::scripting::PhysicsRaycastHit& outHit) const
+{
+    auto* physicsWorld = runtime.getPhysicsWorld();
+    if (!physicsWorld)
+        return false;
+
+    b2World* world = physicsWorld->getRawWorld();
+    if (!world)
+        return false;
+
+    const glm::vec2 physicsStart = physicsWorld->worldToPhysicsVec2(start);
+    const glm::vec2 physicsEnd = physicsWorld->worldToPhysicsVec2(end);
+
+    FirstHitRayCastCallback callback;
+    world->RayCast(&callback, b2Vec2(physicsStart.x, physicsStart.y), b2Vec2(physicsEnd.x, physicsEnd.y));
+
+    if (!callback.hasHit)
+        return false;
+
+    outHit = callback.hit;
+    outHit.point = physicsWorld->physicsToWorldVec2(outHit.point);
+    return true;
+}
+
+uint32_t ScriptApiImpl::raycastAll(
+    const glm::vec2& start,
+    const glm::vec2& end,
+    std::vector<sle::scripting::PhysicsRaycastHit>& outHits) const
+{
+    outHits.clear();
+
+    auto* physicsWorld = runtime.getPhysicsWorld();
+    if (!physicsWorld)
+        return 0;
+
+    b2World* world = physicsWorld->getRawWorld();
+    if (!world)
+        return 0;
+
+    const glm::vec2 physicsStart = physicsWorld->worldToPhysicsVec2(start);
+    const glm::vec2 physicsEnd = physicsWorld->worldToPhysicsVec2(end);
+
+    AllHitsRayCastCallback callback;
+    world->RayCast(&callback, b2Vec2(physicsStart.x, physicsStart.y), b2Vec2(physicsEnd.x, physicsEnd.y));
+
+    for (auto& hit : callback.hits)
+    {
+        hit.point = physicsWorld->physicsToWorldVec2(hit.point);
+    }
+
+    std::sort(
+        callback.hits.begin(),
+        callback.hits.end(),
+        [](const sle::scripting::PhysicsRaycastHit& a, const sle::scripting::PhysicsRaycastHit& b)
+        {
+            return a.fraction < b.fraction;
+        });
+
+    outHits = std::move(callback.hits);
+    return static_cast<uint32_t>(outHits.size());
+}
+
+void ScriptApiImpl::setPhysicsDebugEnabled(bool enabled)
+{
+    runtime.setPhysicsDebugEnabled(enabled);
+}
+
+bool ScriptApiImpl::isPhysicsDebugEnabled() const
+{
+    return runtime.isPhysicsDebugEnabled();
 }
 
 } // namespace sle

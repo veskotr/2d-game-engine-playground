@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 #include <glm/vec2.hpp>
 
 namespace sle::scripting {
@@ -9,6 +10,14 @@ namespace sle::scripting {
 struct ScriptEntityRef
 {
     uint32_t id = 0;
+};
+
+struct PhysicsRaycastHit
+{
+    uint32_t entityId = 0;
+    glm::vec2 point{0.0f, 0.0f};
+    glm::vec2 normal{0.0f, 0.0f};
+    float fraction = 0.0f;
 };
 
 class ScriptApi
@@ -60,6 +69,20 @@ public:
     virtual void log(const std::string& message) = 0;
     virtual void warn(const std::string& message) = 0;
     virtual void error(const std::string& message) = 0;
+
+    // ====== PHYSICS ======
+    virtual bool addForce(ScriptEntityRef entity, float forceX, float forceY) = 0;
+    virtual bool addImpulse(ScriptEntityRef entity, float impulseX, float impulseY) = 0;
+    virtual bool setVelocity(ScriptEntityRef entity, float velocityX, float velocityY) = 0;
+    virtual bool getVelocity(ScriptEntityRef entity, glm::vec2& outVelocity) const = 0;
+    virtual bool setAngularVelocity(ScriptEntityRef entity, float angularVelocity) = 0;
+    virtual float getAngularVelocity(ScriptEntityRef entity) const = 0;
+    virtual bool setGravityScale(ScriptEntityRef entity, float gravityScale) = 0;
+    virtual bool isTouching(ScriptEntityRef entity) const = 0;
+    virtual bool raycastFirst(const glm::vec2& start, const glm::vec2& end, PhysicsRaycastHit& outHit) const = 0;
+    virtual uint32_t raycastAll(const glm::vec2& start, const glm::vec2& end, std::vector<PhysicsRaycastHit>& outHits) const = 0;
+    virtual void setPhysicsDebugEnabled(bool enabled) = 0;
+    virtual bool isPhysicsDebugEnabled() const = 0;
 };
 
 } // namespace sle::scripting

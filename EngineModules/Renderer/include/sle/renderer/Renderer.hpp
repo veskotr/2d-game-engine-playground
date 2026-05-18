@@ -26,12 +26,14 @@ namespace sle::renderer
 
         void submit(const QuadCommand &cmd);
         void submit(const LineCommand &cmd);
+        void submit(const PointCommand &cmd);
         void submit(const TextCommand &cmd);
 
         void beginFrame();
         void endFrame();
 
         void setCamera(const sle::core::Camera2D *cam);
+        void setDebugShaderID(uint32_t shaderID) { debugProgram = shaderID; }
 
     private:
         using OrderedBatchEntry = std::pair<BatchKey, std::vector<QuadCommand>*>;
@@ -47,9 +49,17 @@ namespace sle::renderer
         std::vector<OrderedBatchEntry> orderedBatches;
         std::vector<QuadInstance> instanceStaging;
 
+        uint32_t debugProgram = 0;
+        uint32_t debugVAO = 0;
+        uint32_t debugVBO = 0;
+        std::vector<LineCommand> lineCommands;
+        std::vector<PointCommand> pointCommands;
+
         void createQuad();
+        void createDebugPipeline();
         void drawQuad(const QuadCommand &c);
         void drawBatch(const BatchKey &key, const std::vector<QuadCommand> &cmds);
+        void drawDebugPrimitives();
         void bindShader(uint32_t shader_id);
         void bindTexture(uint32_t texture_id);
     };

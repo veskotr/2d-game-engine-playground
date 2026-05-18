@@ -12,11 +12,14 @@ class RenderSystem
 public:
     void setDefaultShaderID(uint32_t shaderID) { defaultShaderID = shaderID; }
     void setDefaultTextureID(uint32_t textureID) { defaultTextureID = textureID; }
+    void setPhysicsDebugEnabled(bool enabled) { physicsDebugEnabled = enabled; }
+    bool isPhysicsDebugEnabled() const { return physicsDebugEnabled; }
     void update(Context& ctx);
 
 private:
     uint32_t defaultShaderID = 0;
     uint32_t defaultTextureID = 0;
+    bool physicsDebugEnabled = false;
 };
 
 } // namespace sle

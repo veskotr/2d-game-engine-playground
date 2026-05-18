@@ -81,6 +81,16 @@ namespace sle
         camera.setZoom(zoom);
     }
 
+    void Runtime::setPhysicsDebugEnabled(bool enabled)
+    {
+        renderSystem.setPhysicsDebugEnabled(enabled);
+    }
+
+    bool Runtime::isPhysicsDebugEnabled() const
+    {
+        return renderSystem.isPhysicsDebugEnabled();
+    }
+
     Runtime::~Runtime()
     {
         scriptEngine.shutdown();
@@ -114,8 +124,19 @@ namespace sle
             return Result<bool>::error("Failed to load default quad shader resource");
         }
 
+        defaultDebugShader = Resources::create<Shader>(
+            "default_debug_shader",
+            "assets/shaders/debug.vert",
+            "assets/shaders/debug.frag");
+        if (!defaultDebugShader)
+        {
+            return Result<bool>::error("Failed to load default debug shader resource");
+        }
+
         renderSystem.setDefaultShaderID(defaultQuadShader->getID());
         renderSystem.setDefaultTextureID(0);
+        renderSystem.setPhysicsDebugEnabled(false);
+        renderer.setDebugShaderID(defaultDebugShader->getID());
 
         if (!scriptEngine.init(&scriptApi))
         {
@@ -126,6 +147,10 @@ namespace sle
         Input::init(window.getNative());
 
         renderer.setCamera(&camera);
+
+        // Initialize physics world with default gravity
+        physicsWorld = std::make_unique<sle::physics::PhysicsWorld>(glm::vec2(0.0f, -9.81f));
+        physicsWorld->setFixedTimestep(1.0f / 120.0f);
 
         return Result<bool>::success(true);
     }
@@ -169,11 +194,18 @@ namespace sle
                     static_cast<float>(window.getHeight()));
             }
 
+            if (Input::isKeyPressed(static_cast<int>(Input::Key::F3)))
+            {
+                const bool enabled = !renderSystem.isPhysicsDebugEnabled();
+                renderSystem.setPhysicsDebugEnabled(enabled);
+                Log::info("Physics debug rendering: {}", enabled ? "ON" : "OFF");
+            }
+
             if (Input::isKeyDown(GLFW_KEY_ESCAPE))
                 break;
 
             // Construct per-frame context with all system dependencies.
-            Context ctx{scene, scene.getRegistry(), scene.getEventBus(), renderer, camera, dt};
+            Context ctx{scene, scene.getRegistry(), scene.getEventBus(), renderer, camera, physicsWorld.get(), dt};
 
             // === FRAME START ===
             // Clear accumulated events from previous frame.

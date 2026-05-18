@@ -48,6 +48,19 @@ public:
     void warn(const std::string& message) override;
     void error(const std::string& message) override;
 
+    bool addForce(sle::scripting::ScriptEntityRef entity, float forceX, float forceY) override;
+    bool addImpulse(sle::scripting::ScriptEntityRef entity, float impulseX, float impulseY) override;
+    bool setVelocity(sle::scripting::ScriptEntityRef entity, float velocityX, float velocityY) override;
+    bool getVelocity(sle::scripting::ScriptEntityRef entity, glm::vec2& outVelocity) const override;
+    bool setAngularVelocity(sle::scripting::ScriptEntityRef entity, float angularVelocity) override;
+    float getAngularVelocity(sle::scripting::ScriptEntityRef entity) const override;
+    bool setGravityScale(sle::scripting::ScriptEntityRef entity, float gravityScale) override;
+    bool isTouching(sle::scripting::ScriptEntityRef entity) const override;
+    bool raycastFirst(const glm::vec2& start, const glm::vec2& end, sle::scripting::PhysicsRaycastHit& outHit) const override;
+    uint32_t raycastAll(const glm::vec2& start, const glm::vec2& end, std::vector<sle::scripting::PhysicsRaycastHit>& outHits) const override;
+    void setPhysicsDebugEnabled(bool enabled) override;
+    bool isPhysicsDebugEnabled() const override;
+
 private:
     Runtime& runtime;
 };

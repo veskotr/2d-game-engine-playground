@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstddef>
 #include <glad/gl.h>
 #include <sle/core/Log.hpp>
 #include <sle/renderer/GLDebug.hpp>
@@ -9,6 +10,12 @@ namespace sle::renderer
 
     namespace {
         constexpr std::size_t kInitialInstanceCapacity = 10000;
+
+        struct DebugVertex
+        {
+            glm::vec3 pos;
+            glm::vec4 color;
+        };
 
         std::size_t nextPow2(std::size_t value)
         {
@@ -34,6 +41,7 @@ namespace sle::renderer
     Result<bool> Renderer::init()
     {
         createQuad();
+        createDebugPipeline();
 
         GL_CALL(glEnable(GL_BLEND));
         GL_CALL(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
@@ -72,7 +80,27 @@ namespace sle::renderer
             VAO = 0;
         }
 
+        if (debugVBO != 0)
+        {
+            GL_CALL(glDeleteBuffers(1, &debugVBO));
+            debugVBO = 0;
+        }
+
+        if (debugVAO != 0)
+        {
+            GL_CALL(glDeleteVertexArrays(1, &debugVAO));
+            debugVAO = 0;
+        }
+
+        if (debugProgram != 0)
+        {
+            GL_CALL(glDeleteProgram(debugProgram));
+            debugProgram = 0;
+        }
+
         batches.clear();
+        lineCommands.clear();
+        pointCommands.clear();
     }
 
     void Renderer::submit(const QuadCommand &cmd)
@@ -87,12 +115,17 @@ namespace sle::renderer
 
     void Renderer::submit(const LineCommand &cmd)
     {
-        // queue.emplace_back(cmd);
+        lineCommands.push_back(cmd);
+    }
+
+    void Renderer::submit(const PointCommand &cmd)
+    {
+        pointCommands.push_back(cmd);
     }
 
     void Renderer::submit(const TextCommand &cmd)
     {
-        // queue.emplace_back(cmd);
+        (void)cmd;
     }
 
     void Renderer::beginFrame()
@@ -131,8 +164,13 @@ namespace sle::renderer
             drawBatch(key, *cmds);
         }
 
+        drawDebugPrimitives();
+
         for (auto& [_, vec] : batches)
             vec.clear();
+
+        lineCommands.clear();
+        pointCommands.clear();
     }
 
     void Renderer::drawBatch(const BatchKey &key,
@@ -300,6 +338,85 @@ namespace sle::renderer
                               (void *)(sizeof(glm::mat4) + sizeof(glm::vec4)));
         glEnableVertexAttribArray(7);
         glVertexAttribDivisor(7, 1);
+    }
+
+    void Renderer::createDebugPipeline()
+    {
+        // VAO/VBO only — shader program is supplied externally via setDebugShaderID().
+        glGenVertexArrays(1, &debugVAO);
+        glGenBuffers(1, &debugVBO);
+
+        glBindVertexArray(debugVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, debugVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(DebugVertex) * 4096, nullptr, GL_STREAM_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(DebugVertex), (void*)0);
+        glEnableVertexAttribArray(0);
+
+        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(DebugVertex), (void*)offsetof(DebugVertex, color));
+        glEnableVertexAttribArray(1);
+    }
+
+    void Renderer::drawDebugPrimitives()
+    {
+        if (debugProgram == 0 || debugVAO == 0 || debugVBO == 0)
+            return;
+
+        if (lineCommands.empty() && pointCommands.empty())
+            return;
+
+        const glm::mat4 vp = camera ? camera->getViewProjection() : glm::mat4(1.0f);
+
+        glUseProgram(debugProgram);
+        const GLint vpLoc = glGetUniformLocation(debugProgram, "uVP");
+        if (vpLoc != -1)
+            glUniformMatrix4fv(vpLoc, 1, GL_FALSE, &vp[0][0]);
+
+        glBindVertexArray(debugVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, debugVBO);
+
+        std::sort(
+            lineCommands.begin(),
+            lineCommands.end(),
+            [](const LineCommand& a, const LineCommand& b)
+            {
+                return a.layer < b.layer;
+            });
+
+        for (const LineCommand& line : lineCommands)
+        {
+            const float width = std::max(1.0f, line.thickness);
+            glLineWidth(width);
+
+            const DebugVertex vertices[2] = {
+                {{line.a.x, line.a.y, line.z}, line.color},
+                {{line.b.x, line.b.y, line.z}, line.color}
+            };
+
+            glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STREAM_DRAW);
+            glDrawArrays(GL_LINES, 0, 2);
+        }
+
+        std::sort(
+            pointCommands.begin(),
+            pointCommands.end(),
+            [](const PointCommand& a, const PointCommand& b)
+            {
+                return a.layer < b.layer;
+            });
+
+        for (const PointCommand& point : pointCommands)
+        {
+            const float size = std::max(1.0f, point.size);
+            glPointSize(size);
+
+            const DebugVertex vertex = {{point.position.x, point.position.y, point.z}, point.color};
+            glBufferData(GL_ARRAY_BUFFER, sizeof(vertex), &vertex, GL_STREAM_DRAW);
+            glDrawArrays(GL_POINTS, 0, 1);
+        }
+
+        glLineWidth(1.0f);
+        glPointSize(1.0f);
     }
 
     void Renderer::setCamera(const Camera2D *cam)

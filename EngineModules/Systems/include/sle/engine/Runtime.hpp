@@ -14,6 +14,7 @@
 #include <sle/engine/ScriptApiImpl.hpp>
 #include <sle/engine/Context.hpp>
 #include <sle/scripting/ScriptEngine.hpp>
+#include <sle/physics/PhysicsWorld.hpp>
 
 #include <glm/vec2.hpp>
 #include <memory>
@@ -45,9 +46,13 @@ public:
     float getCameraZoom() const;
     void setCameraZoom(float zoom);
 
+    void setPhysicsDebugEnabled(bool enabled);
+    bool isPhysicsDebugEnabled() const;
+
     sle::entity::Scene& getScene() { return scene; }
     SceneManager& getSceneManager() { return sceneManager; }
     const SceneManager& getSceneManager() const { return sceneManager; }
+    sle::physics::PhysicsWorld* getPhysicsWorld() { return physicsWorld.get(); }
 
 private:
     sle::core::EngineConfig config;
@@ -55,6 +60,7 @@ private:
     sle::core::Window window;
     sle::renderer::Renderer renderer;
     sle::entity::Scene scene;
+    std::unique_ptr<sle::physics::PhysicsWorld> physicsWorld;
     TransformSystem transformSystem;
     ScriptSystem scriptSystem;
     PhysicsSystem physicsSystem;
@@ -63,6 +69,7 @@ private:
     ScriptApiImpl scriptApi;
     sle::scripting::ScriptEngine scriptEngine;
     std::shared_ptr<sle::renderer::Shader> defaultQuadShader;
+    std::shared_ptr<sle::renderer::Shader> defaultDebugShader;
     sle::core::Camera2D camera{static_cast<float>(config.width), static_cast<float>(config.height)};
     sle::core::Timer timer;
 };

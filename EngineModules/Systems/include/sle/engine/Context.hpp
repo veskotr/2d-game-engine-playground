@@ -4,6 +4,7 @@ namespace sle::entity { class Scene; class Registry; }
 namespace sle::core { class EventBus; }
 namespace sle::renderer { class Renderer; }
 namespace sle::core { class Camera2D; }
+namespace sle::physics { class PhysicsWorld; }
 
 namespace sle {
 
@@ -17,6 +18,7 @@ struct Context
     sle::core::EventBus&     eventBus;
     sle::renderer::Renderer& renderer;
     const sle::core::Camera2D& camera;
+    sle::physics::PhysicsWorld* physicsWorld;  // Physics world for physics system
     float                    dt;
 };
 

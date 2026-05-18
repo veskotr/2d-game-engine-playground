@@ -35,6 +35,7 @@ public:
         E = GLFW_KEY_E,
         R = GLFW_KEY_R,
         F = GLFW_KEY_F,
+        F3 = GLFW_KEY_F3,
         Up = GLFW_KEY_UP,
         Down = GLFW_KEY_DOWN,
         Left = GLFW_KEY_LEFT,

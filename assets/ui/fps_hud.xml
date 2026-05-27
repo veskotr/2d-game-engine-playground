@@ -1,0 +1,3 @@
+<Panel id="fpsPanel" x="8" y="8" width="160" height="36" color="#101820CC">
+    <Label id="fpsLabel" x="12" y="9" fontSize="18" color="#F7FBFF">FPS: {{fpsText}}</Label>
+</Panel>

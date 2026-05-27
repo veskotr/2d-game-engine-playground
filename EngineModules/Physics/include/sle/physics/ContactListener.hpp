@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <string>
 
-namespace sle::core {
+namespace sle::events {
 class EventBus;
 }
 
@@ -17,11 +17,11 @@ namespace sle::physics {
 class ContactListener : public b2ContactListener
 {
 public:
-    explicit ContactListener(sle::core::EventBus* eventBus, std::unordered_map<uintptr_t, std::string>* fixtureZoneIds = nullptr);
+    explicit ContactListener(sle::events::EventBus* eventBus, std::unordered_map<uintptr_t, std::string>* fixtureZoneIds = nullptr);
     virtual ~ContactListener() = default;
 
     // Set or update the event bus for event dispatching
-    void setEventBus(sle::core::EventBus* eventBus) { eventBus_ = eventBus; }
+    void setEventBus(sle::events::EventBus* eventBus) { eventBus_ = eventBus; }
 
     // Called when two fixtures begin touching
     void BeginContact(b2Contact* contact) override;
@@ -36,7 +36,7 @@ public:
     void PostSolve(b2Contact* contact, const b2ContactImpulse* impulse) override;
 
 private:
-    sle::core::EventBus* eventBus_;
+    sle::events::EventBus* eventBus_;
     std::unordered_map<uintptr_t, std::string>* fixtureZoneIds_;  // ref to zone ID map in PhysicsWorld
 
     // Helper method to determine if a contact involves a sensor (zone trigger)

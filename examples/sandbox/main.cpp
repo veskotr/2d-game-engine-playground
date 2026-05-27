@@ -4,6 +4,7 @@
 #include <sle/core/Log.hpp>
 #include <sle/resources/Resources.hpp>
 #include <sle/renderer/Texture.hpp>
+#include <sle/scene/components/UIComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
 #include <sle/scene/components/Transform.hpp>
@@ -14,9 +15,20 @@
 #include <sle/scene/components/CircleZoneComponent.hpp>
 #include <sle/scripting/ScriptResource.hpp>
 
+#include <filesystem>
+
 using namespace sle;
 using namespace sle::core;
 using namespace sle::renderer;
+
+namespace {
+
+std::string pickFontAsset()
+{
+  return "assets/fonts/Roboto-Regular.ttf";
+}
+
+} // namespace
 
 int main()
 {
@@ -75,6 +87,14 @@ int main()
 
   runtime.registerScene("physics_test", [config](Runtime& runtime)
   {
+    const std::string fontAsset = pickFontAsset();
+
+    if (!std::filesystem::exists(fontAsset))
+    {
+      Log::error("Roboto font is required for this demo but was not found: {}", fontAsset);
+      return;
+    }
+
     auto script = Resources::create<sle::scripting::ScriptResource>(
       "physics_debug_test_script",
       "assets/scripts/physics_debug_test.lua");
@@ -121,6 +141,12 @@ int main()
     auto& playerScript = registry.addComponent<components::ScriptComponent>(player);
     playerScript.scriptAsset = "physics_debug_test_script";
     playerScript.enabled = true;
+
+    auto& playerUi = registry.addComponent<components::UIComponent>(player);
+    playerUi.layoutAsset = "assets/ui/world_label.xml";
+    playerUi.fontAsset = fontAsset;
+    playerUi.spaceMode = components::UISpaceMode::World;
+    playerUi.layer = 20;
 
     // Ground: static wide collider.
     auto ground = scene.createEntity();
@@ -187,6 +213,15 @@ int main()
     circleZone.zoneId = "test_circle_zone";
     circleZone.radius = 36.0f;
 
+    auto hudEntity = scene.createEntity();
+    auto& hud = registry.addComponent<components::UIComponent>(hudEntity);
+    hud.layoutAsset = "assets/ui/fps_hud.xml";
+    hud.fontAsset = fontAsset;
+    hud.spaceMode = components::UISpaceMode::Screen;
+    hud.layer = 100;
+
+    Log::info("UI demo font asset: {}", fontAsset);
+
     Log::info("Loaded physics_test scene. Use F3 or script key F to toggle physics debug.");
   });
 
@@ -198,4 +233,4 @@ int main()
   }
 
   runtime.run();
-} 
+}

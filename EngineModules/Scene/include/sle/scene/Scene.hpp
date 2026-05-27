@@ -1,9 +1,9 @@
 #pragma once
 #include <sle/scene/Registry.hpp>
 #include <sle/scene/Entity.hpp>
+#include <sle/events/EventBus.hpp>
 #include <unordered_map>
 #include <vector>
-#include <sle/core/EventBus.hpp>
 
 namespace sle::entity {
 
@@ -31,7 +31,7 @@ public:
     const Registry& getRegistry() const { return registry; }
 
     // Event bus for decoupled communication between systems within this scene.
-    core::EventBus& getEventBus() { return eventBus; }
+    sle::events::EventBus& getEventBus() { return eventBus; }
 
     template <typename T, typename Func>
     void view(Func func)
@@ -54,7 +54,7 @@ private:
     void markTransformBranchDirty(Entity entity);
 
     Registry registry;
-    core::EventBus eventBus;
+    sle::events::EventBus eventBus;
     std::unordered_map<uint32_t, Entity> parentMap;                    // entityID -> parent (absent = root)
     std::unordered_map<uint32_t, std::vector<Entity>> childrenMap;     // entityID -> children
     std::vector<Entity> roots;

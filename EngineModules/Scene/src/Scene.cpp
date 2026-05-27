@@ -115,6 +115,9 @@ namespace sle::entity
         roots.clear();
         parentMap.clear();
         childrenMap.clear();
+
+        // Clear all event subscriptions to prevent leaks across scene switches
+        eventBus.clearSubscriptions();
     }
 
     void Scene::markTransformBranchDirty(Entity entity)

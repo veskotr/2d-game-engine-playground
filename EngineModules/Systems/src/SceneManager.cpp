@@ -1,5 +1,6 @@
 #include <sle/engine/SceneManager.hpp>
 #include <sle/engine/Runtime.hpp>
+#include <sle/events/SceneLifecycleEvents.hpp>
 
 namespace sle {
 
@@ -26,9 +27,20 @@ sle::core::Result<bool> SceneManager::loadScene(
     if (it == sceneBuilders.end())
         return sle::core::Result<bool>::error("Scene not registered: " + sceneName);
 
+    // Emit unload event for old scene (if any)
+    if (!currentSceneName.empty())
+    {
+        sle::events::SceneUnloadedEvent unloadEvent{currentSceneName};
+        runtime.getGlobalBus().queue(unloadEvent);
+    }
+
     scene.destroy();
     it->second(runtime);
     currentSceneName = sceneName;
+
+    // Emit load event for new scene
+    sle::events::SceneLoadedEvent loadEvent{sceneName};
+    runtime.getGlobalBus().queue(loadEvent);
 
     return sle::core::Result<bool>::success(true);
 }

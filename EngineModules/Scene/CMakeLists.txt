@@ -11,6 +11,7 @@ target_include_directories(sle_scene
 target_link_libraries(sle_scene
     PUBLIC
         sle::core
+        sle::events
         sle::resources
         sle::renderer
 )

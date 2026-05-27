@@ -123,6 +123,39 @@ bool ScriptEngine::ensureScript(uint32_t entityId, const std::string& scriptAsse
     return true;
 }
 
+bool ScriptEngine::executeScriptAsset(const std::string& scriptAsset)
+{
+    if (!L || scriptAsset.empty())
+        return false;
+
+    auto scriptResource = sle::core::Resources::get<ScriptResource>(scriptAsset);
+    if (!scriptResource)
+        scriptResource = sle::core::Resources::create<ScriptResource>(scriptAsset, scriptAsset);
+
+    if (!scriptResource)
+    {
+        sle::core::Log::error("Failed to resolve UI script resource: {}", scriptAsset);
+        return false;
+    }
+
+    const std::string& scriptSource = scriptResource->getSource();
+    if (luaL_loadbuffer(L, scriptSource.c_str(), scriptSource.size(), scriptAsset.c_str()) != LUA_OK)
+    {
+        sle::core::Log::error("Lua load error [{}]: {}", scriptAsset, lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return false;
+    }
+
+    if (lua_pcall(L, 0, 0, 0) != LUA_OK)
+    {
+        sle::core::Log::error("Lua runtime error [{}]: {}", scriptAsset, lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return false;
+    }
+
+    return true;
+}
+
 void ScriptEngine::runUpdate(uint32_t entityId, float dt)
 {
     auto it = instances.find(entityId);
@@ -181,6 +214,41 @@ void ScriptEngine::syncEntities(const std::unordered_set<uint32_t>& activeEntiti
 
 void ScriptEngine::update(float)
 {
+}
+
+bool ScriptEngine::callGlobalFunction(const std::string& functionName, uint32_t entityId, const std::string& stringArg)
+{
+    if (!L || functionName.empty())
+        return false;
+
+    lua_getglobal(L, functionName.c_str());
+    if (!lua_isfunction(L, -1))
+    {
+        lua_pop(L, 1);
+        return false;
+    }
+
+    int argCount = 0;
+    if (entityId != 0)
+    {
+        lua_pushinteger(L, entityId);
+        ++argCount;
+    }
+
+    if (!stringArg.empty())
+    {
+        lua_pushstring(L, stringArg.c_str());
+        ++argCount;
+    }
+
+    if (lua_pcall(L, argCount, 0, 0) != LUA_OK)
+    {
+        sle::core::Log::error("Lua global callback error [{}]: {}", functionName, lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return false;
+    }
+
+    return true;
 }
 
 int ScriptEngine::extractFunctionRef(int tableIndex, const char* functionName)

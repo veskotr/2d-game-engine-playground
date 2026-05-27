@@ -20,8 +20,10 @@ target_link_libraries(sle_engine
         sle::renderer
         sle::resources
         sle::scene
+        sle::events
         sle::physics
         sle::scripting
+        sle::ui
         glm::glm
 )
 

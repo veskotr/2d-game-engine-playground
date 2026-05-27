@@ -13,11 +13,12 @@ SLE is a **modular, data-driven 2D game engine** built in C++17 with:
 - **Strict one-way module dependencies** (no circular imports)
 - **Pure Entity-Component-System (ECS) architecture**
 - **Single Lua VM per engine** for scripting
+- **Dedicated Physics module** wrapping Box2D world/body/fixture management
 - **Command-based rendering** with GPU batching optimization
 - **Transform hierarchy** with dirty-flag optimization
 - **Dependency injection** via Context struct for cross-module communication
 
-**Development Status**: Production-ready for 2D games with Lua scripting, physics integration (Box2D), sprite rendering, and asset management.
+**Development Status**: Production-ready for 2D games with Lua scripting, Box2D physics, sprite rendering, physics debug overlays, and zone/area triggers.
 
 ---
 
@@ -37,20 +38,35 @@ SLE is a **modular, data-driven 2D game engine** built in C++17 with:
 │   Knows About: Everything below (orchestrator role)             │
 └─────────────────────────────────────────────────────────────────┘
                             ↑
-        ┌───────────────────┼───────────────────┐
-        ↑                   ↑                   ↑
-  ┌───────────┐      ┌──────────────┐    ┌──────────────┐
-  │Scripting  │      │ Scene (ECS)  │    │ Resources    │
-  │(Lua VM,   │      │(Entities,    │    │(Asset        │
-  │BindLua)  │      │Components,   │    │ loading,     │
-  │           │      │Hierarchy)    │    │pooling)      │
-  └───────────┘      └──────────────┘    └──────────────┘
-        ↑                   ↑                   ↑
-        └───────────────────┼───────────────────┘
+                 ┌──────────────┐
+                 ↑              │
+             ┌───────────┐        │
+             │Scripting  │        │
+             │(Lua VM,   │        │
+             │BindLua)   │        │
+             └───────────┘        │
+                 ↑              │
+             ┌────────────────────┐
+             │      Physics       │
+             │ (Box2D world,      │
+             │  fixtures, contacts│
+             │  zones/areas)      │
+             └────────────────────┘
+                 ↑              │
+          ┌────────┼──────────────┘
+          ↑        ↑
+      ┌──────────────┐    ┌──────────────┐
+      │ Scene (ECS)  │    │ Resources    │
+      │(Entities,    │    │(Asset        │
+      │Components,   │    │ loading,     │
+      │Hierarchy)    │    │pooling)      │
+      └──────────────┘    └──────────────┘
+          ↑                   ↑
+          └───────────────────┘
                             ↑
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Renderer                                 │
-│              (OpenGL, shaders, batching, GPU)                   │
+│      (OpenGL, shaders, batching, GPU, debug overlays)          │
 │   Knows About: Core, Platform, nothing about Scene/Lua          │
 └─────────────────────────────────────────────────────────────────┘
                             ↑
@@ -69,16 +85,19 @@ SLE is a **modular, data-driven 2D game engine** built in C++17 with:
 
 **Golden Rule**: Lower layers NEVER depend on higher layers. This is enforced at compile time via CMakeLists.txt target_link_libraries ordering.
 
+**Verified module order in CMake**: `Core -> Platform -> Renderer -> Resources -> Scene -> Physics -> Scripting -> Systems -> Sandbox`.
+
 ### 1.2 Module Responsibilities (Verified Against Code)
 
 | Module | Responsibilities | Owns | Does NOT Own | External Dependencies |
 |--------|------------------|------|--------------|----------------------|
 | **Core** | Foundational utilities | Log, Result<T>, Timer, EngineConfig, EventBus | Nothing | stdlib |
 | **Platform** | OS integration, input, window | Window, Input, Camera2D, event polling | Rendering, entities | GLFW, OpenGL headers |
-| **Renderer** | GPU state, draw batching, shader ops | Shader, Texture, QuadCommand, Renderer, BatchKey | Scene, Lua, input | OpenGL, Core, Platform |
+| **Renderer** | GPU state, draw batching, shader ops, debug primitives | Shader, Texture, QuadCommand, LineCommand, PointCommand, batch state | Scene, Lua, input | OpenGL, Core, Platform |
 | **Resources** | Asset loading, caching, pooling | ResourcePool<T>, asset loading logic | Lifetime of entities/scripts | Core, Renderer |
 | **Scene** | Entity model, ECS, hierarchy | Entity, Registry, Components, Scene, hierarchy | Rendering pipeline, Lua | Core, Resources |
-| **Scripting** | Lua VM lifecycle, bindings, script state | ScriptEngine, Lua VM, EngineAPI bindings | Scene data directly | Lua library, Core, Scene, Resources |
+| **Physics** | Box2D integration, body/fixture lifecycle, contact callbacks | PhysicsWorld, ContactListener, fixture zone mapping | ECS orchestration order, rendering | Box2D, Core, Scene |
+| **Scripting** | Lua VM lifecycle, bindings, script state | ScriptEngine, Lua VM, EngineAPI bindings | Scene data directly | Lua library, Core, Scene, Physics, Resources |
 | **Systems** | Game loop, orchestration, updates | TransformSystem, ScriptSystem, RenderSystem, PhysicsSystem, Runtime | Direct scene modification (via systems) | Everything (orchestrator) |
 
 ---
@@ -209,6 +228,37 @@ struct ScriptComponent {
 }
 ```
 
+**RigidBodyComponent**
+```cpp
+namespace sle::components {
+enum class BodyType : uint8_t { Static, Dynamic, Kinematic };
+
+struct RigidBodyComponent {
+    BodyType bodyType = BodyType::Dynamic;
+    float mass = 1.0f;
+    float linearDamping = 0.0f;
+    float angularDamping = 0.0f;
+    float gravityScale = 1.0f;
+    glm::vec2 velocity{0.0f, 0.0f};
+    float angularVelocity = 0.0f;
+    bool fixedRotation = false;
+    bool enabled = true;
+    uint32_t box2dBodyId = 0; // Internal Box2D handle
+};
+}
+```
+
+**Collider/Zone Components**
+```cpp
+// Solid collision
+struct BoxColliderComponent { glm::vec2 offset, size; float friction, restitution, density; uint16_t categoryBits, maskBits; bool enabled; uintptr_t box2dFixtureId; };
+struct CircleColliderComponent { glm::vec2 offset; float radius, friction, restitution, density; uint16_t categoryBits, maskBits; bool enabled; uintptr_t box2dFixtureId; };
+
+// Sensor triggers (no physical response)
+struct BoxZoneComponent { glm::vec2 offset, size; std::string zoneId; bool enabled; uint16_t categoryBits, maskBits; uintptr_t box2dFixtureId; };
+struct CircleZoneComponent { glm::vec2 offset; float radius; std::string zoneId; bool enabled; uint16_t categoryBits, maskBits; uintptr_t box2dFixtureId; };
+```
+
 ---
 
 ### 2.3 Transform System (Verified Implementation)
@@ -248,6 +298,9 @@ struct ScriptComponent {
       - Submit to Renderer
 3. Renderer batches commands by (layer, shader, texture)
 4. GPU uploads and draws in batch order
+5. If physics debug is enabled:
+    - Query collider and zone/area components
+    - Submit line/point debug commands for outlines + centers
 ```
 
 **Command Structure**:
@@ -272,6 +325,12 @@ struct BatchKey {
 ```
 
 **Culling**: Conservative frustum test before submission (reduces GPU load).
+
+**Physics Debug Rendering (implemented)**:
+- Toggled at runtime (`F3`) and exposed through Script API
+- Draws collider outlines in cyan (`BoxColliderComponent`, `CircleColliderComponent`)
+- Draws zone/area outlines in amber (`BoxZoneComponent`, `CircleZoneComponent`)
+- Uses high debug layers so overlays render above gameplay sprites
 
 **Files**: `Systems/include/sle/systems/RenderSystem.hpp`, `Systems/src/RenderSystem.cpp`
 
@@ -313,6 +372,30 @@ Lua Scripts ← (EngineAPI functions) ← ScriptApiImpl
 ```
 
 **Files**: `Systems/include/sle/systems/ScriptSystem.hpp`, `Systems/src/ScriptSystem.cpp`
+
+---
+
+### 2.6 Physics System (Verified Implementation)
+
+**Responsibility**: Synchronize ECS transforms/components with Box2D and step simulation.
+
+**Update Flow**:
+```
+1. Create bodies/fixtures for entities that gained RigidBody/collider/zone components
+2. Sync dirty TransformComponent -> Box2D body transform
+3. Step PhysicsWorld using fixed timestep accumulator
+4. Sync Box2D body state -> TransformComponent and RigidBody velocity fields
+5. Destroy stale Box2D bodies for removed entities/components
+```
+
+**PhysicsWorld Features (implemented)**:
+- Fixed timestep stepping with accumulator
+- World<->physics unit conversion helpers (`pixelsPerMeter = 50`)
+- Body creation/destruction and velocity/force/impulse APIs
+- Collider fixtures (box/circle) and sensor zones (box/circle)
+- Contact listener dispatching collision and zone enter/exit events via EventBus
+
+**Files**: `Physics/include/sle/physics/PhysicsWorld.hpp`, `Physics/src/PhysicsWorld.cpp`, `Physics/src/ContactListener.cpp`, `Systems/src/PhysicsSystem.cpp`
 
 ---
 
@@ -453,6 +536,7 @@ end
 - Frustum culls against camera
 - Builds `QuadCommand` objects
 - Submits to Renderer
+- Optionally submits physics debug overlays (colliders + zones/areas) as line/point commands
 
 **Layer 2: Renderer (Decoupled)**
 - Accepts commands (no scene knowledge)
@@ -461,6 +545,24 @@ end
 - Submits batches to OpenGL
 
 **Benefit**: Renderer is reusable; can be tested without Scene/Lua.
+
+### 4.4 Physics Debug Overlay (Verified)
+
+When debug rendering is enabled, the render pass includes additional command streams:
+
+```
+- Collider overlays (solid collision):
+    BoxColliderComponent + CircleColliderComponent -> cyan outlines
+
+- Area overlays (sensor zones):
+    BoxZoneComponent + CircleZoneComponent -> amber outlines
+
+- Layering:
+    Collider debug layer < Zone/area debug layer
+    Both debug layers render above regular sprite layers
+```
+
+This provides immediate visual validation of collision geometry and trigger-area boundaries.
 
 ### 4.2 GPU Optimization Strategy
 
@@ -587,18 +689,17 @@ while (isRunning) {
 
 ### 6.1 Context Struct
 
-All systems receive a single `Context` struct with pointers to all services:
+All systems receive a single `Context` struct with shared frame services (references + physics pointer):
 
 ```cpp
 struct Context {
-    Window* window;
-    Input* input;
-    Camera2D* camera;
-    Scene* scene;
-    Renderer* renderer;
-    ScriptEngine* scriptEngine;
-    Resources* resources;
-    Timer* timer;
+    sle::entity::Scene& scene;
+    sle::entity::Registry& registry;
+    sle::events::EventBus& eventBus;
+    sle::renderer::Renderer& renderer;
+    const sle::core::Camera2D& camera;
+    sle::physics::PhysicsWorld* physicsWorld;
+    float dt;
 };
 ```
 
@@ -614,9 +715,9 @@ struct Context {
 ```cpp
 // RenderSystem just receives context
 void RenderSystem::update(const Context& ctx) {
-    auto view = ctx.scene->getRegistry().view<SpriteRenderer>();
+    auto view = ctx.registry.view<SpriteRenderer>();
     for (auto entity : view) {
-        ctx.renderer->submitQuad(cmd);
+        ctx.renderer.submitQuad(cmd);
     }
 }
 ```
@@ -626,7 +727,8 @@ void RenderSystem::update(const Context& ctx) {
 // ScriptSystem calls abstract ScriptApi
 class ScriptSystem {
     void update(const Context& ctx) {
-        ctx.scriptEngine->runUpdateCallbacks(ctx);
+        // Script engine is owned by Runtime and injected into ScriptSystem.
+        // Context still carries frame data and ECS access needed by updates.
     }
 };
 ```
@@ -685,14 +787,20 @@ public:
 
 | Aspect | Documented | Code Matches | Notes |
 |--------|-----------|--------------|-------|
-| Module chain | Core→Platform→Renderer→Resources→Scene→Scripting→Systems→Runtime | ✅ Yes | CMakeLists.txt verifies |
+| Module chain | Core→Platform→Renderer→Resources→Scene→Physics→Scripting→Systems→Sandbox | ✅ Yes | EngineModules/CMakeLists.txt verifies |
 | ECS pattern | Pure data components, Registry views | ✅ Yes | Uses entt library |
 | Transform pipeline | Local (component) → World (computed) → System reads | ✅ Yes | Iterative DFS implementation |
 | Lua VM | Single global per engine | ✅ Yes | ScriptEngine owns lua_State |
 | Frame loop order | Input→Transform→Script→Physics→Render | ✅ Yes | Runtime::run() implementation |
+| Physics debug toggle | Runtime toggle + script exposure | ✅ Yes | F3 in Runtime + Script API methods |
 | Batching | (layer, shader, texture) ordering | ✅ Yes | Renderer::endFrame() sorts |
 | GPU upload | Ping-pong VBOs, stream strategy | ✅ Yes | Verified in Renderer code |
 | Scripting API | ~25 functions via ScriptApi interface | ✅ Yes | LuaBindings.cpp registration |
+| Physics module | Box2D world/body/fixture integration | ✅ Yes | PhysicsWorld + ContactListener |
+| Physics ECS sync | RigidBody + collider/zone creation and sync | ✅ Yes | PhysicsSystem::update() |
+| Physics script API | force/impulse/velocity/raycast/debug bindings | ✅ Yes | ScriptApi + LuaBindingsPhysics |
+| Physics debug rendering | Collider + zone/area overlay pass | ✅ Yes | RenderSystem debug views + line/point commands |
+| Area events | Zone enter/exit event dispatch | ✅ Yes | ContactListener emits ZoneEnterEvent/ZoneExitEvent |
 | Hierarchy | Parent/child maps, reparenting support | ✅ Yes | Scene::setParent() maintains |
 | Culling | Frustum test before render submit | ✅ Yes | RenderSystem::update() |
 
@@ -700,7 +808,8 @@ public:
 
 | Item | Status | Plan |
 |------|--------|------|
-| Physics integration | Placeholder (Box2D not fully integrated) | Box2D collision queries WIP |
+| Physics integration | Implemented (Box2D world, colliders, zones, events, Lua API) | Future: joints, constraints extensions, richer debug tooling |
+| Physics debug rendering | Implemented (collider + area overlays, runtime toggle) | Future: labels, normals, contact point visualization |
 | Audio | Headers present (miniaudio) but not integrated | Audio system design pending |
 | Animation | No component yet | AnimationComponent + AnimationSystem design needed |
 | Serialization | Entity data serializable to JSON | Scene save/load not yet exposed |

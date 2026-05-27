@@ -33,6 +33,8 @@ private:
     std::unordered_set<uint32_t> activePhysicsEntities;
     // Keep body IDs even if components are removed so cleanup can still destroy Box2D bodies.
     std::unordered_map<uint32_t, uint32_t> entityBodyIds;
+    // Track the last physics world we injected the event bus into (for re-injection on scene switches)
+    sle::physics::PhysicsWorld* lastInjectedWorld_ = nullptr;
 };
 
 } // namespace sle

@@ -6,6 +6,15 @@
 
 namespace sle::renderer {
 
+struct TextureLoadOptions
+{
+    bool generateMipmaps = false;
+    int wrapS = 0;
+    int wrapT = 0;
+    int minFilter = 0;
+    int magFilter = 0;
+};
+
 class Texture
 {
 public:
@@ -13,6 +22,9 @@ public:
     ~Texture();
 
     bool loadFromFiles(const std::string& imagePath);
+    bool loadFromFiles(const std::string& imagePath, const TextureLoadOptions& options);
+    bool loadFromRGBAData(int textureWidth, int textureHeight, const unsigned char* rgbaData);
+    bool loadFromRGBAData(int textureWidth, int textureHeight, const unsigned char* rgbaData, const TextureLoadOptions& options);
 
     void bind(uint32_t slot = 0) const;
     void unbind() const;

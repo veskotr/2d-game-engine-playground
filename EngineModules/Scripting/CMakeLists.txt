@@ -4,6 +4,7 @@ add_library(sle_scripting STATIC
     src/LuaBindingsPhysics.cpp
     src/LuaBindingsInput.cpp
     src/LuaBindingsCamera.cpp
+    src/LuaBindingsEvents.cpp
     src/LuaBindingsConstants.cpp
     src/ScriptEngine.cpp
 )
@@ -34,6 +35,7 @@ if(Python3_Interpreter_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/LuaBindingsPhysics.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/LuaBindingsInput.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/LuaBindingsCamera.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/LuaBindingsEvents.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/LuaBindingsConstants.cpp
     )
 

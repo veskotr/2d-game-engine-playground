@@ -1,7 +1,7 @@
 #pragma once
 
 namespace sle::entity { class Scene; class Registry; }
-namespace sle::core { class EventBus; }
+namespace sle::events { class EventBus; }
 namespace sle::renderer { class Renderer; }
 namespace sle::core { class Camera2D; }
 namespace sle::physics { class PhysicsWorld; }
@@ -15,7 +15,8 @@ struct Context
 {
     sle::entity::Scene&      scene;
     sle::entity::Registry&   registry;
-    sle::core::EventBus&     eventBus;
+    sle::events::EventBus&     eventBus;        // Per-scene event bus
+    sle::events::EventBus&     globalBus;       // Engine-wide event bus (scene load/unload)
     sle::renderer::Renderer& renderer;
     const sle::core::Camera2D& camera;
     sle::physics::PhysicsWorld* physicsWorld;  // Physics world for physics system

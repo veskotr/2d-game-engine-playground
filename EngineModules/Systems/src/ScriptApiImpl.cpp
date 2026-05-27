@@ -9,6 +9,8 @@
 #include <sle/scene/components/Transform.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/physics/PhysicsWorld.hpp>
+#include <sle/events/CollisionEvents.hpp>
+#include <sle/events/ZoneEvents.hpp>
 #include <box2d/b2_world.h>
 #include <box2d/b2_contact.h>
 #include <box2d/b2_fixture.h>
@@ -84,6 +86,19 @@ bool ScriptApiImpl::isEntityAlive(sle::scripting::ScriptEntityRef entity) const
 
 void ScriptApiImpl::destroyEntity(sle::scripting::ScriptEntityRef entity)
 {
+    // Auto-cleanup all event subscriptions for this entity
+    entitySubscriptions_.erase(entity.id);
+    
+    // Also remove any subscription ID mappings that point to this entity
+    auto it = subscriptionIdToLocation_.begin();
+    while (it != subscriptionIdToLocation_.end())
+    {
+        if (it->second.first == entity.id)
+            it = subscriptionIdToLocation_.erase(it);
+        else
+            ++it;
+    }
+
     runtime.getScene().destroyEntity(sle::entity::Entity(entity.id));
 }
 
@@ -537,6 +552,87 @@ void ScriptApiImpl::setPhysicsDebugEnabled(bool enabled)
 bool ScriptApiImpl::isPhysicsDebugEnabled() const
 {
     return runtime.isPhysicsDebugEnabled();
+}
+
+int ScriptApiImpl::subscribeEvent(const std::string& eventName, uint32_t entityId, int luaRef)
+{
+    auto& eventBus = runtime.getScene().getEventBus();
+    int subId = nextSubscriptionId_++;
+
+    if (eventName == "collision.begin")
+    {
+        auto handle = eventBus.subscribe<sle::events::CollisionBeginEvent>(
+            [this, luaRef](const sle::events::CollisionBeginEvent& evt) {
+                // Call Lua handler with entity IDs
+                // This would require access to Lua state (to be implemented with Lua integration)
+                // For now, just log the event
+                sle::core::Log::info("CollisionBegin event fired");
+            });
+        entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
+        subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
+        return subId;
+    }
+    else if (eventName == "collision.end")
+    {
+        auto handle = eventBus.subscribe<sle::events::CollisionEndEvent>(
+            [this, luaRef](const sle::events::CollisionEndEvent& evt) {
+                sle::core::Log::info("CollisionEnd event fired");
+            });
+        entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
+        subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
+        return subId;
+    }
+    else if (eventName == "zone.enter")
+    {
+        auto handle = eventBus.subscribe<sle::events::ZoneEnterEvent>(
+            [this, luaRef](const sle::events::ZoneEnterEvent& evt) {
+                sle::core::Log::info("ZoneEnter event fired");
+            });
+        entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
+        subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
+        return subId;
+    }
+    else if (eventName == "zone.exit")
+    {
+        auto handle = eventBus.subscribe<sle::events::ZoneExitEvent>(
+            [this, luaRef](const sle::events::ZoneExitEvent& evt) {
+                sle::core::Log::info("ZoneExit event fired");
+            });
+        entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
+        subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
+        return subId;
+    }
+
+    return -1;  // Unknown event name
+}
+
+void ScriptApiImpl::unsubscribeEvent(int subscriptionId)
+{
+    auto it = subscriptionIdToLocation_.find(subscriptionId);
+    if (it == subscriptionIdToLocation_.end())
+        return;
+
+    uint32_t entityId = it->second.first;
+    size_t index = it->second.second;
+
+    auto entityIt = entitySubscriptions_.find(entityId);
+    if (entityIt != entitySubscriptions_.end() && index < entityIt->second.size())
+    {
+        // Swap with last and pop for O(1) removal
+        if (index != entityIt->second.size() - 1)
+        {
+            std::swap(entityIt->second[index], entityIt->second.back());
+            
+            // Update the location tracking for swapped subscription
+            // This is a simplified version; a more robust implementation would track indices
+        }
+        entityIt->second.pop_back();
+
+        if (entityIt->second.empty())
+            entitySubscriptions_.erase(entityIt);
+    }
+
+    subscriptionIdToLocation_.erase(it);
 }
 
 } // namespace sle

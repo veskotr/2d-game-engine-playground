@@ -33,6 +33,6 @@ include(cmake/Dependencies.cmake)
 add_subdirectory(EngineModules)
 
 # -------------------------
-# Sandbox executable
+# Standalone examples/samples
 # -------------------------
-add_subdirectory(Sandbox)
+add_subdirectory(examples)

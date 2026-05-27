@@ -6,6 +6,10 @@
 #include <sle/engine/Context.hpp>
 #include <sle/resources/Resources.hpp>
 
+#include <algorithm>
+#include <cmath>
+#include <string>
+
 namespace sle
 {
 
@@ -144,6 +148,13 @@ namespace sle
         }
         scriptSystem.setScriptEngine(&scriptEngine);
 
+        auto uiResult = uiSystem.init(&scriptEngine);
+        if (!uiResult.ok())
+        {
+            return Result<bool>::error(uiResult.error());
+        }
+        uiSystem.setDefaultShaderID(defaultQuadShader->getID());
+
         Input::init(window.getNative());
 
         renderer.setCamera(&camera);
@@ -162,6 +173,8 @@ namespace sle
 
         float fpsLogAccumulator = 0.0f;
         int fpsFrameCount = 0;
+        float fpsUiAccumulator = 0.0f;
+        int fpsUiFrameCount = 0;
         double transformMsAccum = 0.0;
         double scriptMsAccum = 0.0;
         double physicsMsAccum = 0.0;
@@ -184,6 +197,16 @@ namespace sle
             float dt = timer.getDeltaTime();
             fpsLogAccumulator += dt;
             ++fpsFrameCount;
+            fpsUiAccumulator += dt;
+            ++fpsUiFrameCount;
+
+            if (fpsUiAccumulator >= 1.0f)
+            {
+                const int fpsUi = static_cast<int>(std::lround(static_cast<float>(fpsUiFrameCount) / std::max(fpsUiAccumulator, 0.0001f)));
+                uiSystem.setBinding("fpsText", std::to_string(fpsUi));
+                fpsUiAccumulator = 0.0f;
+                fpsUiFrameCount = 0;
+            }
 
             window.pollEvents();
 
@@ -205,11 +228,12 @@ namespace sle
                 break;
 
             // Construct per-frame context with all system dependencies.
-            Context ctx{scene, scene.getRegistry(), scene.getEventBus(), renderer, camera, physicsWorld.get(), dt};
+            Context ctx{scene, scene.getRegistry(), scene.getEventBus(), globalBus_, renderer, camera, physicsWorld.get(), dt};
 
             // === FRAME START ===
-            // Clear accumulated events from previous frame.
-            ctx.eventBus.clear();
+            // Flush queued events from previous frame.
+            ctx.eventBus.flushQueue();
+            ctx.globalBus.flushQueue();
 
             // === LOGIC UPDATE PHASE ===
             // 1. Resolve world-space transforms (required by all other systems).
@@ -230,6 +254,8 @@ namespace sle
 
             // 4. Submit sprite renders for all entities with transforms.
             renderSystem.update(ctx);
+            sle::ui::UIFrameContext uiCtx{scene, scene.getRegistry(), scene.getEventBus(), globalBus_, renderer, camera, scriptEngine, dt};
+            uiSystem.update(uiCtx);
             auto t4 = Clock::now();
 
             renderer.endFrame();

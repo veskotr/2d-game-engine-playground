@@ -152,7 +152,7 @@ void PhysicsWorld::setBodyEntityId(uint32_t bodyId, uint32_t entityId)
     }
 }
 
-void PhysicsWorld::setEventBus(sle::core::EventBus* eventBus)
+void PhysicsWorld::setEventBus(sle::events::EventBus* eventBus)
 {
     if (contactListener_)
         contactListener_->setEventBus(eventBus);

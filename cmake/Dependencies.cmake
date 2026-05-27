@@ -57,20 +57,50 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(box2d)
 
 # =========================
-# stb (header-only, manual)
+# stb (header-only)
 # =========================
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG master
+)
+FetchContent_Populate(stb)
+
 add_library(stb_image INTERFACE)
 target_include_directories(stb_image INTERFACE
-    ${CMAKE_SOURCE_DIR}/External/stb
+    ${stb_SOURCE_DIR}
+)
+
+# stb_truetype is provided by the same fetched source tree.
+add_library(stb_truetype INTERFACE)
+target_include_directories(stb_truetype INTERFACE
+    ${stb_SOURCE_DIR}
 )
 
 # =========================
 # miniaudio (header-only)
 # =========================
+FetchContent_Declare(
+    miniaudio
+    GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+    GIT_TAG master
+)
+FetchContent_Populate(miniaudio)
+
 add_library(miniaudio INTERFACE)
 target_include_directories(miniaudio INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/miniaudio
+    ${miniaudio_SOURCE_DIR}
 )
+
+# =========================
+# XML parser
+# =========================
+FetchContent_Declare(
+    pugixml
+    GIT_REPOSITORY https://github.com/zeux/pugixml.git
+    GIT_TAG master
+)
+FetchContent_MakeAvailable(pugixml)
 
 # =========================
 # OpenGL (system lib)

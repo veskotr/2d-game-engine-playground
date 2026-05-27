@@ -1,6 +1,7 @@
 #pragma once
 #include <sle/core/EngineConfig.hpp>
 #include <sle/core/Timer.hpp>
+#include <sle/events/EventBus.hpp>
 #include <sle/platform/Window.hpp>
 #include <sle/scene/Scene.hpp>
 #include <sle/platform/Input.hpp>
@@ -14,6 +15,7 @@
 #include <sle/engine/ScriptApiImpl.hpp>
 #include <sle/engine/Context.hpp>
 #include <sle/scripting/ScriptEngine.hpp>
+#include <sle/ui/UISystem.hpp>
 #include <sle/physics/PhysicsWorld.hpp>
 
 #include <glm/vec2.hpp>
@@ -53,6 +55,7 @@ public:
     SceneManager& getSceneManager() { return sceneManager; }
     const SceneManager& getSceneManager() const { return sceneManager; }
     sle::physics::PhysicsWorld* getPhysicsWorld() { return physicsWorld.get(); }
+    sle::events::EventBus& getGlobalBus() { return globalBus_; }
 
 private:
     sle::core::EngineConfig config;
@@ -61,10 +64,12 @@ private:
     sle::renderer::Renderer renderer;
     sle::entity::Scene scene;
     std::unique_ptr<sle::physics::PhysicsWorld> physicsWorld;
+    sle::events::EventBus globalBus_;  // Engine-wide event bus for lifecycle events
     TransformSystem transformSystem;
     ScriptSystem scriptSystem;
     PhysicsSystem physicsSystem;
     RenderSystem renderSystem;
+    sle::ui::UISystem uiSystem;
     SceneManager sceneManager;
     ScriptApiImpl scriptApi;
     sle::scripting::ScriptEngine scriptEngine;

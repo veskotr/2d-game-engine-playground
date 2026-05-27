@@ -19,12 +19,11 @@ void PhysicsSystem::update(Context& ctx)
     if (!ctx.physicsWorld)
         return;
 
-    // Ensure EventBus is set so ContactListener can dispatch events
-    static bool eventBusSet = false;
-    if (!eventBusSet)
+    // Re-inject EventBus whenever physics world changes (e.g., scene switch)
+    if (ctx.physicsWorld != lastInjectedWorld_)
     {
         ctx.physicsWorld->setEventBus(&ctx.eventBus);
-        eventBusSet = true;
+        lastInjectedWorld_ = ctx.physicsWorld;
     }
 
     // Phase 1: Create Box2D bodies for newly added RigidBody components

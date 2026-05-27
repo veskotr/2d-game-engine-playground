@@ -14,7 +14,7 @@
 class b2World;
 class b2Body;
 
-namespace sle::core {
+namespace sle::events {
 class EventBus;
 }
 
@@ -100,7 +100,7 @@ public:
 
     // Set the EventBus so ContactListener can dispatch collision/zone events.
     // Should be called once per scene load with the scene's EventBus.
-    void setEventBus(sle::core::EventBus* eventBus);
+    void setEventBus(sle::events::EventBus* eventBus);
 
     // ============ Fixture Management ============
 

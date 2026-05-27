@@ -83,6 +83,14 @@ public:
     virtual uint32_t raycastAll(const glm::vec2& start, const glm::vec2& end, std::vector<PhysicsRaycastHit>& outHits) const = 0;
     virtual void setPhysicsDebugEnabled(bool enabled) = 0;
     virtual bool isPhysicsDebugEnabled() const = 0;
+
+    // ====== EVENTS ======
+    // Subscribe to an engine event. Returns a subscription ID for later unsubscribe.
+    // eventName: "collision.begin", "collision.end", "zone.enter", "zone.exit"
+    // entityId: entity subscribing to the event (for auto-cleanup on destruction)
+    // luaRef: Lua function ref (from luaL_ref) to call when event fires
+    virtual int subscribeEvent(const std::string& eventName, uint32_t entityId, int luaRef) = 0;
+    virtual void unsubscribeEvent(int subscriptionId) = 0;
 };
 
 } // namespace sle::scripting

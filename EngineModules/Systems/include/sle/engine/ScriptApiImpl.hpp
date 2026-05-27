@@ -1,6 +1,9 @@
 #pragma once
 
 #include <sle/scripting/ScriptApi.hpp>
+#include <sle/events/ScopedSubscription.hpp>
+#include <unordered_map>
+#include <vector>
 
 namespace sle {
 
@@ -61,8 +64,15 @@ public:
     void setPhysicsDebugEnabled(bool enabled) override;
     bool isPhysicsDebugEnabled() const override;
 
+    int subscribeEvent(const std::string& eventName, uint32_t entityId, int luaRef) override;
+    void unsubscribeEvent(int subscriptionId) override;
+
 private:
     Runtime& runtime;
+    // Track subscriptions per entity for auto-cleanup
+    std::unordered_map<uint32_t, std::vector<sle::events::ScopedSubscription>> entitySubscriptions_;
+    // Track subscription ID to index mapping for unsubscribe
+    std::unordered_map<int, std::pair<uint32_t, size_t>> subscriptionIdToLocation_;
+    int nextSubscriptionId_ = 1;
 };
-
-} // namespace sle
+};// namespace sle

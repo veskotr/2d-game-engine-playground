@@ -12,6 +12,10 @@ struct MouseState
 
     bool left = false;
     bool right = false;
+    bool leftPressed = false;
+    bool leftReleased = false;
+    bool rightPressed = false;
+    bool rightReleased = false;
 };
 
 struct KeyState

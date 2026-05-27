@@ -12,6 +12,7 @@ target_link_libraries(sle_physics
     PUBLIC
         sle::core
         sle::scene
+        sle::events
         box2d
     PRIVATE
         glm::glm

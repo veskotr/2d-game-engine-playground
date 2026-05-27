@@ -1,13 +1,13 @@
 #include <sle/physics/ContactListener.hpp>
-#include <sle/core/EventBus.hpp>
-#include <sle/scene/events/CollisionEvents.hpp>
-#include <sle/scene/events/ZoneEvents.hpp>
+#include <sle/events/EventBus.hpp>
+#include <sle/events/CollisionEvents.hpp>
+#include <sle/events/ZoneEvents.hpp>
 #include <box2d/b2_contact.h>
 #include <box2d/b2_fixture.h>
 
 namespace sle::physics {
 
-ContactListener::ContactListener(sle::core::EventBus* eventBus, std::unordered_map<uintptr_t, std::string>* fixtureZoneIds)
+ContactListener::ContactListener(sle::events::EventBus* eventBus, std::unordered_map<uintptr_t, std::string>* fixtureZoneIds)
     : eventBus_(eventBus), fixtureZoneIds_(fixtureZoneIds)
 {
 }
@@ -46,7 +46,7 @@ void ContactListener::BeginContact(b2Contact* contact)
             zoneId,
             sle::entity::Entity{otherEntityId}
         };
-        eventBus_->emit(event);
+        eventBus_->queue(event);
     }
     else
     {
@@ -62,7 +62,7 @@ void ContactListener::BeginContact(b2Contact* contact)
             sle::entity::Entity{entityIdA},
             sle::entity::Entity{entityIdB}
         };
-        eventBus_->emit(event);
+        eventBus_->queue(event);
     }
 }
 
@@ -97,7 +97,7 @@ void ContactListener::EndContact(b2Contact* contact)
             zoneId,
             sle::entity::Entity{otherEntityId}
         };
-        eventBus_->emit(event);
+        eventBus_->queue(event);
     }
     else
     {
@@ -112,7 +112,7 @@ void ContactListener::EndContact(b2Contact* contact)
             sle::entity::Entity{entityIdA},
             sle::entity::Entity{entityIdB}
         };
-        eventBus_->emit(event);
+        eventBus_->queue(event);
     }
 }
 

@@ -1,5 +1,7 @@
 # SLE (Simple Little Engine) Architecture Design
 
+> Historical design note: prefer `ARCHITECTURE_VERIFIED.md` for current architecture truth and `ENGINE_MASTER_PLAN.md` for active roadmap planning.
+
 ## Executive Summary
 
 A **data-driven, Lua-scripted 2D game engine** built on modular C++ with strict dependency layering, pure ECS, and safe Lua integration via a controlled EngineAPI.

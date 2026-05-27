@@ -1,5 +1,7 @@
 # Box2D Physics Integration Plan
 
+> Planning note: use `ENGINE_MASTER_PLAN.md` as the canonical roadmap. Keep this file for physics-specific implementation details.
+
 ## Executive Summary
 
 Integrate Box2D for collision detection and 2D physics into SLE. The physics system will follow the existing modular architecture with a new **Physics** module positioned between Scene and Systems layers. Physics will operate as a discrete system that reads transforms, simulates the physics world, and writes results back to entities.

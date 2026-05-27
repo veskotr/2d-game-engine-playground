@@ -14,6 +14,7 @@ description: "Instructions for contributing to SLE (Simple Little Engine), a mod
 - **Design Pattern**: Pure ECS + command-based rendering
 - **Scripting**: Single Lua VM per engine instance
 - **Build**: CMake, C++17, OpenGL 4.3
+- **Agent Fast Context**: Read `docs/AGENT_ARCHITECTURE_CONTEXT.md` first, then `docs/ARCHITECTURE_VERIFIED.md` and `docs/IMPLEMENTATION_OVERVIEW.md`
 
 ---
 
@@ -222,13 +223,13 @@ Per Frame:
 3. Register in `Scene/src/` or ComponentRegistry
 4. Export from Scene public API
 5. Add to any systems that need it (via Registry view)
-6. Update `COMPONENT_SYSTEM_GUIDE.md`
+6. Update `docs/COMPONENT_SYSTEM_GUIDE.md`
 
 ### Adding a Lua API Function
 1. Add abstract method to `ScriptApi` (Scripting/include/)
 2. Implement in `ScriptApiImpl` (Systems/src/)
 3. Register binding in `LuaBindings.cpp` via `lua_register()`
-4. Document in script template and `SCRIPTING_CURRENT.md`
+4. Document in script template and `docs/SCRIPTING_CURRENT.md`
 5. Test in Sandbox with a simple script
 
 ### Creating a New System
@@ -238,14 +239,14 @@ Per Frame:
 4. Operate via Registry views, not direct pointers
 5. Call into Runtime/ScriptApi only for high-level operations
 6. Add to Runtime::run() at appropriate point in frame
-7. Update `IMPLEMENTATION_OVERVIEW.md` frame loop
+7. Update `docs/IMPLEMENTATION_OVERVIEW.md` frame loop
 
 ### Extending Renderer
 1. New command type? Add to `QuadCommand` or create sibling
 2. New batch key? Update `BatchKey` struct
 3. New GPU upload strategy? Modify upload loop in `Renderer::endFrame()`
 4. **KEY**: Do not add Scene dependencies
-5. Update `RENDERING_CURRENT.md`
+5. Update `docs/RENDERING_CURRENT.md`
 
 ---
 
@@ -253,16 +254,34 @@ Per Frame:
 
 Each major `.md` file serves a purpose:
 
-- **ARCHITECTURE.md**: Module design, responsibilities, rationale
-- **IMPLEMENTATION_OVERVIEW.md**: Current-state, what's actually coded, frame loop
-- **COMPONENT_SYSTEM_GUIDE.md**: How to add components, serialization patterns
-- **SCRIPTING_CURRENT.md**: Lua integration, EngineAPI, script lifecycle
-- **RENDERING_CURRENT.md**: Render pipeline, batching, GPU strategy
-- **SCENE_ECS_CURRENT.md**: Entity model, hierarchy, component storage
-- **LUA_IMPLEMENTATION_QUICKSTART.md**: Step-by-step Lua integration guide
-- **OPTIMIZATIONS_CURRENT.md**: Performance work, bottlenecks addressed
+- **docs/ARCHITECTURE.md**: Module design, responsibilities, rationale
+- **docs/IMPLEMENTATION_OVERVIEW.md**: Current-state, what's actually coded, frame loop
+- **docs/COMPONENT_SYSTEM_GUIDE.md**: How to add components, serialization patterns
+- **docs/SCRIPTING_CURRENT.md**: Lua integration, EngineAPI, script lifecycle
+- **docs/RENDERING_CURRENT.md**: Render pipeline, batching, GPU strategy
+- **docs/SCENE_ECS_CURRENT.md**: Entity model, hierarchy, component storage
+- **docs/LUA_IMPLEMENTATION_QUICKSTART.md**: Step-by-step Lua integration guide
+- **docs/OPTIMIZATIONS_CURRENT.md**: Performance work, bottlenecks addressed
 
 **When you modify code, update corresponding .md file immediately.** Documentation lag is a killer for AI + team understanding.
+
+### Task Completion Documentation Gate (Required)
+
+Before marking any implementation task complete, the agent must run this gate:
+
+1. Identify behavioral impact:
+  - Did frame order, module boundaries, ownership, or API surface change?
+2. Apply required doc updates:
+  - Update `docs/IMPLEMENTATION_OVERVIEW.md` for runtime behavior changes.
+  - Update the affected subsystem doc (Scene/Scripting/Rendering/Physics/UI).
+  - Update `docs/ARCHITECTURE_VERIFIED.md` if architecture truth changed.
+  - Update `docs/ENGINE_MASTER_PLAN.md` if priorities, sequence, or scope changed.
+3. Update fast context:
+  - Update `docs/AGENT_ARCHITECTURE_CONTEXT.md` if invariants, ownership, or first-read paths changed.
+4. Report completion with doc refs:
+  - Final task summary must list the exact updated docs.
+
+If code changed but no docs changed, the agent must explicitly justify why docs were unaffected.
 
 ---
 
@@ -316,6 +335,7 @@ namespace sle::components { } // Within sle::scene for clarity
 - [ ] No architecture violations
 - [ ] Module responsibilities clear
 - [ ] No circular dependencies
+- [ ] Task Completion Documentation Gate executed
 
 ---
 
@@ -330,7 +350,7 @@ When using AI to extend SLE:
 5. **Doc sync**: Always ask AI to update .md files alongside code changes
 
 Example good request:
-> "Add a ColorComponent with serialize/deserialize. Update code AND COMPONENT_SYSTEM_GUIDE.md"
+> "Add a ColorComponent with serialize/deserialize. Update code AND docs/COMPONENT_SYSTEM_GUIDE.md"
 
 Example bad request:
 > "Make the Renderer aware of the Scene for optimization" (breaks layering)
@@ -340,11 +360,11 @@ Example bad request:
 ## Resources & Files
 
 **Architecture Files:**
-- Root: `ARCHITECTURE.md`, `IMPLEMENTATION_OVERVIEW.md`, `COMPONENT_SYSTEM_GUIDE.md`
-- Scripting: `SCRIPTING_CURRENT.md`, `LUA_IMPLEMENTATION_QUICKSTART.md`
-- Rendering: `RENDERING_CURRENT.md`
-- Scene: `SCENE_ECS_CURRENT.md`
-- Performance: `OPTIMIZATIONS_CURRENT.md`
+- Docs: `docs/ARCHITECTURE.md`, `docs/ARCHITECTURE_VERIFIED.md`, `docs/IMPLEMENTATION_OVERVIEW.md`, `docs/ENGINE_MASTER_PLAN.md`
+- Scripting: `docs/SCRIPTING_CURRENT.md`, `docs/LUA_IMPLEMENTATION_QUICKSTART.md`
+- Rendering: `docs/RENDERING_CURRENT.md`
+- Scene: `docs/SCENE_ECS_CURRENT.md`
+- Performance: `docs/OPTIMIZATIONS_CURRENT.md`
 
 **Key Directories:**
 - `EngineModules/Core`, `Platform`, `Renderer`, `Resources`, `Scene`, `Scripting`, `Systems`
@@ -371,7 +391,7 @@ A: Via public structs/interfaces or Context parameters. Never via static globals
 A: ScriptEngine supports hot-reload. Verify it works in Sandbox before shipping.
 
 **Q: Should I serialize components to Lua tables or JSON?**  
-A: Both. See COMPONENT_SYSTEM_GUIDE.md for the pattern.
+A: Both. See docs/COMPONENT_SYSTEM_GUIDE.md for the pattern.
 
 **Q: Can entities be destroyed mid-frame?**  
 A: Yes. Scene::destroyEntity() handles it. Systems read from Registry views which skip dead entities.
@@ -380,4 +400,4 @@ A: Yes. Scene::destroyEntity() handles it. Systems read from Registry views whic
 
 **Last Updated**: May 2026  
 **Verified Against**: All documented .md files + source code exploration  
-**Maintainer**: Architecture Council (documented in ARCHITECTURE.md)
+**Maintainer**: Architecture Council (documented in docs/ARCHITECTURE.md)

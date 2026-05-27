@@ -1,5 +1,7 @@
 # Event System Implementation Plan (Complete & Detailed)
 
+> Planning note: use `ENGINE_MASTER_PLAN.md` as the canonical roadmap. Keep this file for event-system implementation details.
+
 ## Current Critical Bugs (Must Fix First)
 
 Three concrete bugs exist that block any new event system feature:

@@ -150,6 +150,19 @@ public:
         handleToType.clear();
     }
 
+    // Remove all queued deferred events without dispatching them.
+    void clearQueue()
+    {
+        pendingQueue_.clear();
+    }
+
+    // Remove both subscriptions and queued deferred events.
+    void clearAll()
+    {
+        clearSubscriptions();
+        clearQueue();
+    }
+
 private:
     struct Slot
     {

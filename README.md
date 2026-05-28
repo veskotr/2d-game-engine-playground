@@ -58,6 +58,30 @@ build/debug/examples/phase1_eventbus/Debug/example_phase1_eventbus.exe
 build/debug/examples/phase2_lua_events/Debug/example_phase2_lua_events.exe
 ```
 
+## Run Tests
+
+After configuring and building with presets, run CTest from repository root.
+
+Smoke tests:
+
+```powershell
+ctest --test-dir build/debug -C Debug -L smoke --output-on-failure
+```
+
+Current smoke suite includes harness and runtime sentinel checks.
+
+Integration tests:
+
+```powershell
+ctest --test-dir build/debug -C Debug -L integration --output-on-failure
+```
+
+All tests:
+
+```powershell
+ctest --test-dir build/debug -C Debug --output-on-failure
+```
+
 ## Documentation
 
 Start here:

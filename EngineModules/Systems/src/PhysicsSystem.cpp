@@ -19,11 +19,12 @@ void PhysicsSystem::update(Context& ctx)
     if (!ctx.physicsWorld)
         return;
 
-    // Re-inject EventBus whenever physics world changes (e.g., scene switch)
-    if (ctx.physicsWorld != lastInjectedWorld_)
+    // Re-inject EventBus whenever physics world or scene EventBus changes.
+    if (ctx.physicsWorld != lastInjectedWorld_ || &ctx.eventBus != lastInjectedEventBus_)
     {
         ctx.physicsWorld->setEventBus(&ctx.eventBus);
         lastInjectedWorld_ = ctx.physicsWorld;
+        lastInjectedEventBus_ = &ctx.eventBus;
     }
 
     // Phase 1: Create Box2D bodies for newly added RigidBody components

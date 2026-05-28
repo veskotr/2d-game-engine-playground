@@ -19,6 +19,7 @@
 #include <sle/physics/PhysicsWorld.hpp>
 
 #include <glm/vec2.hpp>
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -32,6 +33,7 @@ public:
 
     sle::core::Result<bool> init();
     void run();
+    std::size_t runForFrames(std::size_t maxFrames);
 
     bool registerScene(const std::string& sceneName, SceneManager::SceneBuilder builder);
     bool hasScene(const std::string& sceneName) const;
@@ -58,6 +60,8 @@ public:
     sle::events::EventBus& getGlobalBus() { return globalBus_; }
 
 private:
+    std::size_t runMainLoop(bool bounded, std::size_t maxFrames);
+
     sle::core::EngineConfig config;
 
     sle::core::Window window;

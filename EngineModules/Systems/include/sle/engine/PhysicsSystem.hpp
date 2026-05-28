@@ -35,6 +35,7 @@ private:
     std::unordered_map<uint32_t, uint32_t> entityBodyIds;
     // Track the last physics world we injected the event bus into (for re-injection on scene switches)
     sle::physics::PhysicsWorld* lastInjectedWorld_ = nullptr;
+    sle::events::EventBus* lastInjectedEventBus_ = nullptr;
 };
 
 } // namespace sle

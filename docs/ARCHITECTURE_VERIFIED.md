@@ -1052,41 +1052,140 @@ AnimationSystem::update(ctx);  // After TransformSystem, before RenderSystem
 
 ## Part 13: Testing Strategy
 
-### 13.1 Unit Testing Approach
+### 13.1 Test Architecture Goals
 
-**Testable Modules** (no external dependencies):
-- Core (Log, Timer, Result)
-- Platform (Input state machine, Camera math)
-- Renderer (Batch sorting, GPU command validation)
-- Scene (Registry operations, hierarchy)
+Testing is architecture, not a final checklist item.
 
-**Example Test**:
-```cpp
-TEST(TransformSystemTest, DirtyFlagOptimization) {
-    // Create entity hierarchy
-    auto root = scene.createEntity();
-    auto child = scene.createEntity();
-    scene.setParent(child, root);
-    
-    // Modify root transform (marks child dirty)
-    scene.setTransformPosition(root, {10, 20});
-    
-    // Run transform system
-    TransformSystem::update(ctx);
-    
-    // Verify child computed correctly
-    auto wt = scene.getComponent<WorldTransformComponent>(child);
-    EXPECT_EQ(wt.matrix, glm::translate(glm::mat4(1.0f), glm::vec3(10, 20, 0)));
-}
-```
+Goals:
 
-### 13.2 Integration Testing
+- Provide deterministic verification for feature logic across module boundaries.
+- Keep fast feedback loops for daily development.
+- Prevent regressions in runtime orchestration order (Input -> Transform -> Script -> Physics -> Render).
+- Keep tests aligned to strict dependency layering.
 
-**Sandbox Scenarios**:
-- Load scene, verify entities spawn
-- Run scripts, verify Lua update() called
-- Render pass, verify no GPU errors
-- Verify frame time consistent
+### 13.2 Test Layers and Priority
+
+Primary confidence should come from integration coverage, with targeted unit checks.
+
+- Integration tests: primary investment (~70%).
+- Smoke tests: runtime startup/shutdown and key behavior sanity (~20%).
+- Unit tests: pure logic and high-risk edge behavior (~10%).
+
+Rationale:
+
+- Most regressions in this engine occur at subsystem boundaries.
+- Integration tests validate real orchestration without requiring full manual playtesting.
+- Unit tests stay focused and cheap by targeting deterministic pure logic.
+
+### 13.2.1 Unit Test Applicability by Module
+
+Use this as the default rule when deciding whether to write unit tests or integration tests.
+
+Prefer unit tests:
+
+- Core: math/time/result utilities and deterministic helpers
+- Platform: input state transitions and camera math helpers
+- Renderer: sort keys, batch grouping logic, deterministic command helpers
+- Resources: cache/path resolution rules
+- Scene: hierarchy and registry invariants
+- Events: queue ordering and subscription lifetime semantics
+- UI: layout/focus/binding helper logic
+
+Prefer integration tests:
+
+- Physics: Box2D stepping and contact/sensor behavior
+- Scripting: full Lua lifecycle and runtime entity interaction
+- Systems/Runtime: frame orchestration order across subsystems
+- Renderer GPU correctness and driver-facing behavior
+
+### 13.3 Canonical Test Structure
+
+Use one path for all new tests:
+
+- `tests/harness/` shared fixture helpers (scene setup, fixed-step frames, log capture)
+- `tests/integration/` subsystem interaction tests
+- `tests/smoke/` minimal end-to-end runtime checks
+- `tests/unit/` focused pure-logic tests
+- `tests/data/` deterministic test assets/scripts/layout docs
+
+Naming:
+
+- `integration_<subsystem>_<scenario>.cpp`
+- `smoke_<feature>.cpp`
+- `unit_<module>_<behavior>.cpp`
+
+### 13.4 CMake/CTest Contract
+
+Wire tests through CMake with CTest labels so execution is predictable.
+
+- Labels: `unit`, `integration`, `smoke`.
+- Subsystem labels: `physics`, `scripting`, `events`, `ui`, `renderer`.
+
+Expected command flow:
+
+- integration gate: `ctest -L integration --output-on-failure`
+- smoke gate: `ctest -L smoke --output-on-failure`
+- full regression: `ctest --output-on-failure`
+
+### 13.5 Determinism Rules
+
+To keep tests stable and CI-friendly:
+
+- Step fixed frame counts instead of wall-clock sleeps.
+- Assert on stable state changes, event delivery, and structured log markers.
+- Keep test assets minimal and versioned under `tests/data/`.
+- Avoid fragile exact string snapshots of large logs.
+
+### 13.6 Required Integration Matrix
+
+Physics:
+
+1. fixed-step simulation yields expected body state transitions
+2. zone/sensor enter and exit events occur exactly once per transition
+3. create-destroy lifecycle leaves no stale body/fixture handles
+
+Scripting:
+
+1. script lifecycle order `init -> update -> destroy` is correct
+2. `ScriptApi` read/write component operations mutate expected scene state
+3. script runtime error path reports failure without crashing frame loop
+
+Events:
+
+1. physics callback emissions are deferred and dispatched safely
+2. listeners persist across frames unless explicitly unsubscribed
+3. scene teardown clears subscriptions intentionally and prevents leaks
+
+UI:
+
+1. XML document load and data binding initialize expected runtime values
+2. keyboard focus navigation order is deterministic
+3. UI interaction callbacks bridge correctly to scripting/native handlers
+
+Renderer:
+
+1. render submission ordering respects layer plus stable tie-break behavior
+2. fallback shader/texture paths are non-crashing and observable
+3. debug overlay command emission toggles correctly with debug state
+
+### 13.7 Smoke Baselines
+
+Smoke tests should validate at least:
+
+1. engine boot + clean shutdown path
+2. one script-enabled scene update for N deterministic frames
+3. one physics-enabled scene update for N deterministic frames
+4. one UI-enabled scene load and interaction path
+5. one renderer command path with no fatal errors
+
+### 13.8 Feature Definition of Done (Testing)
+
+A feature is not complete until:
+
+- one happy-path integration test exists
+- one edge/failure integration test exists
+- smoke coverage is updated if runtime-visible behavior changed
+- tests are label-runnable through CTest commands above
 
 ---
 
@@ -1104,6 +1203,7 @@ When extending SLE:
 - [ ] **No circular includes** — modules depend downward only
 - [ ] **Hierarchy maintained** — Scene owns parent/child, not components
 - [ ] **Transform read-only** — WorldTransformComponent not directly mutated
+- [ ] **Required tests added** — integration plus smoke impact validated
 
 ---
 

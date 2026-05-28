@@ -1,0 +1,165 @@
+function(sle_add_integration_test targetName sourceFile labels)
+    set(options)
+    set(oneValueArgs WORKING_DIRECTORY)
+    set(multiValueArgs LINK_LIBS)
+    cmake_parse_arguments(SLE_IT "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    add_executable(${targetName} ${sourceFile})
+
+    if(MSVC)
+        set_property(
+            TARGET ${targetName}
+            PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+        )
+    endif()
+
+    if(SLE_IT_LINK_LIBS)
+        target_link_libraries(${targetName} PRIVATE ${SLE_IT_LINK_LIBS})
+    endif()
+
+    add_test(NAME ${targetName} COMMAND ${targetName})
+
+    set(_allLabels "integration;${labels}")
+    set_tests_properties(${targetName} PROPERTIES LABELS "${_allLabels}")
+
+    if(SLE_IT_WORKING_DIRECTORY)
+        set_tests_properties(${targetName} PROPERTIES WORKING_DIRECTORY "${SLE_IT_WORKING_DIRECTORY}")
+    endif()
+
+endfunction()
+
+# Events
+sle_add_integration_test(
+    integration_events_happy_path
+    events/integration_events_happy_path.cpp
+    events
+    LINK_LIBS sle::events sle::scene
+)
+
+sle_add_integration_test(
+    integration_events_edge_path
+    events/integration_events_edge_path.cpp
+    events
+    LINK_LIBS sle::events
+)
+
+sle_add_integration_test(
+    integration_events_scene_teardown_path
+    events/integration_events_scene_teardown_path.cpp
+    events
+    LINK_LIBS sle::events sle::scene
+)
+
+sle_add_integration_test(
+    integration_events_scene_lifecycle_order_path
+    events/integration_events_scene_lifecycle_order_path.cpp
+    events
+    LINK_LIBS sle::engine
+)
+
+sle_add_integration_test(
+    integration_events_scene_switch_invalid_path
+    events/integration_events_scene_switch_invalid_path.cpp
+    events
+    LINK_LIBS sle::engine
+)
+
+sle_add_integration_test(
+    integration_events_subscription_persistence_path
+    events/integration_events_subscription_persistence_path.cpp
+    events
+    LINK_LIBS sle::engine
+)
+
+sle_add_integration_test(
+    integration_events_scene_switch_coalescing_path
+    events/integration_events_scene_switch_coalescing_path.cpp
+    events
+    LINK_LIBS sle::engine
+)
+
+sle_add_integration_test(
+    integration_events_physics_eventbus_swap_path
+    events/integration_events_physics_eventbus_swap_path.cpp
+    events
+    LINK_LIBS sle::physics sle::events
+)
+
+# Physics
+sle_add_integration_test(
+    integration_physics_happy_path
+    physics/integration_physics_happy_path.cpp
+    physics
+    LINK_LIBS sle::physics sle::events
+)
+
+sle_add_integration_test(
+    integration_physics_edge_path
+    physics/integration_physics_edge_path.cpp
+    physics
+    LINK_LIBS sle::physics
+)
+
+sle_add_integration_test(
+    integration_physics_contact_deferred_dispatch_path
+    physics/integration_physics_contact_deferred_dispatch_path.cpp
+    physics
+    LINK_LIBS sle::physics sle::events
+)
+
+sle_add_integration_test(
+    integration_physics_zone_enter_exit_path
+    physics/integration_physics_zone_enter_exit_path.cpp
+    physics
+    LINK_LIBS sle::physics sle::events
+)
+
+# Scripting
+sle_add_integration_test(
+    integration_scripting_happy_path
+    scripting/integration_scripting_happy_path.cpp
+    scripting
+    LINK_LIBS sle::scripting
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_scripting_edge_path
+    scripting/integration_scripting_edge_path.cpp
+    scripting
+    LINK_LIBS sle::scripting
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# UI
+sle_add_integration_test(
+    integration_ui_happy_path
+    ui/integration_ui_happy_path.cpp
+    ui
+    LINK_LIBS sle::ui
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_ui_edge_path
+    ui/integration_ui_edge_path.cpp
+    ui
+    LINK_LIBS sle::ui
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# Renderer
+sle_add_integration_test(
+    integration_renderer_happy_path
+    renderer/integration_renderer_happy_path.cpp
+    renderer
+    LINK_LIBS sle::renderer sle::platform
+)
+
+sle_add_integration_test(
+    integration_renderer_edge_path
+    renderer/integration_renderer_edge_path.cpp
+    renderer
+    LINK_LIBS sle::renderer sle::platform
+)
+

@@ -64,7 +64,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/nothings/stb.git
     GIT_TAG master
 )
-FetchContent_Populate(stb)
+FetchContent_MakeAvailable(stb)
 
 add_library(stb_image INTERFACE)
 target_include_directories(stb_image INTERFACE
@@ -85,12 +85,14 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/mackron/miniaudio.git
     GIT_TAG master
 )
-FetchContent_Populate(miniaudio)
+FetchContent_MakeAvailable(miniaudio)
 
-add_library(miniaudio INTERFACE)
-target_include_directories(miniaudio INTERFACE
-    ${miniaudio_SOURCE_DIR}
-)
+if(NOT TARGET miniaudio)
+    add_library(miniaudio INTERFACE)
+    target_include_directories(miniaudio INTERFACE
+        ${miniaudio_SOURCE_DIR}
+    )
+endif()
 
 # =========================
 # XML parser
@@ -124,8 +126,6 @@ glad_add_library(glad_gl_core_43 STATIC REPRODUCIBLE LOADER API gl:core=4.3)
 # Lua
 # =========================
 
-include(FetchContent)
-
 FetchContent_Declare(
     lua
     GIT_REPOSITORY "https://github.com/marovira/lua"
@@ -139,6 +139,30 @@ if(MSVC)
         if(TARGET ${lua_target})
             set_property(
                 TARGET ${lua_target}
+                PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+            )
+        endif()
+    endforeach()
+
+    foreach(third_party_target IN ITEMS glfw glad_gl_core_43)
+        if(TARGET ${third_party_target})
+            set_property(
+                TARGET ${third_party_target}
+                PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+            )
+        endif()
+    endforeach()
+
+    foreach(miniaudio_target IN ITEMS
+        miniaudio
+        miniaudio_channel_combiner_node
+        miniaudio_channel_separator_node
+        miniaudio_ltrim_node
+        miniaudio_reverb_node
+        miniaudio_vocoder_node)
+        if(TARGET ${miniaudio_target})
+            set_property(
+                TARGET ${miniaudio_target}
                 PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
             )
         endif()

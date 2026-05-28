@@ -116,8 +116,10 @@ namespace sle::entity
         parentMap.clear();
         childrenMap.clear();
 
-        // Clear all event subscriptions to prevent leaks across scene switches
-        eventBus.clearSubscriptions();
+        // Scene teardown should fully reset per-scene event state.
+        // Clearing queued events prevents stale deferred events from reaching
+        // listeners registered by the next scene.
+        eventBus.clearAll();
     }
 
     void Scene::markTransformBranchDirty(Entity entity)

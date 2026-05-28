@@ -168,6 +168,16 @@ namespace sle
 
     void Runtime::run()
     {
+        (void)runMainLoop(false, 0);
+    }
+
+    std::size_t Runtime::runForFrames(std::size_t maxFrames)
+    {
+        return runMainLoop(true, maxFrames);
+    }
+
+    std::size_t Runtime::runMainLoop(bool bounded, std::size_t maxFrames)
+    {
         using Clock = std::chrono::high_resolution_clock;
         using Ms = std::chrono::duration<double, std::milli>;
 
@@ -182,7 +192,9 @@ namespace sle
         double renderFlushMsAccum = 0.0;
         double swapMsAccum = 0.0;
 
-        while (!window.shouldClose())
+        std::size_t executedFrames = 0;
+
+        while (!window.shouldClose() && (!bounded || executedFrames < maxFrames))
         {
             auto switchResult = sceneManager.processPendingSwitch(*this, scene);
             if (!switchResult.ok())
@@ -293,7 +305,11 @@ namespace sle
                 renderFlushMsAccum = 0.0;
                 swapMsAccum = 0.0;
             }
+
+            ++executedFrames;
         }
+
+        return executedFrames;
     }
 
 } // namespace sle

@@ -33,6 +33,8 @@ public:
 
 private:
     std::unordered_map<std::string, SceneBuilder> sceneBuilders;
+    // Coalesced pending switch: if multiple requests arrive before processing,
+    // the latest request replaces earlier ones.
     std::optional<std::string> pendingSceneName;
     std::string currentSceneName;
 };

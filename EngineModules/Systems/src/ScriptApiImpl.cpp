@@ -6,6 +6,7 @@
 #include <sle/resources/Resources.hpp>
 #include <sle/renderer/Texture.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
+#include <sle/scene/components/StateMachineComponent.hpp>
 #include <sle/scene/components/Transform.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/physics/PhysicsWorld.hpp>
@@ -291,6 +292,101 @@ bool ScriptApiImpl::switchScene(const std::string& sceneName)
 std::string ScriptApiImpl::getCurrentSceneName() const
 {
     return runtime.getCurrentSceneName();
+}
+
+bool ScriptApiImpl::setStateMachineBool(
+    sle::scripting::ScriptEntityRef entity,
+    const std::string& key,
+    bool value)
+{
+    if (!isEntityAlive(entity) || key.empty())
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    auto* sm = registry.getComponent<components::StateMachineComponent>(sle::entity::Entity(entity.id));
+    if (!sm)
+        return false;
+
+    sm->boolParameters[key] = value;
+    return true;
+}
+
+bool ScriptApiImpl::setStateMachineTrigger(
+    sle::scripting::ScriptEntityRef entity,
+    const std::string& key)
+{
+    if (!isEntityAlive(entity) || key.empty())
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    auto* sm = registry.getComponent<components::StateMachineComponent>(sle::entity::Entity(entity.id));
+    if (!sm)
+        return false;
+
+    sm->triggers.insert(key);
+    return true;
+}
+
+bool ScriptApiImpl::getStateMachineCurrentState(
+    sle::scripting::ScriptEntityRef entity,
+    std::string& outState) const
+{
+    if (!isEntityAlive(entity))
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    auto* sm = registry.getComponent<components::StateMachineComponent>(sle::entity::Entity(entity.id));
+    if (!sm || !sm->initialized)
+        return false;
+
+    outState = sm->currentState;
+    return true;
+}
+
+bool ScriptApiImpl::forceStateMachineState(
+    sle::scripting::ScriptEntityRef entity,
+    const std::string& stateName)
+{
+    if (!isEntityAlive(entity) || stateName.empty())
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    auto* sm = registry.getComponent<components::StateMachineComponent>(sle::entity::Entity(entity.id));
+    if (!sm || !sm->definition)
+        return false;
+
+    if (!sm->definition->findState(stateName))
+        return false;
+
+    sm->previousState = sm->currentState;
+    sm->currentState = stateName;
+    sm->stateTimeSeconds = 0.0f;
+    sm->initialized = true;
+    return true;
+}
+
+bool ScriptApiImpl::isStateMachineInState(
+    sle::scripting::ScriptEntityRef entity,
+    const std::string& stateName) const
+{
+    if (!isEntityAlive(entity) || stateName.empty())
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    auto* sm = registry.getComponent<components::StateMachineComponent>(sle::entity::Entity(entity.id));
+    if (!sm || !sm->initialized)
+        return false;
+
+    return sm->currentState == stateName;
+}
+
+bool ScriptApiImpl::sendStateMachineEvent(
+    sle::scripting::ScriptEntityRef entity,
+    const std::string& eventName)
+{
+    // sendStateEvent is a named trigger — identical semantics to setStateMachineTrigger
+    // but provides a cleaner intent-revealing API name at the Lua surface.
+    return setStateMachineTrigger(entity, eventName);
 }
 
 void ScriptApiImpl::log(const std::string& message)

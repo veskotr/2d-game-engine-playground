@@ -65,6 +65,14 @@ public:
     virtual bool switchScene(const std::string& sceneName) = 0;
     virtual std::string getCurrentSceneName() const = 0;
 
+    // ====== STATE MACHINE ======
+    virtual bool setStateMachineBool(ScriptEntityRef entity, const std::string& key, bool value) = 0;
+    virtual bool setStateMachineTrigger(ScriptEntityRef entity, const std::string& key) = 0;
+    virtual bool getStateMachineCurrentState(ScriptEntityRef entity, std::string& outState) const = 0;
+    virtual bool forceStateMachineState(ScriptEntityRef entity, const std::string& stateName) = 0;
+    virtual bool isStateMachineInState(ScriptEntityRef entity, const std::string& stateName) const = 0;
+    virtual bool sendStateMachineEvent(ScriptEntityRef entity, const std::string& eventName) = 0;
+
     // ====== LOGGING ======
     virtual void log(const std::string& message) = 0;
     virtual void warn(const std::string& message) = 0;

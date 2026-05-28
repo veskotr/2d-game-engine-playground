@@ -257,6 +257,9 @@ namespace sle
             scriptSystem.update(ctx);
             auto t2 = Clock::now();
 
+            // 2.5 Update state machines after scripts mutate parameters/triggers.
+            stateMachineSystem.update(scene, dt, &scriptEngine);
+
             // 3. Step physics simulation and resolve collisions (placeholder for Box2D).
             physicsSystem.update(ctx);
             auto t3 = Clock::now();

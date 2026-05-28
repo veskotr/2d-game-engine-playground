@@ -43,6 +43,12 @@ public:
     bool hasScene(const std::string&) const override { return false; }
     bool switchScene(const std::string&) override { return false; }
     std::string getCurrentSceneName() const override { return {}; }
+    bool setStateMachineBool(sle::scripting::ScriptEntityRef, const std::string&, bool) override { return false; }
+    bool setStateMachineTrigger(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
+    bool getStateMachineCurrentState(sle::scripting::ScriptEntityRef, std::string&) const override { return false; }
+    bool forceStateMachineState(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
+    bool isStateMachineInState(sle::scripting::ScriptEntityRef, const std::string&) const override { return false; }
+    bool sendStateMachineEvent(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
 
     void log(const std::string&) override {}
     void warn(const std::string&) override {}

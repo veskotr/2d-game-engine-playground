@@ -32,10 +32,12 @@ public:
     void runUpdate(uint32_t entityId, float dt);
     void removeScript(uint32_t entityId);
     bool hasScript(uint32_t entityId) const;
+    bool callEntityFunctionByName(uint32_t entityId, const std::string& functionName);
     void syncEntities(const std::unordered_set<uint32_t>& activeEntities);
 
     void update(float dt);
     bool callGlobalFunction(const std::string& functionName, uint32_t entityId = 0, const std::string& stringArg = {});
+    bool callGlobalBoolFunction(const std::string& functionName, uint32_t entityId = 0, const std::string& stringArg = {});
 
 private:
     bool callFunction(int ref, uint32_t entityId, float dt = -1.0f);

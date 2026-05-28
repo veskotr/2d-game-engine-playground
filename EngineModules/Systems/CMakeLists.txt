@@ -4,6 +4,7 @@ add_library(sle_engine STATIC
     src/Runtime.cpp
     src/TransformSystem.cpp
     src/ScriptSystem.cpp
+    src/StateMachineSystem.cpp
     src/PhysicsSystem.cpp
     src/RenderSystem.cpp
 )

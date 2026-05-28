@@ -3,6 +3,7 @@
 
 #include <glm/vec2.hpp>
 
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -15,7 +16,7 @@ public:
     glm::vec2 getWindowSize() const override { return {320.0f, 180.0f}; }
 
     sle::scripting::ScriptEntityRef createEntity() override { return {}; }
-    bool isEntityAlive(sle::scripting::ScriptEntityRef) const override { return false; }
+    bool isEntityAlive(sle::scripting::ScriptEntityRef) const override { return true; }
     void destroyEntity(sle::scripting::ScriptEntityRef) override {}
     uint32_t getChildCount(sle::scripting::ScriptEntityRef) const override { return 0; }
     uint32_t destroyChildren(sle::scripting::ScriptEntityRef) override { return 0; }
@@ -43,14 +44,41 @@ public:
     bool hasScene(const std::string&) const override { return false; }
     bool switchScene(const std::string&) override { return false; }
     std::string getCurrentSceneName() const override { return {}; }
+
     bool setStateMachineBool(sle::scripting::ScriptEntityRef, const std::string&, bool) override { return false; }
     bool setStateMachineTrigger(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
-    bool getStateMachineCurrentState(sle::scripting::ScriptEntityRef, std::string&) const override { return false; }
-    bool forceStateMachineState(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
-    bool isStateMachineInState(sle::scripting::ScriptEntityRef, const std::string&) const override { return false; }
-    bool sendStateMachineEvent(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
+    bool getStateMachineCurrentState(sle::scripting::ScriptEntityRef entity, std::string& outState) const override
+    {
+        outState = "Run";
+        lastCurrentStateEntity = entity.id;
+        return true;
+    }
 
-    void log(const std::string&) override {}
+    bool forceStateMachineState(sle::scripting::ScriptEntityRef entity, const std::string& stateName) override
+    {
+        forceStateCalled = true;
+        forcedEntity = entity.id;
+        forcedStateName = stateName;
+        return true;
+    }
+
+    bool isStateMachineInState(sle::scripting::ScriptEntityRef entity, const std::string& stateName) const override
+    {
+        isStateCalled = true;
+        isStateEntity = entity.id;
+        isStateName = stateName;
+        return stateName == "Run";
+    }
+
+    bool sendStateMachineEvent(sle::scripting::ScriptEntityRef entity, const std::string& eventName) override
+    {
+        sendEventCalled = true;
+        sendEventEntity = entity.id;
+        sendEventName = eventName;
+        return true;
+    }
+
+    void log(const std::string& message) override { logs.push_back(message); }
     void warn(const std::string&) override {}
     void error(const std::string&) override {}
 
@@ -69,29 +97,91 @@ public:
 
     int subscribeEvent(const std::string&, uint32_t, int) override { return 0; }
     void unsubscribeEvent(int) override {}
+
+    mutable bool isStateCalled = false;
+    mutable uint32_t isStateEntity = 0;
+    mutable std::string isStateName;
+    mutable uint32_t lastCurrentStateEntity = 0;
+
+    bool forceStateCalled = false;
+    uint32_t forcedEntity = 0;
+    std::string forcedStateName;
+
+    bool sendEventCalled = false;
+    uint32_t sendEventEntity = 0;
+    std::string sendEventName;
+
+    std::vector<std::string> logs;
 };
 
 } // namespace
 
-int main() {
+int main()
+{
     DummyScriptApi api;
     sle::scripting::ScriptEngine engine;
 
-    if (!engine.init(&api)) {
+    if (!engine.init(&api))
+    {
         std::cerr << "ScriptEngine failed to initialize\n";
         return 1;
     }
 
-    const bool executed = engine.executeScriptAsset("tests/data/scripts/integration_script.lua");
-    if (!executed) {
-        std::cerr << "Failed to execute integration script asset\n";
+    if (!engine.executeScriptAsset("tests/data/scripts/state_machine_api_surface.lua"))
+    {
+        std::cerr << "Failed to execute state_machine_api_surface.lua\n";
         engine.shutdown();
         return 1;
     }
 
-    const bool callbackWorked = engine.callGlobalFunction("integration_mark", 42, "ok_token");
-    if (!callbackWorked) {
-        std::cerr << "Expected integration_mark global callback to execute successfully\n";
+    if (!engine.callGlobalFunction("runStateMachineApi", 77))
+    {
+        std::cerr << "Failed to run runStateMachineApi callback\n";
+        engine.shutdown();
+        return 1;
+    }
+
+    if (!api.forceStateCalled || api.forcedEntity != 77 || api.forcedStateName != "Run")
+    {
+        std::cerr << "Engine.setState binding did not call ScriptApi correctly\n";
+        engine.shutdown();
+        return 1;
+    }
+
+    if (!api.isStateCalled || api.isStateEntity != 77 || api.isStateName != "Run")
+    {
+        std::cerr << "Engine.isState binding did not call ScriptApi correctly\n";
+        engine.shutdown();
+        return 1;
+    }
+
+    if (!api.sendEventCalled || api.sendEventEntity != 77 || api.sendEventName != "jump")
+    {
+        std::cerr << "Engine.sendStateEvent binding did not call ScriptApi correctly\n";
+        engine.shutdown();
+        return 1;
+    }
+
+    if (api.lastCurrentStateEntity != 77)
+    {
+        std::cerr << "Engine.getState binding did not call ScriptApi correctly\n";
+        engine.shutdown();
+        return 1;
+    }
+
+    bool sawOkLog = false;
+    for (const auto& msg : api.logs)
+    {
+        if (msg == "state_api_ok")
+        {
+            sawOkLog = true;
+            break;
+        }
+    }
+
+    if (!sawOkLog)
+    {
+        std::cerr << "Expected state_api_ok log marker from Lua script\n";
         engine.shutdown();
         return 1;
     }

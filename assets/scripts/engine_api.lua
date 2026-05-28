@@ -47,6 +47,14 @@ function Engine.getParent(...) end
 
 ---@param ... any
 ---@return any
+function Engine.getState(...) end
+
+---@param ... any
+---@return any
+function Engine.getStateMachineState(...) end
+
+---@param ... any
+---@return any
 function Engine.getTransformPosition(...) end
 
 ---@param ... any
@@ -67,6 +75,10 @@ function Engine.isEntityAlive(...) end
 
 ---@param ... any
 ---@return any
+function Engine.isState(...) end
+
+---@param ... any
+---@return any
 function Engine.loadTexture(...) end
 
 ---@param ... any
@@ -75,11 +87,27 @@ function Engine.log(...) end
 
 ---@param ... any
 ---@return any
+function Engine.sendStateEvent(...) end
+
+---@param ... any
+---@return any
 function Engine.setParent(...) end
 
 ---@param ... any
 ---@return any
 function Engine.setSpriteTexture(...) end
+
+---@param ... any
+---@return any
+function Engine.setState(...) end
+
+---@param ... any
+---@return any
+function Engine.setStateMachineBool(...) end
+
+---@param ... any
+---@return any
+function Engine.setStateMachineTrigger(...) end
 
 ---@param ... any
 ---@return any

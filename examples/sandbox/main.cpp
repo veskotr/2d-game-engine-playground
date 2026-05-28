@@ -7,6 +7,7 @@
 #include <sle/scene/components/UIComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
+#include <sle/scene/components/StateMachineComponent.hpp>
 #include <sle/scene/components/Transform.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/scene/components/BoxColliderComponent.hpp>
@@ -141,6 +142,9 @@ int main()
     auto& playerScript = registry.addComponent<components::ScriptComponent>(player);
     playerScript.scriptAsset = "physics_debug_test_script";
     playerScript.enabled = true;
+
+    auto& playerStateMachine = registry.addComponent<components::StateMachineComponent>(player);
+    playerStateMachine.definitionAsset = "assets/state_machines/player_state_machine.json";
 
     auto& playerUi = registry.addComponent<components::UIComponent>(player);
     playerUi.layoutAsset = "assets/ui/world_label.xml";

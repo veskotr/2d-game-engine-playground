@@ -39,6 +39,7 @@ It currently exposes:
 - camera access
 - resource loading
 - scene switching
+- state machine controls (`setState`, `getState`, `isState`, `sendStateEvent`)
 - logging
 
 ### ScriptApiImpl
@@ -83,7 +84,15 @@ Current core functions include:
 - `Engine.hasScene(name)`
 - `Engine.switchScene(name)`
 - `Engine.getCurrentSceneName()`
+- `Engine.setState(entity, stateName)`
+- `Engine.getState(entity)`
+- `Engine.isState(entity, stateName)`
+- `Engine.sendStateEvent(entity, eventName)`
 - `Engine.log()`, `Engine.warn()`, `Engine.error()`
+
+`ScriptEngine` now supports two global callback call modes:
+- `callGlobalFunction(...)` for side-effect callbacks
+- `callGlobalBoolFunction(...)` for boolean guard evaluation (used by `StateMachineSystem` Lua guard transitions)
 
 ## Lua Resource Model
 

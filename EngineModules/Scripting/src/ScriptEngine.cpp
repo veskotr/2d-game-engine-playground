@@ -197,6 +197,48 @@ bool ScriptEngine::hasScript(uint32_t entityId) const
     return instances.find(entityId) != instances.end();
 }
 
+bool ScriptEngine::callEntityFunctionByName(uint32_t entityId, const std::string& functionName)
+{
+    if (!L || functionName.empty())
+        return false;
+
+    auto it = instances.find(entityId);
+    if (it == instances.end())
+        return false;
+
+    const ScriptInstance& instance = it->second;
+
+    if (instance.tableRef != kLuaNoRef)
+    {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, instance.tableRef);
+        if (lua_istable(L, -1))
+        {
+            lua_getfield(L, -1, functionName.c_str());
+            if (lua_isfunction(L, -1))
+            {
+                lua_pushinteger(L, entityId);
+                if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+                {
+                    sle::core::Log::error("Lua callback error [{}]: {}", functionName, lua_tostring(L, -1));
+                    lua_pop(L, 1); // error
+                    lua_pop(L, 1); // table
+                    return false;
+                }
+
+                lua_pop(L, 1); // table
+                return true;
+            }
+
+            lua_pop(L, 1); // non-function field
+        }
+
+        lua_pop(L, 1); // table/nil
+    }
+
+    // Fallback to global callback when table-local callback is not present.
+    return callGlobalFunction(functionName, entityId);
+}
+
 void ScriptEngine::syncEntities(const std::unordered_set<uint32_t>& activeEntities)
 {
     std::vector<uint32_t> toRemove;
@@ -249,6 +291,49 @@ bool ScriptEngine::callGlobalFunction(const std::string& functionName, uint32_t 
     }
 
     return true;
+}
+
+bool ScriptEngine::callGlobalBoolFunction(const std::string& functionName, uint32_t entityId, const std::string& stringArg)
+{
+    if (!L || functionName.empty())
+        return false;
+
+    lua_getglobal(L, functionName.c_str());
+    if (!lua_isfunction(L, -1))
+    {
+        lua_pop(L, 1);
+        return false;
+    }
+
+    int argCount = 0;
+    if (entityId != 0)
+    {
+        lua_pushinteger(L, entityId);
+        ++argCount;
+    }
+
+    if (!stringArg.empty())
+    {
+        lua_pushstring(L, stringArg.c_str());
+        ++argCount;
+    }
+
+    if (lua_pcall(L, argCount, 1, 0) != LUA_OK)
+    {
+        sle::core::Log::error("Lua global callback error [{}]: {}", functionName, lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return false;
+    }
+
+    if (!lua_isboolean(L, -1))
+    {
+        lua_pop(L, 1);
+        return false;
+    }
+
+    const bool result = lua_toboolean(L, -1) != 0;
+    lua_pop(L, 1);
+    return result;
 }
 
 int ScriptEngine::extractFunctionRef(int tableIndex, const char* functionName)

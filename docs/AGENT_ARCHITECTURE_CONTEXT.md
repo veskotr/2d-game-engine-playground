@@ -33,11 +33,12 @@ Non-negotiable rule:
 4. build Context
 5. transform update
 6. script update
-7. physics update
-8. renderer beginFrame
-9. render-system submit commands
-10. renderer endFrame
-11. swap buffers
+7. state machine update
+8. physics update
+9. renderer beginFrame
+10. render-system submit commands
+11. renderer endFrame
+12. swap buffers
 
 ## 4. Critical Architecture Invariants
 

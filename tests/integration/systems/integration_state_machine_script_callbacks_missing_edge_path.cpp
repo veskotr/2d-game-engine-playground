@@ -1,30 +1,28 @@
-#include <sle/events/CollisionEvents.hpp>
+#include <sle/engine/Context.hpp>
+#include <sle/engine/ScriptSystem.hpp>
+#include <sle/engine/StateMachineSystem.hpp>
 #include <sle/events/EventBus.hpp>
-#include <sle/events/ScopedSubscription.hpp>
-#include <sle/scripting/LuaBindings.hpp>
+#include <sle/renderer/Camera2D.hpp>
+#include <sle/renderer/Renderer.hpp>
+#include <sle/scene/Scene.hpp>
+#include <sle/scene/components/ScriptComponent.hpp>
+#include <sle/scene/components/StateMachineComponent.hpp>
+#include <sle/scene/components/StateMachineDefinition.hpp>
 #include <sle/scripting/ScriptApi.hpp>
-
-extern "C" {
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
-}
+#include <sle/scripting/ScriptEngine.hpp>
 
 #include <glm/vec2.hpp>
 
-#include <cstdint>
-#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
 
 namespace {
 
-class ScriptApiStub final : public sle::scripting::ScriptApi
-{
+class DummyScriptApi final : public sle::scripting::ScriptApi {
 public:
-    float getDeltaTime() const override { return 0.0f; }
-    glm::vec2 getWindowSize() const override { return {0.0f, 0.0f}; }
+    float getDeltaTime() const override { return 0.016f; }
+    glm::vec2 getWindowSize() const override { return {320.0f, 180.0f}; }
 
     sle::scripting::ScriptEntityRef createEntity() override { return {}; }
     bool isEntityAlive(sle::scripting::ScriptEntityRef) const override { return false; }
@@ -55,6 +53,7 @@ public:
     bool hasScene(const std::string&) const override { return false; }
     bool switchScene(const std::string&) override { return false; }
     std::string getCurrentSceneName() const override { return {}; }
+
     bool setStateMachineBool(sle::scripting::ScriptEntityRef, const std::string&, bool) override { return false; }
     bool setStateMachineTrigger(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
     bool getStateMachineCurrentState(sle::scripting::ScriptEntityRef, std::string&) const override { return false; }
@@ -62,7 +61,7 @@ public:
     bool isStateMachineInState(sle::scripting::ScriptEntityRef, const std::string&) const override { return false; }
     bool sendStateMachineEvent(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
 
-    void log(const std::string&) override {}
+    void log(const std::string& message) override { logs.push_back(message); }
     void warn(const std::string&) override {}
     void error(const std::string&) override {}
 
@@ -79,131 +78,101 @@ public:
     void setPhysicsDebugEnabled(bool) override {}
     bool isPhysicsDebugEnabled() const override { return false; }
 
-    int subscribeEvent(const std::string& eventName, uint32_t entityId, int luaRef) override
-    {
-        subscribedEventNames.push_back(eventName);
-        subscribedEntityIds.push_back(entityId);
-        subscribedLuaRefs.push_back(luaRef);
-        return nextSubId++;
-    }
+    int subscribeEvent(const std::string&, uint32_t, int) override { return 0; }
+    void unsubscribeEvent(int) override {}
 
-    void unsubscribeEvent(int subscriptionId) override
-    {
-        unsubscribedIds.push_back(subscriptionId);
-    }
-
-    std::vector<std::string> subscribedEventNames;
-    std::vector<uint32_t> subscribedEntityIds;
-    std::vector<int> subscribedLuaRefs;
-    std::vector<int> unsubscribedIds;
-
-private:
-    int nextSubId = 1;
+    std::vector<std::string> logs;
 };
-
-bool check(bool condition, const std::string& message)
-{
-    if (!condition)
-    {
-        std::cerr << "[FAIL] " << message << "\n";
-        return false;
-    }
-
-    std::cout << "[PASS] " << message << "\n";
-    return true;
-}
-
-bool runScopedSubscriptionTest()
-{
-    sle::events::EventBus bus;
-    int calls = 0;
-
-    {
-        auto handle = bus.subscribe<sle::events::CollisionBeginEvent>(
-            [&calls](const sle::events::CollisionBeginEvent&) { ++calls; });
-
-        sle::events::ScopedSubscription scoped(&bus, handle);
-        bus.emit(sle::events::CollisionBeginEvent{});
-
-        if (!check(calls == 1, "ScopedSubscription keeps handler active while alive"))
-            return false;
-    }
-
-    bus.emit(sle::events::CollisionBeginEvent{});
-    return check(calls == 1, "ScopedSubscription unsubscribes on destruction");
-}
-
-bool runLuaBindingsEventsTest()
-{
-    ScriptApiStub api;
-
-    lua_State* L = luaL_newstate();
-    if (!L)
-        return check(false, "luaL_newstate succeeded");
-
-    luaL_openlibs(L);
-    sle::scripting::registerLuaBindings(L, &api);
-
-    const std::vector<std::filesystem::path> scriptCandidates = {
-        "assets/scripts/phase2_lua_events_sample.lua",
-        "examples/phase2_lua_events/assets/scripts/phase2_lua_events_sample.lua",
-        "../examples/phase2_lua_events/assets/scripts/phase2_lua_events_sample.lua",
-        "../../examples/phase2_lua_events/assets/scripts/phase2_lua_events_sample.lua"
-    };
-
-    std::filesystem::path scriptPath;
-    for (const auto& candidate : scriptCandidates)
-    {
-        if (std::filesystem::exists(candidate))
-        {
-            scriptPath = candidate;
-            break;
-        }
-    }
-
-    if (scriptPath.empty())
-    {
-        lua_close(L);
-        return check(false, "Lua sample script is discoverable");
-    }
-
-    if (luaL_dofile(L, scriptPath.string().c_str()) != LUA_OK)
-    {
-        const char* err = lua_tostring(L, -1);
-        std::cerr << "[FAIL] Lua execution error: " << (err ? err : "unknown") << "\n";
-        lua_close(L);
-        return false;
-    }
-
-    bool ok = true;
-    ok = check(api.subscribedEventNames.size() == 1, "Engine.Events.subscribe forwards one valid subscription") && ok;
-
-    if (!api.subscribedEventNames.empty())
-    {
-        ok = check(api.subscribedEventNames[0] == "collision.begin", "Engine.Events.subscribe forwards event name") && ok;
-        ok = check(api.subscribedEntityIds[0] == 0, "Engine.Events.subscribe uses default global entity id") && ok;
-    }
-
-    ok = check(api.unsubscribedIds.size() == 1, "Engine.Events.unsubscribe forwards handle") && ok;
-
-    lua_close(L);
-    return ok;
-}
 
 } // namespace
 
-int main()
-{
-    bool ok = true;
-    ok = runScopedSubscriptionTest() && ok;
-    ok = runLuaBindingsEventsTest() && ok;
+int main() {
+    sle::entity::Scene scene;
+    auto& registry = scene.getRegistry();
 
-    if (!ok)
-    {
-        std::cerr << "Phase 2 Lua/RAII sample failed\n";
+    auto definition = std::make_shared<sle::components::StateMachineDefinition>();
+    definition->initialState = "Idle";
+
+    sle::components::StateDefinition idle;
+    idle.name = "Idle";
+    idle.onExitCallback = "missing_exit_callback";
+    idle.transitions.push_back({
+        .toState = "Run",
+        .type = sle::components::StateTransitionType::Trigger,
+        .key = "start",
+        .expectedBool = true,
+        .minTimeSeconds = 0.0f,
+        .consumeTrigger = true,
+    });
+
+    sle::components::StateDefinition run;
+    run.name = "Run";
+    run.onEnterCallback = "missing_enter_callback";
+
+    definition->states.emplace(idle.name, idle);
+    definition->states.emplace(run.name, run);
+
+    const auto entity = scene.createEntity();
+
+    auto& script = registry.addComponent<sle::components::ScriptComponent>(entity);
+    script.scriptAsset = "tests/data/scripts/state_machine_callbacks_missing.lua";
+
+    auto& sm = registry.addComponent<sle::components::StateMachineComponent>(entity);
+    sm.definition = definition;
+
+    DummyScriptApi api;
+    sle::scripting::ScriptEngine scriptEngine;
+    if (!scriptEngine.init(&api)) {
+        std::cerr << "Script engine init failed\n";
         return 1;
     }
 
-    std::cout << "Phase 2 Lua/RAII sample passed\n";
+    sle::renderer::Renderer renderer;
+    sle::core::Camera2D camera(320.0f, 180.0f);
+    sle::events::EventBus globalBus;
+
+    sle::Context ctx{
+        scene,
+        registry,
+        scene.getEventBus(),
+        globalBus,
+        renderer,
+        camera,
+        nullptr,
+        1.0f / 60.0f,
+    };
+
+    sle::ScriptSystem scriptSystem;
+    scriptSystem.setScriptEngine(&scriptEngine);
+
+    sle::StateMachineSystem stateMachineSystem;
+
+    scriptSystem.update(ctx);
+    if (api.logs.empty()) {
+        std::cerr << "Expected script init log after script load\n";
+        scriptEngine.shutdown();
+        return 1;
+    }
+
+    stateMachineSystem.update(scene, ctx.dt);
+    sm.triggers.insert("start");
+    stateMachineSystem.update(scene, ctx.dt);
+
+    scene.getEventBus().flushQueue();
+
+    if (sm.currentState != "Run") {
+        std::cerr << "Transition should still complete even when callback names are missing\n";
+        scriptEngine.shutdown();
+        return 1;
+    }
+
+    // Missing callbacks should not produce new Engine.log entries in this script.
+    if (api.logs.size() != 1) {
+        std::cerr << "Missing callbacks should be ignored without extra script log output\n";
+        scriptEngine.shutdown();
+        return 1;
+    }
+
+    scriptEngine.shutdown();
     return 0;
 }

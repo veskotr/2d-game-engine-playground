@@ -9,6 +9,7 @@
 #include <sle/renderer/Shader.hpp>
 #include <sle/engine/TransformSystem.hpp>
 #include <sle/engine/ScriptSystem.hpp>
+#include <sle/engine/StateMachineSystem.hpp>
 #include <sle/engine/PhysicsSystem.hpp>
 #include <sle/engine/RenderSystem.hpp>
 #include <sle/engine/SceneManager.hpp>
@@ -71,6 +72,7 @@ private:
     sle::events::EventBus globalBus_;  // Engine-wide event bus for lifecycle events
     TransformSystem transformSystem;
     ScriptSystem scriptSystem;
+    StateMachineSystem stateMachineSystem;
     PhysicsSystem physicsSystem;
     RenderSystem renderSystem;
     sle::ui::UISystem uiSystem;

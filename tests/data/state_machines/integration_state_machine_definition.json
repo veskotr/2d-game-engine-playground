@@ -1,0 +1,29 @@
+{
+  "initialState": "Idle",
+  "states": [
+    {
+      "name": "Idle",
+      "onExit": "on_exit_idle",
+      "transitions": [
+        {
+          "to": "Run",
+          "type": "trigger",
+          "key": "start",
+          "consumeTrigger": true
+        }
+      ]
+    },
+    {
+      "name": "Run",
+      "onEnter": "on_enter_run",
+      "transitions": [
+        {
+          "to": "Idle",
+          "type": "bool_equals",
+          "key": "shouldStop",
+          "expectedBool": true
+        }
+      ]
+    }
+  ]
+}

@@ -131,6 +131,14 @@ sle_add_integration_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+sle_add_integration_test(
+    integration_scripting_state_machine_api_surface_path
+    scripting/integration_scripting_state_machine_api_surface_path.cpp
+    scripting
+    LINK_LIBS sle::scripting
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 # UI
 sle_add_integration_test(
     integration_ui_happy_path
@@ -161,5 +169,59 @@ sle_add_integration_test(
     renderer/integration_renderer_edge_path.cpp
     renderer
     LINK_LIBS sle::renderer sle::platform
+)
+
+# Systems
+sle_add_integration_test(
+    integration_state_machine_happy_path
+    systems/integration_state_machine_happy_path.cpp
+    systems
+    LINK_LIBS sle::engine
+)
+
+sle_add_integration_test(
+    integration_state_machine_timed_transition_path
+    systems/integration_state_machine_timed_transition_path.cpp
+    systems
+    LINK_LIBS sle::engine
+)
+
+sle_add_integration_test(
+    integration_state_machine_transition_event_path
+    systems/integration_state_machine_transition_event_path.cpp
+    systems
+    LINK_LIBS sle::engine
+)
+
+sle_add_integration_test(
+    integration_state_machine_script_callbacks_path
+    systems/integration_state_machine_script_callbacks_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_state_machine_script_callbacks_missing_edge_path
+    systems/integration_state_machine_script_callbacks_missing_edge_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_state_machine_asset_definition_happy_path
+    systems/integration_state_machine_asset_definition_happy_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_state_machine_lua_guard_transition_path
+    systems/integration_state_machine_lua_guard_transition_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 

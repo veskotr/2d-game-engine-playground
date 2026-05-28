@@ -47,6 +47,13 @@ public:
     bool switchScene(const std::string& sceneName) override;
     std::string getCurrentSceneName() const override;
 
+    bool setStateMachineBool(sle::scripting::ScriptEntityRef entity, const std::string& key, bool value) override;
+    bool setStateMachineTrigger(sle::scripting::ScriptEntityRef entity, const std::string& key) override;
+    bool getStateMachineCurrentState(sle::scripting::ScriptEntityRef entity, std::string& outState) const override;
+    bool forceStateMachineState(sle::scripting::ScriptEntityRef entity, const std::string& stateName) override;
+    bool isStateMachineInState(sle::scripting::ScriptEntityRef entity, const std::string& stateName) const override;
+    bool sendStateMachineEvent(sle::scripting::ScriptEntityRef entity, const std::string& eventName) override;
+
     void log(const std::string& message) override;
     void warn(const std::string& message) override;
     void error(const std::string& message) override;

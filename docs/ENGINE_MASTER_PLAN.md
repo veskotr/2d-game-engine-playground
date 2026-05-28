@@ -333,6 +333,15 @@ Done when:
 - state definitions can be edited without recompiling the engine
 - scripting integration tests validate native-event-to-Lua transitions and Lua-triggered transitions
 
+Current status snapshot (May 2026):
+
+- Implemented: component + definition + runtime evaluator + transition events
+- Implemented: trigger/bool/timer transitions and serialized JSON state machine definitions
+- Implemented: Lua state API surface (`setState`, `getState`, `isState`, `sendStateEvent`)
+- Implemented: Lua guard transitions via boolean guard callbacks
+- Implemented: sandbox/example and integration coverage for callbacks, assets, and Lua guard transitions
+- Remaining before fully closing Phase 2: broaden native-event-driven scenarios as needed by gameplay content
+
 ### Phase 3: Animation Built on the State Machine
 
 Goal: make animation a consumer of state instead of a separate ad-hoc feature.

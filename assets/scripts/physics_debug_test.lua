@@ -14,6 +14,7 @@ return {
         Engine.log("physics_debug_test.lua init for entity " .. tostring(entity))
         Engine.log("Controls: WASD move, SPACE jump impulse, F toggle debug, R raycast down, Q low gravity, E normal gravity")
         Engine.Physics.setDebugEnabled(true)
+        Engine.setStateMachineBool(entity, "should_stop", true)
     end,
 
     update = function(entity, dt)
@@ -29,6 +30,13 @@ return {
         local velocity = Engine.Physics.getVelocity(entity)
         if velocity ~= nil then
             Engine.Physics.setVelocity(entity, moveX * MOVE_SPEED, velocity.y)
+        end
+
+        if math.abs(moveX) > 0.0 then
+            Engine.setStateMachineBool(entity, "should_stop", false)
+            Engine.setStateMachineTrigger(entity, "start_move")
+        else
+            Engine.setStateMachineBool(entity, "should_stop", true)
         end
 
         if Engine.Input.isKeyPressed(Engine.Keys.SPACE) then
@@ -86,5 +94,13 @@ return {
 
     destroy = function(entity)
         Engine.log("physics_debug_test.lua destroy for entity " .. tostring(entity))
+    end,
+
+    on_enter_run = function(entity)
+        Engine.log("state_machine: enter Run for entity " .. tostring(entity))
+    end,
+
+    on_exit_idle = function(entity)
+        Engine.log("state_machine: exit Idle for entity " .. tostring(entity))
     end
 }

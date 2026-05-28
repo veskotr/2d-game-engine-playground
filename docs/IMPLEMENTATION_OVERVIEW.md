@@ -58,11 +58,12 @@ Per frame, `Runtime::run()` currently does this:
 5. build a `Context`
 6. `TransformSystem::update(ctx)`
 7. `ScriptSystem::update(ctx)`
-8. `PhysicsSystem::update(ctx)`
-9. `renderer.beginFrame()`
-10. `RenderSystem::update(ctx)`
-11. `renderer.endFrame()`
-12. `window.swapBuffers()`
+8. `StateMachineSystem::update(scene, dt, &scriptEngine)`
+9. `PhysicsSystem::update(ctx)`
+10. `renderer.beginFrame()`
+11. `RenderSystem::update(ctx)`
+12. `renderer.endFrame()`
+13. `window.swapBuffers()`
 
 A profiling log in `Runtime` also prints averaged per-phase timings once per second.
 
@@ -133,6 +134,10 @@ It currently exposes:
 - `Engine.hasScene(name)`
 - `Engine.switchScene(name)`
 - `Engine.getCurrentSceneName()`
+- `Engine.setState(entity, stateName)`
+- `Engine.getState(entity)`
+- `Engine.isState(entity, stateName)`
+- `Engine.sendStateEvent(entity, eventName)`
 - `Engine.log()`, `Engine.warn()`, `Engine.error()`
 
 It also exposes service groups:

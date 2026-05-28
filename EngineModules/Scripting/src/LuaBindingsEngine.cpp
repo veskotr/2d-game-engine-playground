@@ -156,6 +156,61 @@ int l_getCurrentSceneName(lua_State* L)
     return 1;
 }
 
+int l_setStateMachineBool(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const char* key = luaL_checkstring(L, 2);
+    const bool value = lua_toboolean(L, 3) != 0;
+    lua_pushboolean(L, detail::getApi(L)->setStateMachineBool({id}, key, value));
+    return 1;
+}
+
+int l_setStateMachineTrigger(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const char* key = luaL_checkstring(L, 2);
+    lua_pushboolean(L, detail::getApi(L)->setStateMachineTrigger({id}, key));
+    return 1;
+}
+
+int l_getStateMachineState(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    std::string state;
+    if (!detail::getApi(L)->getStateMachineCurrentState({id}, state))
+    {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    lua_pushstring(L, state.c_str());
+    return 1;
+}
+
+int l_forceStateMachineState(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const char* stateName = luaL_checkstring(L, 2);
+    lua_pushboolean(L, detail::getApi(L)->forceStateMachineState({id}, stateName));
+    return 1;
+}
+
+int l_isStateMachineInState(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const char* stateName = luaL_checkstring(L, 2);
+    lua_pushboolean(L, detail::getApi(L)->isStateMachineInState({id}, stateName));
+    return 1;
+}
+
+int l_sendStateMachineEvent(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const char* eventName = luaL_checkstring(L, 2);
+    lua_pushboolean(L, detail::getApi(L)->sendStateMachineEvent({id}, eventName));
+    return 1;
+}
+
 int l_log(lua_State* L)
 {
     const char* msg = luaL_checkstring(L, 1);
@@ -198,6 +253,13 @@ void registerEngineFunctions(lua_State* L, int engineTable, ScriptApi* api)
     detail::setEngineFunction(L, engineTable, api, "hasScene", l_hasScene);
     detail::setEngineFunction(L, engineTable, api, "switchScene", l_switchScene);
     detail::setEngineFunction(L, engineTable, api, "getCurrentSceneName", l_getCurrentSceneName);
+    detail::setEngineFunction(L, engineTable, api, "setStateMachineBool", l_setStateMachineBool);
+    detail::setEngineFunction(L, engineTable, api, "setStateMachineTrigger", l_setStateMachineTrigger);
+    detail::setEngineFunction(L, engineTable, api, "getStateMachineState", l_getStateMachineState);
+    detail::setEngineFunction(L, engineTable, api, "setState", l_forceStateMachineState);
+    detail::setEngineFunction(L, engineTable, api, "getState", l_getStateMachineState);
+    detail::setEngineFunction(L, engineTable, api, "isState", l_isStateMachineInState);
+    detail::setEngineFunction(L, engineTable, api, "sendStateEvent", l_sendStateMachineEvent);
     detail::setEngineFunction(L, engineTable, api, "log", l_log);
     detail::setEngineFunction(L, engineTable, api, "warn", l_warn);
     detail::setEngineFunction(L, engineTable, api, "error", l_error);

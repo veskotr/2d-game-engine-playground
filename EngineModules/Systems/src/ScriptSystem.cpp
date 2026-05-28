@@ -1,6 +1,7 @@
 #include <sle/engine/ScriptSystem.hpp>
 #include <sle/engine/Context.hpp>
 #include <sle/core/Log.hpp>
+#include <sle/events/StateMachineEvents.hpp>
 #include <sle/scene/Entity.hpp>
 #include <sle/scene/Registry.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
@@ -8,10 +9,35 @@
 
 namespace sle {
 
+void ScriptSystem::ensureStateMachineSubscription(sle::events::EventBus& eventBus)
+{
+    if (&eventBus == subscribedEventBus_ && stateMachineTransitionSubscription_)
+        return;
+
+    stateMachineTransitionSubscription_.reset();
+    subscribedEventBus_ = &eventBus;
+    stateMachineTransitionSubscription_ = sle::events::ScopedSubscription(
+        &eventBus,
+        eventBus.subscribe<sle::events::StateMachineTransitionEvent>(
+            [this](const sle::events::StateMachineTransitionEvent& event)
+            {
+                if (!scriptEngine)
+                    return;
+
+                if (!event.onExitCallback.empty())
+                    (void)scriptEngine->callEntityFunctionByName(event.entity.getID(), event.onExitCallback);
+
+                if (!event.onEnterCallback.empty())
+                    (void)scriptEngine->callEntityFunctionByName(event.entity.getID(), event.onEnterCallback);
+            }));
+}
+
 void ScriptSystem::update(Context& ctx)
 {
     if (!scriptEngine)
         return;
+
+    ensureStateMachineSubscription(ctx.eventBus);
 
     activeScriptEntities.clear();
 

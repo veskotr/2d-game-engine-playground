@@ -35,4 +35,4 @@ jobs:
         run: ctest --test-dir build/debug -C Debug -L smoke --output-on-failure
 
       - name: Run integration tests
-        run: ctest --test-dir build/debug -C Debug -L integration --output-on-failure
+        run: ctest --test-dir build/debug -C Debug -L integration -LE windowed --output-on-failure

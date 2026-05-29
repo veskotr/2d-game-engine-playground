@@ -160,14 +160,14 @@ sle_add_integration_test(
 sle_add_integration_test(
     integration_renderer_happy_path
     renderer/integration_renderer_happy_path.cpp
-    renderer
+    "renderer;windowed"
     LINK_LIBS sle::renderer sle::platform
 )
 
 sle_add_integration_test(
     integration_renderer_edge_path
     renderer/integration_renderer_edge_path.cpp
-    renderer
+    "renderer;windowed"
     LINK_LIBS sle::renderer sle::platform
 )
 

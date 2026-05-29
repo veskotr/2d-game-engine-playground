@@ -7,6 +7,15 @@
 #include <iostream>
 #include <string>
 
+namespace {
+constexpr int kHeadlessSkipCode = 125;
+
+bool isHeadlessRuntimeInitError(const std::string& error)
+{
+    return error.find("Failed to create GLFW window") != std::string::npos;
+}
+} // namespace
+
 int main() {
     using namespace sle;
 
@@ -28,6 +37,10 @@ int main() {
 
         const core::Result<bool> initResult = runtime.init();
         if (!initResult.ok()) {
+            if (isHeadlessRuntimeInitError(initResult.error())) {
+                std::cout << "SKIP: runtime smoke requires GUI windowing environment\n";
+                return kHeadlessSkipCode;
+            }
             std::cerr << "Runtime init failed: " << initResult.error() << "\n";
             return 1;
         }

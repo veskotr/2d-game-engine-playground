@@ -33,5 +33,6 @@ add_test(
 
 set_tests_properties(smoke.runtime_sentinel PROPERTIES
     LABELS "smoke;runtime"
+    SKIP_RETURN_CODE 125
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )

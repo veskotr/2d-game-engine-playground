@@ -56,14 +56,15 @@ Per frame, `Runtime::run()` currently does this:
 3. `Timer::tick()`
 4. handle resize and escape key
 5. build a `Context`
-6. `TransformSystem::update(ctx)`
-7. `ScriptSystem::update(ctx)`
-8. `StateMachineSystem::update(scene, dt, &scriptEngine)`
-9. `PhysicsSystem::update(ctx)`
-10. `renderer.beginFrame()`
-11. `RenderSystem::update(ctx)`
-12. `renderer.endFrame()`
-13. `window.swapBuffers()`
+6. `AnimationSystem::update(scene, dt)`
+7. `TransformSystem::update(ctx)`
+8. `ScriptSystem::update(ctx)`
+9. `StateMachineSystem::update(scene, dt, &scriptEngine)`
+10. `PhysicsSystem::update(ctx)`
+11. `renderer.beginFrame()`
+12. `RenderSystem::update(ctx)`
+13. `renderer.endFrame()`
+14. `window.swapBuffers()`
 
 A profiling log in `Runtime` also prints averaged per-phase timings once per second.
 

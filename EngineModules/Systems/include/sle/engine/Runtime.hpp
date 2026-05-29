@@ -8,6 +8,7 @@
 #include <sle/renderer/Renderer.hpp>
 #include <sle/renderer/Shader.hpp>
 #include <sle/engine/TransformSystem.hpp>
+#include <sle/engine/AnimationSystem.hpp>
 #include <sle/engine/ScriptSystem.hpp>
 #include <sle/engine/StateMachineSystem.hpp>
 #include <sle/engine/PhysicsSystem.hpp>
@@ -51,6 +52,9 @@ public:
     float getCameraZoom() const;
     void setCameraZoom(float zoom);
 
+    bool setUIBinding(const std::string& key, const std::string& value);
+    bool emitScriptEvent(const std::string& eventName, uint32_t sourceEntity, const std::string& payload);
+
     void setPhysicsDebugEnabled(bool enabled);
     bool isPhysicsDebugEnabled() const;
 
@@ -58,6 +62,7 @@ public:
     SceneManager& getSceneManager() { return sceneManager; }
     const SceneManager& getSceneManager() const { return sceneManager; }
     sle::physics::PhysicsWorld* getPhysicsWorld() { return physicsWorld.get(); }
+    sle::scripting::ScriptEngine& getScriptEngine() { return scriptEngine; }
     sle::events::EventBus& getGlobalBus() { return globalBus_; }
 
 private:
@@ -71,6 +76,7 @@ private:
     std::unique_ptr<sle::physics::PhysicsWorld> physicsWorld;
     sle::events::EventBus globalBus_;  // Engine-wide event bus for lifecycle events
     TransformSystem transformSystem;
+    AnimationSystem animationSystem;
     ScriptSystem scriptSystem;
     StateMachineSystem stateMachineSystem;
     PhysicsSystem physicsSystem;

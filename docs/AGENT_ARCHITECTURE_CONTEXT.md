@@ -31,14 +31,15 @@ Non-negotiable rule:
 2. update input
 3. tick timer
 4. build Context
-5. transform update
-6. script update
-7. state machine update
-8. physics update
-9. renderer beginFrame
-10. render-system submit commands
-11. renderer endFrame
-12. swap buffers
+5. animation update
+6. transform update
+7. script update
+8. state machine update
+9. physics update
+10. renderer beginFrame
+11. render-system submit commands
+12. renderer endFrame
+13. swap buffers
 
 ## 4. Critical Architecture Invariants
 

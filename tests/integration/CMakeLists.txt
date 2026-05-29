@@ -225,3 +225,35 @@ sle_add_integration_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+sle_add_integration_test(
+    integration_animation_interpolation_binding_path
+    systems/integration_animation_interpolation_binding_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_animation_vec2_vec4_other_entity_path
+    systems/integration_animation_vec2_vec4_other_entity_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_animation_state_machine_clip_map_path
+    systems/integration_animation_state_machine_clip_map_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_scripting_animator_api_surface_path
+    scripting/integration_scripting_animator_api_surface_path.cpp
+    scripting
+    LINK_LIBS sle::scripting
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+

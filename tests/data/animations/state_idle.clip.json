@@ -1,0 +1,15 @@
+{
+    "name": "state_idle",
+    "lengthSeconds": 1.0,
+    "loopMode": "loop",
+    "tracks": [
+        {
+            "bindingPath": "self.Transform.position.x",
+            "valueType": "float",
+            "keys": [
+                { "timeSeconds": 0.0, "value": 0.0, "interp": "linear" },
+                { "timeSeconds": 1.0, "value": 2.0, "interp": "linear" }
+            ]
+        }
+    ]
+}

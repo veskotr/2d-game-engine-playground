@@ -31,6 +31,14 @@ function Engine.error(...) end
 
 ---@param ... any
 ---@return any
+function Engine.getAnimatorTime(...) end
+
+---@param ... any
+---@return any
+function Engine.getAnimatorFloat(...) end
+
+---@param ... any
+---@return any
 function Engine.getChildCount(...) end
 
 ---@param ... any
@@ -71,6 +79,10 @@ function Engine.hasScene(...) end
 
 ---@param ... any
 ---@return any
+function Engine.isAnimatorPlaying(...) end
+
+---@param ... any
+---@return any
 function Engine.isEntityAlive(...) end
 
 ---@param ... any
@@ -87,7 +99,35 @@ function Engine.log(...) end
 
 ---@param ... any
 ---@return any
+function Engine.pauseAnimator(...) end
+
+---@param ... any
+---@return any
+function Engine.playAnimator(...) end
+
+---@param ... any
+---@return any
+function Engine.resumeAnimator(...) end
+
+---@param ... any
+---@return any
 function Engine.sendStateEvent(...) end
+
+---@param ... any
+---@return any
+function Engine.setAnimatorSpeed(...) end
+
+---@param ... any
+---@return any
+function Engine.setAnimatorTarget(...) end
+
+---@param ... any
+---@return any
+function Engine.setAnimatorTime(...) end
+
+---@param ... any
+---@return any
+function Engine.setAnimatorFloat(...) end
 
 ---@param ... any
 ---@return any
@@ -112,6 +152,14 @@ function Engine.setStateMachineTrigger(...) end
 ---@param ... any
 ---@return any
 function Engine.setTransformPosition(...) end
+
+---@param ... any
+---@return any
+function Engine.setUIBinding(...) end
+
+---@param ... any
+---@return any
+function Engine.stopAnimator(...) end
 
 ---@param ... any
 ---@return any

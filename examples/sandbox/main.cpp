@@ -7,6 +7,7 @@
 #include <sle/scene/components/UIComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
+#include <sle/scene/components/AnimatorComponent.hpp>
 #include <sle/scene/components/StateMachineComponent.hpp>
 #include <sle/scene/components/Transform.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
@@ -24,9 +25,32 @@ using namespace sle::renderer;
 
 namespace {
 
+std::string resolveAssetPath(const std::string& relativePath)
+{
+  namespace fs = std::filesystem;
+
+  fs::path path(relativePath);
+  if (fs::exists(path))
+    return path.lexically_normal().generic_string();
+
+  fs::path current = fs::current_path();
+  while (!current.empty())
+  {
+    fs::path candidate = current / relativePath;
+    if (fs::exists(candidate))
+      return candidate.lexically_normal().generic_string();
+
+    if (current == current.root_path())
+      break;
+    current = current.parent_path();
+  }
+
+  return relativePath;
+}
+
 std::string pickFontAsset()
 {
-  return "assets/fonts/Roboto-Regular.ttf";
+  return resolveAssetPath("assets/fonts/Roboto-Regular.ttf");
 }
 
 } // namespace
@@ -52,19 +76,22 @@ int main()
 
   runtime.registerScene("main", [config](Runtime& runtime)
   {
+    const std::string playerMoveScriptAsset = resolveAssetPath("assets/scripts/player_move.lua");
+    const std::string tileTextureAsset = resolveAssetPath("assets/textures/tile2.png");
+
     auto script = Resources::create<sle::scripting::ScriptResource>(
       "player_move_script",
-      "assets/scripts/player_move.lua");
+      playerMoveScriptAsset);
     if (!script)
     {
-      Log::error("Failed to preload script resource: assets/scripts/player_move.lua");
+      Log::error("Failed to preload script resource: {}", playerMoveScriptAsset);
       return;
     }
 
-    auto texture = Resources::create<Texture>("tile2", "assets/textures/tile2.png");
+    auto texture = Resources::create<Texture>("tile2", tileTextureAsset);
     if (!texture)
     {
-      Log::error("Failed to load sprite texture: assets/textures/tile2.png");
+      Log::error("Failed to load sprite texture: {}", tileTextureAsset);
       return;
     }
 
@@ -89,6 +116,11 @@ int main()
   runtime.registerScene("physics_test", [config](Runtime& runtime)
   {
     const std::string fontAsset = pickFontAsset();
+    const std::string physicsScriptAsset = resolveAssetPath("assets/scripts/physics_debug_test.lua");
+    const std::string tileTextureAsset = resolveAssetPath("assets/textures/tile2.png");
+    const std::string stateMachineAsset = resolveAssetPath("assets/state_machines/player_state_machine.json");
+    const std::string worldLabelLayoutAsset = resolveAssetPath("assets/ui/world_label.xml");
+    const std::string fpsHudLayoutAsset = resolveAssetPath("assets/ui/fps_hud.xml");
 
     if (!std::filesystem::exists(fontAsset))
     {
@@ -98,17 +130,17 @@ int main()
 
     auto script = Resources::create<sle::scripting::ScriptResource>(
       "physics_debug_test_script",
-      "assets/scripts/physics_debug_test.lua");
+      physicsScriptAsset);
     if (!script)
     {
-      Log::error("Failed to preload script resource: assets/scripts/physics_debug_test.lua");
+      Log::error("Failed to preload script resource: {}", physicsScriptAsset);
       return;
     }
 
-    auto texture = Resources::create<Texture>("tile2", "assets/textures/tile2.png");
+    auto texture = Resources::create<Texture>("tile2", tileTextureAsset);
     if (!texture)
     {
-      Log::error("Failed to load sprite texture: assets/textures/tile2.png");
+      Log::error("Failed to load sprite texture: {}", tileTextureAsset);
       return;
     }
 
@@ -144,10 +176,10 @@ int main()
     playerScript.enabled = true;
 
     auto& playerStateMachine = registry.addComponent<components::StateMachineComponent>(player);
-    playerStateMachine.definitionAsset = "assets/state_machines/player_state_machine.json";
+    playerStateMachine.definitionAsset = stateMachineAsset;
 
     auto& playerUi = registry.addComponent<components::UIComponent>(player);
-    playerUi.layoutAsset = "assets/ui/world_label.xml";
+    playerUi.layoutAsset = worldLabelLayoutAsset;
     playerUi.fontAsset = fontAsset;
     playerUi.spaceMode = components::UISpaceMode::World;
     playerUi.layer = 20;
@@ -219,7 +251,7 @@ int main()
 
     auto hudEntity = scene.createEntity();
     auto& hud = registry.addComponent<components::UIComponent>(hudEntity);
-    hud.layoutAsset = "assets/ui/fps_hud.xml";
+    hud.layoutAsset = fpsHudLayoutAsset;
     hud.fontAsset = fontAsset;
     hud.spaceMode = components::UISpaceMode::Screen;
     hud.layer = 100;
@@ -229,7 +261,154 @@ int main()
     Log::info("Loaded physics_test scene. Use F3 or script key F to toggle physics debug.");
   });
 
-  auto loadSceneResult = runtime.loadScene("physics_test");
+  runtime.registerScene("npc_zone_demo", [config](Runtime& runtime)
+  {
+    const std::string fontAsset = pickFontAsset();
+    const std::string npcDemoScriptAsset = resolveAssetPath("assets/scripts/npc_zone_demo.lua");
+    const std::string zoneEmitterScriptAsset = resolveAssetPath("assets/scripts/zone_distance_emitter.lua");
+    const std::string tileTextureAsset = resolveAssetPath("assets/textures/tile2.png");
+    const std::string playerColorClipAsset = resolveAssetPath("assets/animations/player_color_red_blue.clip.json");
+    const std::string distanceLabelLayoutAsset = resolveAssetPath("assets/ui/player_distance_world_label.xml");
+
+    if (!std::filesystem::exists(fontAsset))
+    {
+      Log::error("Roboto font is required for this demo but was not found: {}", fontAsset);
+      return;
+    }
+
+    auto script = Resources::create<sle::scripting::ScriptResource>(
+      "npc_zone_demo_script",
+      npcDemoScriptAsset);
+    if (!script)
+    {
+      Log::error("Failed to preload script resource: {}", npcDemoScriptAsset);
+      return;
+    }
+
+    auto zoneScript = Resources::create<sle::scripting::ScriptResource>(
+      "zone_distance_emitter_script",
+      zoneEmitterScriptAsset);
+    if (!zoneScript)
+    {
+      Log::error("Failed to preload script resource: {}", zoneEmitterScriptAsset);
+      return;
+    }
+
+    auto texture = Resources::create<Texture>("tile2", tileTextureAsset);
+    if (!texture)
+    {
+      Log::error("Failed to load sprite texture: {}", tileTextureAsset);
+      return;
+    }
+
+    auto& scene = runtime.getScene();
+    auto& registry = scene.getRegistry();
+
+    // 1) Player (entity id 1): controllable, animated color, and world-space UI label.
+    const auto player = scene.createEntity();
+
+    auto& playerTransform = registry.addComponent<components::TransformComponent>(player);
+    playerTransform.setPosition({static_cast<float>(config.width) * 0.35f, static_cast<float>(config.height) * 0.50f});
+    playerTransform.setScale({28.0f, 28.0f});
+
+    auto& playerSprite = registry.addComponent<components::SpriteRenderer>(player);
+    playerSprite.region.texture = texture;
+    playerSprite.region.uv = {0.0f, 0.0f, 1.0f, 1.0f};
+    playerSprite.color = {1.0f, 0.0f, 0.0f, 1.0f};
+
+    auto& playerBody = registry.addComponent<components::RigidBodyComponent>(player);
+    playerBody.bodyType = components::BodyType::Dynamic;
+    playerBody.gravityScale = 0.0f;
+    playerBody.linearDamping = 6.0f;
+
+    auto& playerCollider = registry.addComponent<components::CircleColliderComponent>(player);
+    playerCollider.radius = 14.0f;
+    playerCollider.friction = 0.3f;
+    playerCollider.restitution = 0.1f;
+
+    auto& playerAnimator = registry.addComponent<components::AnimatorComponent>(player);
+    playerAnimator.clipAsset = playerColorClipAsset;
+    playerAnimator.enabled = true;
+    playerAnimator.playing = true;
+
+    auto& playerScript = registry.addComponent<components::ScriptComponent>(player);
+    playerScript.scriptAsset = "npc_zone_demo_script";
+    playerScript.enabled = true;
+
+    auto& playerUi = registry.addComponent<components::UIComponent>(player);
+    playerUi.layoutAsset = distanceLabelLayoutAsset;
+    playerUi.fontAsset = fontAsset;
+    playerUi.spaceMode = components::UISpaceMode::World;
+    playerUi.layer = 50;
+
+    // 2) NPC (entity id 2): static anchor for distance + event area demo.
+    const auto npc = scene.createEntity();
+
+    auto& npcTransform = registry.addComponent<components::TransformComponent>(npc);
+    npcTransform.setPosition({static_cast<float>(config.width) * 0.70f, static_cast<float>(config.height) * 0.50f});
+    npcTransform.setScale({30.0f, 30.0f});
+
+    auto& npcSprite = registry.addComponent<components::SpriteRenderer>(npc);
+    npcSprite.region.texture = texture;
+    npcSprite.region.uv = {0.0f, 0.0f, 1.0f, 1.0f};
+    npcSprite.color = {0.20f, 0.95f, 0.30f, 1.0f};
+
+    auto& npcBody = registry.addComponent<components::RigidBodyComponent>(npc);
+    npcBody.bodyType = components::BodyType::Static;
+
+    auto& npcCollider = registry.addComponent<components::CircleColliderComponent>(npc);
+    npcCollider.radius = 15.0f;
+
+    // Expose NPC as animator target for automatic UI bindings like
+    // {{entity.target.npc.distance}} on the player's attached UI document.
+    playerAnimator.targetEntities["npc"] = npc.getID();
+
+    // Visible area 1 (inner ring) and active zone.
+    const auto npcInnerArea = scene.createEntity();
+
+    auto& innerTransform = registry.addComponent<components::TransformComponent>(npcInnerArea);
+    innerTransform.setPosition(npcTransform.getPosition());
+    innerTransform.setScale({120.0f, 120.0f});
+
+    auto& innerSprite = registry.addComponent<components::SpriteRenderer>(npcInnerArea);
+    innerSprite.region.texture = texture;
+    innerSprite.region.uv = {0.0f, 0.0f, 1.0f, 1.0f};
+    innerSprite.color = {0.25f, 0.70f, 1.00f, 0.18f};
+
+    auto& innerBody = registry.addComponent<components::RigidBodyComponent>(npcInnerArea);
+    innerBody.bodyType = components::BodyType::Static;
+
+    auto& innerZone = registry.addComponent<components::CircleZoneComponent>(npcInnerArea);
+    innerZone.zoneId = "npc_inner";
+    innerZone.radius = 60.0f;
+
+    // Visible area 2 (outer ring) and secondary zone.
+    const auto npcOuterArea = scene.createEntity();
+
+    auto& outerTransform = registry.addComponent<components::TransformComponent>(npcOuterArea);
+    outerTransform.setPosition(npcTransform.getPosition());
+    outerTransform.setScale({180.0f, 180.0f});
+
+    auto& outerSprite = registry.addComponent<components::SpriteRenderer>(npcOuterArea);
+    outerSprite.region.texture = texture;
+    outerSprite.region.uv = {0.0f, 0.0f, 1.0f, 1.0f};
+    outerSprite.color = {0.25f, 0.70f, 1.00f, 0.08f};
+
+    auto& outerBody = registry.addComponent<components::RigidBodyComponent>(npcOuterArea);
+    outerBody.bodyType = components::BodyType::Static;
+
+    auto& outerZone = registry.addComponent<components::CircleZoneComponent>(npcOuterArea);
+    outerZone.zoneId = "npc_outer";
+    outerZone.radius = 90.0f;
+
+    auto& outerZoneScript = registry.addComponent<components::ScriptComponent>(npcOuterArea);
+    outerZoneScript.scriptAsset = "zone_distance_emitter_script";
+    outerZoneScript.enabled = true;
+
+    Log::info("Loaded npc_zone_demo scene. Move with WASD toward the NPC to trigger event subscriptions.");
+  });
+
+  auto loadSceneResult = runtime.loadScene("npc_zone_demo");
   if (!loadSceneResult.ok())
   {
     Log::error("Failed to load startup scene: {}", loadSceneResult.error());

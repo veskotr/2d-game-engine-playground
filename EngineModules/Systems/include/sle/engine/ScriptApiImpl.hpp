@@ -57,6 +57,7 @@ public:
     void log(const std::string& message) override;
     void warn(const std::string& message) override;
     void error(const std::string& message) override;
+    bool setUIBinding(const std::string& key, const std::string& value) override;
 
     bool addForce(sle::scripting::ScriptEntityRef entity, float forceX, float forceY) override;
     bool addImpulse(sle::scripting::ScriptEntityRef entity, float impulseX, float impulseY) override;
@@ -73,6 +74,19 @@ public:
 
     int subscribeEvent(const std::string& eventName, uint32_t entityId, int luaRef) override;
     void unsubscribeEvent(int subscriptionId) override;
+    bool emitEvent(const std::string& eventName, uint32_t sourceEntity, const std::string& payload) override;
+
+    bool playAnimation(sle::scripting::ScriptEntityRef entity, const std::string& clipAsset) override;
+    bool stopAnimation(sle::scripting::ScriptEntityRef entity) override;
+    bool pauseAnimation(sle::scripting::ScriptEntityRef entity) override;
+    bool resumeAnimation(sle::scripting::ScriptEntityRef entity) override;
+    bool setAnimationSpeed(sle::scripting::ScriptEntityRef entity, float speed) override;
+    bool setAnimationTime(sle::scripting::ScriptEntityRef entity, float timeSeconds) override;
+    bool isAnimationPlaying(sle::scripting::ScriptEntityRef entity) const override;
+    float getAnimationTime(sle::scripting::ScriptEntityRef entity) const override;
+    bool setAnimationTarget(sle::scripting::ScriptEntityRef entity, const std::string& targetName, sle::scripting::ScriptEntityRef targetEntity) override;
+    bool setAnimatorFloat(sle::scripting::ScriptEntityRef entity, const std::string& name, float value) override;
+    bool getAnimatorFloat(sle::scripting::ScriptEntityRef entity, const std::string& name, float& outValue) const override;
 
 private:
     Runtime& runtime;

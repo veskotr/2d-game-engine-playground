@@ -352,23 +352,115 @@ Recommended strategy:
 - keep animation playback data separate from state logic
 - support a simple first version before adding blending or graphs
 
+Updated scope direction (May 2026):
+
+- Animation must be generic property animation, not only sprite-frame switching.
+- Animation data is JSON asset-driven and reusable across entities.
+- Tracks can target:
+	- local entity properties (transform, sprite, custom numeric fields)
+	- properties on other entities via explicit target references
+	- script-exposed parameters for gameplay-driven blending/selection
+- Keyframes are time-in-seconds based, with interpolation per keyframe segment.
+- The system should feel conceptually similar to Unity clips + curves, while staying ECS/data-oriented.
+
+Core data model (proposed):
+
+- `AnimationClipResource`:
+	- `name`
+	- `lengthSeconds`
+	- `loopMode` (`once`, `loop`, `ping_pong` later)
+	- list of typed tracks
+- `AnimationTrack`:
+	- `bindingPath` (what property to drive)
+	- `valueType` (`float`, `vec2`, `vec3`, `vec4`, `int`, `bool`, `string` optional later)
+	- ordered keyframes
+- `Keyframe`:
+	- `timeSeconds`
+	- `value`
+	- `interp` / easing (`step`, `linear`, `ease_in`, `ease_out`, `ease_in_out`, `smoothstep`, `exp`, `log`)
+
+Binding model (proposed):
+
+- Use explicit path syntax to avoid hardcoded per-component animation code.
+- Path examples:
+	- `self.Transform.position.x`
+	- `self.Transform.rotation`
+	- `self.SpriteRenderer.color.a`
+	- `entity:PlayerWeapon.Transform.position.y`
+	- `script.speed`
+- Runtime resolves each binding to a typed accessor (getter/setter function pair) and caches it.
+- Invalid bindings should produce warnings and skip only that track (not fail the whole clip).
+
+Script integration model (proposed):
+
+- Scripts can set animation parameters (speed, booleans, triggers, numeric values) via small API.
+- Animator can read script parameters when selecting clip/state.
+- State machine remains the high-level selector; animation system is the value driver.
+
+JSON sketch (proposed):
+
+```json
+{
+	"name": "player_move",
+	"lengthSeconds": 0.8,
+	"loopMode": "loop",
+	"tracks": [
+		{
+			"bindingPath": "self.Transform.position.y",
+			"valueType": "float",
+			"keys": [
+				{ "timeSeconds": 0.0, "value": 0.0, "interp": "ease_out" },
+				{ "timeSeconds": 0.2, "value": 6.0, "interp": "ease_in" },
+				{ "timeSeconds": 0.8, "value": 0.0, "interp": "linear" }
+			]
+		},
+		{
+			"bindingPath": "self.SpriteRenderer.color.a",
+			"valueType": "float",
+			"keys": [
+				{ "timeSeconds": 0.0, "value": 1.0, "interp": "linear" },
+				{ "timeSeconds": 0.8, "value": 0.6, "interp": "smoothstep" }
+			]
+		}
+	]
+}
+```
+
+Module/system placement decision:
+
+- Keep execution in `Systems` as `AnimationSystem` (same layer as state machine/script/physics orchestration).
+- Keep animation components in `Scene` (data-only ECS rule).
+- Keep clip asset loading/parsing in `Resources` or `Scene` resource wrappers (same pattern as existing JSON resources).
+- Keep this implementation inside current modules for Phase 3 to reduce complexity and speed delivery.
+
 Suggested component model:
 
-- `AnimatorComponent` stores the current animation, playback time, speed, loop mode, and asset reference.
-- optional animation clips are loaded from data assets.
-- the state machine decides which clip should play.
+- `AnimatorComponent` stores:
+	- active clip asset
+	- playback time
+	- playback speed
+	- play/paused/enabled flags
+	- loop mode override
+	- optional target entity bindings
+- `AnimationParameterComponent` (or map inside animator):
+	- named float/int/bool parameters set by scripts and gameplay systems
+	- used for clip selection and conditional transitions
 
 Implementation slices:
 
-1. Add animation asset loading and a simple clip representation.
-2. Add the animator component and system.
-3. Connect state names to animation names.
-4. Expose play/stop/query helpers to Lua.
-5. Add a demo character with idle and run states.
+1. Add animation clip JSON schema + loader + validation.
+2. Add typed track evaluator (keyframe search + interpolation functions).
+3. Add path binding resolver and cached property accessors.
+4. Add `AnimatorComponent` + `AnimationSystem` playback loop.
+5. Connect state names to clip names through state machine mapping.
+6. Expose Lua helpers for parameter set/get and play/stop/query.
+7. Add demo entity animating transform + sprite + one custom numeric variable.
+8. Add integration tests for interpolation correctness and binding resolution failures.
 
 Suggested file targets:
 
 - `EngineModules/Scene/include/sle/scene/components/AnimatorComponent.hpp`
+- `EngineModules/Scene/include/sle/scene/components/AnimationClipResource.hpp`
 - `EngineModules/Systems/include/sle/engine/AnimationSystem.hpp`
 - `EngineModules/Systems/src/AnimationSystem.cpp`
 - `EngineModules/Resources/` for animation asset loading if needed
@@ -378,6 +470,9 @@ Done when:
 - a character can switch between at least two animations
 - animation changes are driven by state or script
 - update order does not cause one-frame desync between state and playback
+- one clip can animate at least three different property types (`float`, `vec2`, and sprite-related field)
+- clip/keyframe interpolation modes are deterministic and covered by integration tests
+- invalid binding paths fail gracefully with warnings and do not crash the frame loop
 
 ### Phase 4: Audio
 

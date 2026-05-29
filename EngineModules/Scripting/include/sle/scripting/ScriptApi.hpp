@@ -78,6 +78,9 @@ public:
     virtual void warn(const std::string& message) = 0;
     virtual void error(const std::string& message) = 0;
 
+    // ====== UI ======
+    virtual bool setUIBinding(const std::string& key, const std::string& value) = 0;
+
     // ====== PHYSICS ======
     virtual bool addForce(ScriptEntityRef entity, float forceX, float forceY) = 0;
     virtual bool addImpulse(ScriptEntityRef entity, float impulseX, float impulseY) = 0;
@@ -99,6 +102,20 @@ public:
     // luaRef: Lua function ref (from luaL_ref) to call when event fires
     virtual int subscribeEvent(const std::string& eventName, uint32_t entityId, int luaRef) = 0;
     virtual void unsubscribeEvent(int subscriptionId) = 0;
+    virtual bool emitEvent(const std::string& eventName, uint32_t sourceEntity, const std::string& payload) = 0;
+
+    // ====== ANIMATOR ======
+    virtual bool playAnimation(ScriptEntityRef entity, const std::string& clipAsset) = 0;
+    virtual bool stopAnimation(ScriptEntityRef entity) = 0;
+    virtual bool pauseAnimation(ScriptEntityRef entity) = 0;
+    virtual bool resumeAnimation(ScriptEntityRef entity) = 0;
+    virtual bool setAnimationSpeed(ScriptEntityRef entity, float speed) = 0;
+    virtual bool setAnimationTime(ScriptEntityRef entity, float timeSeconds) = 0;
+    virtual bool isAnimationPlaying(ScriptEntityRef entity) const = 0;
+    virtual float getAnimationTime(ScriptEntityRef entity) const = 0;
+    virtual bool setAnimationTarget(ScriptEntityRef entity, const std::string& targetName, ScriptEntityRef targetEntity) = 0;
+    virtual bool setAnimatorFloat(ScriptEntityRef entity, const std::string& name, float value) = 0;
+    virtual bool getAnimatorFloat(ScriptEntityRef entity, const std::string& name, float& outValue) const = 0;
 };
 
 } // namespace sle::scripting

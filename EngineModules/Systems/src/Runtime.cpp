@@ -4,6 +4,7 @@
 #include <sle/core/Log.hpp>
 #include <sle/engine/Runtime.hpp>
 #include <sle/engine/Context.hpp>
+#include <sle/events/ScriptEvents.hpp>
 #include <sle/resources/Resources.hpp>
 
 #include <algorithm>
@@ -83,6 +84,27 @@ namespace sle
     void Runtime::setCameraZoom(float zoom)
     {
         camera.setZoom(zoom);
+    }
+
+    bool Runtime::setUIBinding(const std::string& key, const std::string& value)
+    {
+        if (key.empty())
+            return false;
+
+        return uiSystem.setBinding(key, value);
+    }
+
+    bool Runtime::emitScriptEvent(const std::string& eventName, uint32_t sourceEntity, const std::string& payload)
+    {
+        if (eventName.empty())
+            return false;
+
+        scene.getEventBus().queue(sle::events::ScriptEvent{
+            eventName,
+            sle::entity::Entity(sourceEntity),
+            payload,
+        });
+        return true;
     }
 
     void Runtime::setPhysicsDebugEnabled(bool enabled)
@@ -248,19 +270,23 @@ namespace sle
             ctx.globalBus.flushQueue();
 
             // === LOGIC UPDATE PHASE ===
-            // 1. Resolve world-space transforms (required by all other systems).
-            auto t0 = Clock::now();
+            // 1. Advance animations before transform solve so animated local transforms
+            // are reflected in world transforms in the same frame.
+            animationSystem.update(scene, dt);
+            auto tAnimation = Clock::now();
+
+            // 2. Resolve world-space transforms (required by all other systems).
             transformSystem.update(ctx);
             auto t1 = Clock::now();
 
-            // 2. Update scripted entities (placeholder for Lua integration).
+            // 3. Update scripted entities (placeholder for Lua integration).
             scriptSystem.update(ctx);
             auto t2 = Clock::now();
 
-            // 2.5 Update state machines after scripts mutate parameters/triggers.
+            // 4. Update state machines after scripts mutate parameters/triggers.
             stateMachineSystem.update(scene, dt, &scriptEngine);
 
-            // 3. Step physics simulation and resolve collisions (placeholder for Box2D).
+            // 5. Step physics simulation and resolve collisions (placeholder for Box2D).
             physicsSystem.update(ctx);
             auto t3 = Clock::now();
 
@@ -279,7 +305,7 @@ namespace sle
             window.swapBuffers();
             auto t6 = Clock::now();
 
-            transformMsAccum += Ms(t1 - t0).count();
+            transformMsAccum += Ms(t1 - tAnimation).count();
             scriptMsAccum += Ms(t2 - t1).count();
             physicsMsAccum += Ms(t3 - t2).count();
             renderSubmitMsAccum += Ms(t4 - t3).count();

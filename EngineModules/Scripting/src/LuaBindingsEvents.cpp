@@ -21,7 +21,8 @@ int l_subscribe(lua_State* L)
         return 1;
     }
 
-    // Store the Lua function in the registry and get its reference
+    // Copy callback to top before luaL_ref so argument stack remains valid.
+    lua_pushvalue(L, 2);
     int luaRef = luaL_ref(L, LUA_REGISTRYINDEX);
     
     // Subscribe through ScriptApi
@@ -30,6 +31,19 @@ int l_subscribe(lua_State* L)
     int subId = detail::getApi(L)->subscribeEvent(eventName, 0, luaRef);
     
     lua_pushinteger(L, subId);
+    return 1;
+}
+
+// Engine.Events.emit(eventName, payload?, sourceEntity?)
+int l_emit(lua_State* L)
+{
+    const char* eventName = luaL_checkstring(L, 1);
+    const char* payload = lua_isnoneornil(L, 2) ? "" : luaL_checkstring(L, 2);
+    const uint32_t sourceEntity = lua_isnoneornil(L, 3)
+        ? 0
+        : static_cast<uint32_t>(luaL_checkinteger(L, 3));
+
+    lua_pushboolean(L, detail::getApi(L)->emitEvent(eventName, sourceEntity, payload));
     return 1;
 }
 
@@ -51,6 +65,7 @@ void registerEventsTable(lua_State* L, int engineTable, ScriptApi* api)
     
     detail::setTableFunction(L, eventsTable, api, "subscribe", l_subscribe);
     detail::setTableFunction(L, eventsTable, api, "unsubscribe", l_unsubscribe);
+    detail::setTableFunction(L, eventsTable, api, "emit", l_emit);
     
     lua_setfield(L, engineTable, "Events");
 }

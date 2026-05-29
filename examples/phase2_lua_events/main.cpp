@@ -92,6 +92,21 @@ public:
         unsubscribedIds.push_back(subscriptionId);
     }
 
+    bool emitEvent(const std::string&, uint32_t, const std::string&) override { return false; }
+
+    bool playAnimation(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
+    bool stopAnimation(sle::scripting::ScriptEntityRef) override { return false; }
+    bool pauseAnimation(sle::scripting::ScriptEntityRef) override { return false; }
+    bool resumeAnimation(sle::scripting::ScriptEntityRef) override { return false; }
+    bool setAnimationSpeed(sle::scripting::ScriptEntityRef, float) override { return false; }
+    bool setAnimationTime(sle::scripting::ScriptEntityRef, float) override { return false; }
+    bool isAnimationPlaying(sle::scripting::ScriptEntityRef) const override { return false; }
+    float getAnimationTime(sle::scripting::ScriptEntityRef) const override { return 0.0f; }
+    bool setAnimationTarget(sle::scripting::ScriptEntityRef, const std::string&, sle::scripting::ScriptEntityRef) override { return false; }
+    bool setAnimatorFloat(sle::scripting::ScriptEntityRef, const std::string&, float) override { return false; }
+    bool getAnimatorFloat(sle::scripting::ScriptEntityRef, const std::string&, float&) const override { return false; }
+    bool setUIBinding(const std::string&, const std::string&) override { return false; }
+
     std::vector<std::string> subscribedEventNames;
     std::vector<uint32_t> subscribedEntityIds;
     std::vector<int> subscribedLuaRefs;

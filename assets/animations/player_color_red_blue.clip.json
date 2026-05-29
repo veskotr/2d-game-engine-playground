@@ -1,0 +1,16 @@
+{
+    "name": "player_color_red_blue",
+    "lengthSeconds": 1.5,
+    "loopMode": "loop",
+    "tracks": [
+        {
+            "bindingPath": "self.SpriteRenderer.color",
+            "valueType": "vec4",
+            "keys": [
+                { "timeSeconds": 0.0, "value": [1.0, 0.0, 0.0, 1.0], "interp": "linear" },
+                { "timeSeconds": 0.75, "value": [0.0, 0.2, 1.0, 1.0], "interp": "ease_in_out" },
+                { "timeSeconds": 1.5, "value": [1.0, 0.0, 0.0, 1.0], "interp": "ease_in_out" }
+            ]
+        }
+    ]
+}

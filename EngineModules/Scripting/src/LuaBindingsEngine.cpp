@@ -211,6 +211,105 @@ int l_sendStateMachineEvent(lua_State* L)
     return 1;
 }
 
+// ============================================================
+// Animator
+// ============================================================
+
+int l_playAnimation(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const char* clipAsset = luaL_checkstring(L, 2);
+    lua_pushboolean(L, detail::getApi(L)->playAnimation({id}, clipAsset));
+    return 1;
+}
+
+int l_stopAnimation(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    lua_pushboolean(L, detail::getApi(L)->stopAnimation({id}));
+    return 1;
+}
+
+int l_pauseAnimation(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    lua_pushboolean(L, detail::getApi(L)->pauseAnimation({id}));
+    return 1;
+}
+
+int l_resumeAnimation(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    lua_pushboolean(L, detail::getApi(L)->resumeAnimation({id}));
+    return 1;
+}
+
+int l_setAnimationSpeed(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const float speed = static_cast<float>(luaL_checknumber(L, 2));
+    lua_pushboolean(L, detail::getApi(L)->setAnimationSpeed({id}, speed));
+    return 1;
+}
+
+int l_setAnimationTime(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const float t = static_cast<float>(luaL_checknumber(L, 2));
+    lua_pushboolean(L, detail::getApi(L)->setAnimationTime({id}, t));
+    return 1;
+}
+
+int l_isAnimationPlaying(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    lua_pushboolean(L, detail::getApi(L)->isAnimationPlaying({id}));
+    return 1;
+}
+
+int l_getAnimationTime(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    lua_pushnumber(L, detail::getApi(L)->getAnimationTime({id}));
+    return 1;
+}
+
+int l_setAnimationTarget(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const char* targetName = luaL_checkstring(L, 2);
+    // targetEntity may be nil/0 to clear the binding
+    const uint32_t targetId = lua_isnoneornil(L, 3)
+        ? 0
+        : static_cast<uint32_t>(luaL_checkinteger(L, 3));
+    lua_pushboolean(L, detail::getApi(L)->setAnimationTarget({id}, targetName, {targetId}));
+    return 1;
+}
+
+int l_setAnimatorFloat(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const char* name = luaL_checkstring(L, 2);
+    const float value = static_cast<float>(luaL_checknumber(L, 3));
+    lua_pushboolean(L, detail::getApi(L)->setAnimatorFloat({id}, name, value));
+    return 1;
+}
+
+int l_getAnimatorFloat(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const char* name = luaL_checkstring(L, 2);
+    float value = 0.0f;
+    if (!detail::getApi(L)->getAnimatorFloat({id}, name, value))
+    {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    lua_pushnumber(L, value);
+    return 1;
+}
+
 int l_log(lua_State* L)
 {
     const char* msg = luaL_checkstring(L, 1);
@@ -230,6 +329,14 @@ int l_error(lua_State* L)
     const char* msg = luaL_checkstring(L, 1);
     detail::getApi(L)->error(msg);
     return 0;
+}
+
+int l_setUIBinding(lua_State* L)
+{
+    const char* key = luaL_checkstring(L, 1);
+    const char* value = luaL_checkstring(L, 2);
+    lua_pushboolean(L, detail::getApi(L)->setUIBinding(key, value));
+    return 1;
 }
 
 } // namespace
@@ -263,6 +370,20 @@ void registerEngineFunctions(lua_State* L, int engineTable, ScriptApi* api)
     detail::setEngineFunction(L, engineTable, api, "log", l_log);
     detail::setEngineFunction(L, engineTable, api, "warn", l_warn);
     detail::setEngineFunction(L, engineTable, api, "error", l_error);
+    detail::setEngineFunction(L, engineTable, api, "setUIBinding", l_setUIBinding);
+
+    // Animator
+    detail::setEngineFunction(L, engineTable, api, "playAnimator",      l_playAnimation);
+    detail::setEngineFunction(L, engineTable, api, "stopAnimator",      l_stopAnimation);
+    detail::setEngineFunction(L, engineTable, api, "pauseAnimator",     l_pauseAnimation);
+    detail::setEngineFunction(L, engineTable, api, "resumeAnimator",    l_resumeAnimation);
+    detail::setEngineFunction(L, engineTable, api, "setAnimatorSpeed",  l_setAnimationSpeed);
+    detail::setEngineFunction(L, engineTable, api, "setAnimatorTime",   l_setAnimationTime);
+    detail::setEngineFunction(L, engineTable, api, "isAnimatorPlaying", l_isAnimationPlaying);
+    detail::setEngineFunction(L, engineTable, api, "getAnimatorTime",   l_getAnimationTime);
+    detail::setEngineFunction(L, engineTable, api, "setAnimatorTarget", l_setAnimationTarget);
+    detail::setEngineFunction(L, engineTable, api, "setAnimatorFloat",   l_setAnimatorFloat);
+    detail::setEngineFunction(L, engineTable, api, "getAnimatorFloat",   l_getAnimatorFloat);
 }
 
 } // namespace sle::scripting

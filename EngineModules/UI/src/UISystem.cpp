@@ -6,6 +6,9 @@
 #include <sle/platform/Input.hpp>
 #include <sle/renderer/RendererCommand.hpp>
 #include <sle/scene/Registry.hpp>
+#include <sle/scene/components/AnimatorComponent.hpp>
+#include <sle/scene/components/SpriteRenderer.hpp>
+#include <sle/scene/components/Transform.hpp>
 #include <sle/scene/components/UIComponent.hpp>
 #include <sle/scene/components/WorldTransformComponent.hpp>
 #include <sle/ui/UIEvents.hpp>
@@ -40,6 +43,80 @@ struct HitTarget
     std::string handler;
     ResolvedRect rect;
 };
+
+void applyAutoEntityBindings(UIFrameContext& ctx, UIDocument& document)
+{
+    const auto& descriptor = document.getDescriptor();
+    if (descriptor.ownerEntityId == 0)
+        return;
+
+    const sle::entity::Entity entity(descriptor.ownerEntityId);
+    if (!ctx.registry.hasEntity(entity))
+        return;
+
+    auto& bindings = document.getBindings();
+    const std::string& scope = descriptor.bindingScope;
+
+    auto setBoundValue = [&](const std::string& key, const UIValue& value)
+    {
+        bindings.set(key, value);
+        if (!scope.empty())
+            bindings.set(scope + "." + key, value);
+    };
+
+    setBoundValue("entity.id", static_cast<int64_t>(descriptor.ownerEntityId));
+
+    if (const auto* transform = ctx.registry.getComponent<sle::components::TransformComponent>(entity))
+    {
+        const auto position = transform->getPosition();
+        const auto scale = transform->getScale();
+        setBoundValue("entity.transform.position.x", static_cast<double>(position.x));
+        setBoundValue("entity.transform.position.y", static_cast<double>(position.y));
+        setBoundValue("entity.transform.rotation", static_cast<double>(transform->getRotation()));
+        setBoundValue("entity.transform.scale.x", static_cast<double>(scale.x));
+        setBoundValue("entity.transform.scale.y", static_cast<double>(scale.y));
+    }
+
+    if (const auto* worldTransform = ctx.registry.getComponent<sle::components::WorldTransformComponent>(entity))
+    {
+        setBoundValue("entity.world.position.x", static_cast<double>(worldTransform->position.x));
+        setBoundValue("entity.world.position.y", static_cast<double>(worldTransform->position.y));
+        setBoundValue("entity.world.rotation", static_cast<double>(worldTransform->rotation));
+    }
+
+    if (const auto* sprite = ctx.registry.getComponent<sle::components::SpriteRenderer>(entity))
+    {
+        setBoundValue("entity.sprite.color.r", static_cast<double>(sprite->color.r));
+        setBoundValue("entity.sprite.color.g", static_cast<double>(sprite->color.g));
+        setBoundValue("entity.sprite.color.b", static_cast<double>(sprite->color.b));
+        setBoundValue("entity.sprite.color.a", static_cast<double>(sprite->color.a));
+    }
+
+    // Optional target distance bindings derived from Animator targetEntities map:
+    // key format: entity.target.<name>.distance
+    if (const auto* animator = ctx.registry.getComponent<sle::components::AnimatorComponent>(entity))
+    {
+        const auto* selfTransform = ctx.registry.getComponent<sle::components::TransformComponent>(entity);
+        if (selfTransform)
+        {
+            const glm::vec2 selfPos = selfTransform->getPosition();
+
+            for (const auto& [targetName, targetId] : animator->targetEntities)
+            {
+                const sle::entity::Entity target(targetId);
+                const auto* targetTransform = ctx.registry.getComponent<sle::components::TransformComponent>(target);
+                if (!targetTransform)
+                    continue;
+
+                const glm::vec2 targetPos = targetTransform->getPosition();
+                const float dx = targetPos.x - selfPos.x;
+                const float dy = targetPos.y - selfPos.y;
+                const float distance = std::sqrt(dx * dx + dy * dy);
+                setBoundValue("entity.target." + targetName + ".distance", static_cast<double>(distance));
+            }
+        }
+    }
+}
 
 const UIAttribute* findAttribute(const UIElement& element, std::string_view name)
 {
@@ -435,6 +512,8 @@ void UISystem::update(UIFrameContext& ctx)
 
     for (auto& [_, document] : entityDocuments)
     {
+        applyAutoEntityBindings(ctx, document);
+
         auto dirtyKeys = document.getBindings().consumeDirtyKeys();
         if (!dirtyKeys.empty())
             document.refreshBindings();

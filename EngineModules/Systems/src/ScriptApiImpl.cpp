@@ -5,12 +5,14 @@
 #include <sle/platform/Input.hpp>
 #include <sle/resources/Resources.hpp>
 #include <sle/renderer/Texture.hpp>
+#include <sle/scene/components/AnimatorComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
 #include <sle/scene/components/StateMachineComponent.hpp>
 #include <sle/scene/components/Transform.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/physics/PhysicsWorld.hpp>
 #include <sle/events/CollisionEvents.hpp>
+#include <sle/events/ScriptEvents.hpp>
 #include <sle/events/ZoneEvents.hpp>
 #include <box2d/b2_world.h>
 #include <box2d/b2_contact.h>
@@ -404,6 +406,11 @@ void ScriptApiImpl::error(const std::string& message)
     sle::core::Log::error("[Script] {}", message);
 }
 
+bool ScriptApiImpl::setUIBinding(const std::string& key, const std::string& value)
+{
+    return runtime.setUIBinding(key, value);
+}
+
 bool ScriptApiImpl::addForce(sle::scripting::ScriptEntityRef entity, float forceX, float forceY)
 {
     if (!isEntityAlive(entity))
@@ -659,10 +666,11 @@ int ScriptApiImpl::subscribeEvent(const std::string& eventName, uint32_t entityI
     {
         auto handle = eventBus.subscribe<sle::events::CollisionBeginEvent>(
             [this, luaRef](const sle::events::CollisionBeginEvent& evt) {
-                // Call Lua handler with entity IDs
-                // This would require access to Lua state (to be implemented with Lua integration)
-                // For now, just log the event
-                sle::core::Log::info("CollisionBegin event fired");
+                (void)runtime.getScriptEngine().callEventCallback(
+                    luaRef,
+                    "collision.begin",
+                    evt.entityA.getID(),
+                    evt.entityB.getID());
             });
         entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
         subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
@@ -672,7 +680,11 @@ int ScriptApiImpl::subscribeEvent(const std::string& eventName, uint32_t entityI
     {
         auto handle = eventBus.subscribe<sle::events::CollisionEndEvent>(
             [this, luaRef](const sle::events::CollisionEndEvent& evt) {
-                sle::core::Log::info("CollisionEnd event fired");
+                (void)runtime.getScriptEngine().callEventCallback(
+                    luaRef,
+                    "collision.end",
+                    evt.entityA.getID(),
+                    evt.entityB.getID());
             });
         entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
         subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
@@ -682,7 +694,12 @@ int ScriptApiImpl::subscribeEvent(const std::string& eventName, uint32_t entityI
     {
         auto handle = eventBus.subscribe<sle::events::ZoneEnterEvent>(
             [this, luaRef](const sle::events::ZoneEnterEvent& evt) {
-                sle::core::Log::info("ZoneEnter event fired");
+                (void)runtime.getScriptEngine().callEventCallback(
+                    luaRef,
+                    "zone.enter",
+                    evt.zoneEntity.getID(),
+                    evt.otherEntity.getID(),
+                    evt.zoneId);
             });
         entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
         subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
@@ -692,14 +709,36 @@ int ScriptApiImpl::subscribeEvent(const std::string& eventName, uint32_t entityI
     {
         auto handle = eventBus.subscribe<sle::events::ZoneExitEvent>(
             [this, luaRef](const sle::events::ZoneExitEvent& evt) {
-                sle::core::Log::info("ZoneExit event fired");
+                (void)runtime.getScriptEngine().callEventCallback(
+                    luaRef,
+                    "zone.exit",
+                    evt.zoneEntity.getID(),
+                    evt.otherEntity.getID(),
+                    evt.zoneId);
             });
         entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
         subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
         return subId;
     }
 
-    return -1;  // Unknown event name
+    // Any other event name is treated as a custom script event channel.
+    auto handle = eventBus.subscribe<sle::events::ScriptEvent>(
+        [this, luaRef](const sle::events::ScriptEvent& evt) {
+            (void)runtime.getScriptEngine().callEventCallback(
+                luaRef,
+                evt.name,
+                0,
+                0,
+                {},
+                evt.sourceEntity.getID(),
+                evt.payload);
+        },
+        [eventName](const sle::events::ScriptEvent& evt) {
+            return evt.name == eventName;
+        });
+    entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
+    subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
+    return subId;
 }
 
 void ScriptApiImpl::unsubscribeEvent(int subscriptionId)
@@ -729,6 +768,168 @@ void ScriptApiImpl::unsubscribeEvent(int subscriptionId)
     }
 
     subscriptionIdToLocation_.erase(it);
+}
+
+bool ScriptApiImpl::emitEvent(const std::string& eventName, uint32_t sourceEntity, const std::string& payload)
+{
+    return runtime.emitScriptEvent(eventName, sourceEntity, payload);
+}
+
+// ============================================================
+// Animator API
+// ============================================================
+
+bool ScriptApiImpl::playAnimation(sle::scripting::ScriptEntityRef entity, const std::string& clipAsset)
+{
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* animator = registry.getComponent<sle::components::AnimatorComponent>(rawEntity);
+    if (!animator)
+        return false;
+
+    if (!clipAsset.empty() && animator->clipAsset != clipAsset)
+    {
+        animator->clipAsset = clipAsset;
+        animator->clip.reset();
+        animator->clipLoadAttempted = false;
+    }
+
+    animator->playing = true;
+    animator->timeSeconds = 0.0f;
+    return true;
+}
+
+bool ScriptApiImpl::stopAnimation(sle::scripting::ScriptEntityRef entity)
+{
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* animator = registry.getComponent<sle::components::AnimatorComponent>(rawEntity);
+    if (!animator)
+        return false;
+
+    animator->playing = false;
+    animator->timeSeconds = 0.0f;
+    return true;
+}
+
+bool ScriptApiImpl::pauseAnimation(sle::scripting::ScriptEntityRef entity)
+{
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* animator = registry.getComponent<sle::components::AnimatorComponent>(rawEntity);
+    if (!animator)
+        return false;
+
+    animator->playing = false;
+    return true;
+}
+
+bool ScriptApiImpl::resumeAnimation(sle::scripting::ScriptEntityRef entity)
+{
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* animator = registry.getComponent<sle::components::AnimatorComponent>(rawEntity);
+    if (!animator)
+        return false;
+
+    animator->playing = true;
+    return true;
+}
+
+bool ScriptApiImpl::setAnimationSpeed(sle::scripting::ScriptEntityRef entity, float speed)
+{
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* animator = registry.getComponent<sle::components::AnimatorComponent>(rawEntity);
+    if (!animator)
+        return false;
+
+    animator->speed = speed;
+    return true;
+}
+
+bool ScriptApiImpl::setAnimationTime(sle::scripting::ScriptEntityRef entity, float timeSeconds)
+{
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* animator = registry.getComponent<sle::components::AnimatorComponent>(rawEntity);
+    if (!animator)
+        return false;
+
+    animator->timeSeconds = timeSeconds;
+    return true;
+}
+
+bool ScriptApiImpl::isAnimationPlaying(sle::scripting::ScriptEntityRef entity) const
+{
+    auto& registry = const_cast<ScriptApiImpl*>(this)->runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    const auto* animator = registry.getComponent<sle::components::AnimatorComponent>(rawEntity);
+    return animator && animator->playing;
+}
+
+float ScriptApiImpl::getAnimationTime(sle::scripting::ScriptEntityRef entity) const
+{
+    auto& registry = const_cast<ScriptApiImpl*>(this)->runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    const auto* animator = registry.getComponent<sle::components::AnimatorComponent>(rawEntity);
+    return animator ? animator->timeSeconds : 0.0f;
+}
+
+bool ScriptApiImpl::setAnimationTarget(
+    sle::scripting::ScriptEntityRef entity,
+    const std::string& targetName,
+    sle::scripting::ScriptEntityRef targetEntity)
+{
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* animator = registry.getComponent<sle::components::AnimatorComponent>(rawEntity);
+    if (!animator)
+        return false;
+
+    if (targetEntity.id == 0)
+        animator->targetEntities.erase(targetName);
+    else
+        animator->targetEntities[targetName] = targetEntity.id;
+
+    return true;
+}
+
+bool ScriptApiImpl::setAnimatorFloat(sle::scripting::ScriptEntityRef entity, const std::string& name, float value)
+{
+    if (name.empty())
+        return false;
+
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* animator = registry.getComponent<sle::components::AnimatorComponent>(rawEntity);
+    if (!animator)
+        return false;
+
+    animator->floatParameters[name] = value;
+    return true;
+}
+
+bool ScriptApiImpl::getAnimatorFloat(
+    sle::scripting::ScriptEntityRef entity,
+    const std::string& name,
+    float& outValue) const
+{
+    if (name.empty())
+        return false;
+
+    auto& registry = const_cast<ScriptApiImpl*>(this)->runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    const auto* animator = registry.getComponent<sle::components::AnimatorComponent>(rawEntity);
+    if (!animator)
+        return false;
+
+    auto it = animator->floatParameters.find(name);
+    if (it == animator->floatParameters.end())
+        return false;
+
+    outValue = it->second;
+    return true;
 }
 
 } // namespace sle

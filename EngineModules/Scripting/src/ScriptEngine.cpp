@@ -336,6 +336,70 @@ bool ScriptEngine::callGlobalBoolFunction(const std::string& functionName, uint3
     return result;
 }
 
+bool ScriptEngine::callEventCallback(
+    int luaRef,
+    const std::string& eventName,
+    uint32_t entityA,
+    uint32_t entityB,
+    const std::string& zoneId,
+    uint32_t sourceEntity,
+    const std::string& payload)
+{
+    if (!L || luaRef == kLuaNoRef)
+        return false;
+
+    lua_rawgeti(L, LUA_REGISTRYINDEX, luaRef);
+    if (!lua_isfunction(L, -1))
+    {
+        lua_pop(L, 1);
+        return false;
+    }
+
+    lua_newtable(L);
+
+    lua_pushstring(L, eventName.c_str());
+    lua_setfield(L, -2, "name");
+
+    if (entityA != 0)
+    {
+        lua_pushinteger(L, entityA);
+        lua_setfield(L, -2, "entityA");
+    }
+
+    if (entityB != 0)
+    {
+        lua_pushinteger(L, entityB);
+        lua_setfield(L, -2, "entityB");
+    }
+
+    if (!zoneId.empty())
+    {
+        lua_pushstring(L, zoneId.c_str());
+        lua_setfield(L, -2, "zoneId");
+    }
+
+    if (sourceEntity != 0)
+    {
+        lua_pushinteger(L, sourceEntity);
+        lua_setfield(L, -2, "sourceEntity");
+    }
+
+    if (!payload.empty())
+    {
+        lua_pushstring(L, payload.c_str());
+        lua_setfield(L, -2, "payload");
+    }
+
+    if (lua_pcall(L, 1, 0, 0) != LUA_OK)
+    {
+        sle::core::Log::error("Lua event callback error [{}]: {}", eventName, lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return false;
+    }
+
+    return true;
+}
+
 int ScriptEngine::extractFunctionRef(int tableIndex, const char* functionName)
 {
     lua_getfield(L, tableIndex, functionName);

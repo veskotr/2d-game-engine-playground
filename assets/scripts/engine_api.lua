@@ -31,11 +31,11 @@ function Engine.error(...) end
 
 ---@param ... any
 ---@return any
-function Engine.getAnimatorTime(...) end
+function Engine.getAnimatorFloat(...) end
 
 ---@param ... any
 ---@return any
-function Engine.getAnimatorFloat(...) end
+function Engine.getAnimatorTime(...) end
 
 ---@param ... any
 ---@return any
@@ -87,6 +87,10 @@ function Engine.isEntityAlive(...) end
 
 ---@param ... any
 ---@return any
+function Engine.isSoundPlaying(...) end
+
+---@param ... any
+---@return any
 function Engine.isState(...) end
 
 ---@param ... any
@@ -107,11 +111,19 @@ function Engine.playAnimator(...) end
 
 ---@param ... any
 ---@return any
+function Engine.playSound(...) end
+
+---@param ... any
+---@return any
 function Engine.resumeAnimator(...) end
 
 ---@param ... any
 ---@return any
 function Engine.sendStateEvent(...) end
+
+---@param ... any
+---@return any
+function Engine.setAnimatorFloat(...) end
 
 ---@param ... any
 ---@return any
@@ -127,11 +139,15 @@ function Engine.setAnimatorTime(...) end
 
 ---@param ... any
 ---@return any
-function Engine.setAnimatorFloat(...) end
+function Engine.setParent(...) end
 
 ---@param ... any
 ---@return any
-function Engine.setParent(...) end
+function Engine.setSoundPitch(...) end
+
+---@param ... any
+---@return any
+function Engine.setSoundVolume(...) end
 
 ---@param ... any
 ---@return any
@@ -160,6 +176,10 @@ function Engine.setUIBinding(...) end
 ---@param ... any
 ---@return any
 function Engine.stopAnimator(...) end
+
+---@param ... any
+---@return any
+function Engine.stopSound(...) end
 
 ---@param ... any
 ---@return any

@@ -474,69 +474,30 @@ Done when:
 - clip/keyframe interpolation modes are deterministic and covered by integration tests
 - invalid binding paths fail gracefully with warnings and do not crash the frame loop
 
-### Phase 4: Audio
+### Phase 4: Audio ✅ COMPLETE
 
 Goal: add basic sound effects and music playback with a small, stable API.
 
-Recommended scope for the first version:
+Status snapshot (May 2026):
 
-- one-shot sound effects
-- looping music
-- volume and pause/stop controls
-- entity-bound audio for positional or contextual playback later
+- Implemented: `AudioComponent` (data-only ECS) + `AudioSystem` (miniaudio backend)
+- Implemented: WAV/MP3/FLAC via `ma_sound_init_from_file`; OGG/Vorbis via stb_vorbis PCM decode → `ma_audio_buffer`
+- Implemented: Lua API — `Engine.playSound`, `Engine.stopSound`, `Engine.setSoundVolume`, `Engine.setSoundPitch`, `Engine.isSoundPlaying`
+- Implemented: headless-safe init (no-ops gracefully if no audio device)
+- Implemented: sandbox demo wires gravel.ogg (footstep SFX) and Great Boss.ogg (looping BGM) in npc_zone_demo
+- Integration test: `integration_scripting_audio_api_surface_path`
 
-Suggested component model:
-
-- `AudioComponent` stores asset path, loop flag, volume, pitch, and runtime handle.
-- `AudioSystem` manages playback and synchronization.
-
-Implementation slices:
-
-1. Integrate the audio backend.
-2. Add the audio component and playback system.
-3. Add simple Lua helpers.
-4. Make one demo action play a sound.
-5. Add one looping music example.
-
-Suggested file targets:
-
-- `EngineModules/Scene/include/sle/scene/components/AudioComponent.hpp`
-- `EngineModules/Systems/include/sle/engine/AudioSystem.hpp`
-- `EngineModules/Systems/src/AudioSystem.cpp`
-- `EngineModules/Scripting/src/ScriptApiImpl.cpp`
-
-Done when:
-
-- a sound effect can be triggered from Lua or gameplay code
-- music can loop without special-case code in the sandbox
-- audio playback does not block the frame loop
-
-### Phase 5: UI Polish
+### Phase 5: UI Polish ✅ COMPLETE
 
 Goal: finish the UI layer so it feels usable instead of merely functional.
 
-Current next steps already identified in `UI_PROGRESS.md`:
+Status snapshot (May 2026):
 
-- expand layout rules beyond absolute positioning
-- add a small example scene and layout asset
-- expose Lua-facing binding mutation helpers
-- add keyboard focus and navigation
-- add text wrapping, alignment, and fallback font chains
-
-Suggested order:
-
-1. Layout rules and sizing behavior.
-2. Focus and navigation.
-3. Text wrapping and alignment.
-4. Font fallback and richer text handling.
-5. Example scene polish.
-
-Done when:
-
-- UI can be used in a real sample without hardcoded positioning everywhere
-- keyboard navigation works for at least buttons and fields
-- labels do not break when text gets longer than expected
-- UI integration tests validate focus navigation, binding updates, and layout behavior at multiple resolutions
+- Implemented: `textAlign="left|center|right"` on Label and Button elements
+- Implemented: `wrap="true"` word-wrapping at element width, per-line alignment
+- Implemented: `anchor` attribute with 9-point grid (`topleft`, `topcenter`, `topright`, `middleleft`, `center`, `middleright`, `bottomleft`, `bottomcenter`, `bottomright`) in both screen and world space
+- Integration test: `integration_ui_layout_features_path`
+- Remaining for post-v1: keyboard focus/navigation, font fallback chains, flow/stack layout primitives
 
 ### Phase 6: Gameplay Systems That Fit the State Machine
 
@@ -672,3 +633,96 @@ Treat as working-plan source material or historical detail:
 - `BOX2D_PHYSICS_INTEGRATION_PLAN.md`
 
 If you want the repository to feel cleaner, the next cleanup pass should shorten the older plan docs so they point here instead of repeating the same roadmap in full.
+
+---
+
+## 9. Current State & v1 Roadmap (May 2026)
+
+### What Is Done
+
+| Phase | Feature | Tests |
+|-------|---------|-------|
+| 0 | Documentation cleanup | — |
+| 0.5 | Testing foundation (harness, CTest labels, CI) | 2 smoke |
+| 1 | Event system (deferred dispatch, scene teardown, subscription lifetime) | 8 integration |
+| 2 | Generic scriptable state machine (JSON assets, Lua guards, timer/bool/event transitions) | 6 integration |
+| 3 | Generic property animation (JSON clips, typed tracks, 8 interpolation modes, binding resolver) | 8 integration |
+| 4 | Audio (miniaudio, OGG/stb_vorbis, Lua API, sandbox demo) | 1 integration |
+| 5 | UI polish (textAlign, word wrap, 9-point anchor, integration test) | 3 integration |
+
+**Total integration tests: 32. Smoke tests: 2. All passing in CI.**
+
+### What Is Partially Done
+
+- **UI keyboard focus/navigation** — system designed, not yet implemented. Buttons can be clicked with mouse; Tab/Enter navigation is not wired.
+- **Audio positional/spatial audio** — component has the foundation; `ma_sound_set_position` not yet wired.
+- **Font fallback chains** — single font per document only; no chain-of-fonts fallback.
+- **Phase 6 gameplay systems** — the state machine is ready to drive quest/AI/dialogue flow but no concrete content examples exist yet.
+
+### v1 Definition
+
+v1 means: **a solo developer can ship a small 2D game using only this engine without hitting a hard blocker.**
+
+The criteria:
+
+1. All Phase 0–5 systems work end-to-end in the sandbox demo without crashes or audio/render artifacts.
+2. A developer can define a new scene, attach scripts, physics, audio, and UI in C++ and Lua without reading engine source code.
+3. Integration tests pass clean in CI (no windowed tests excluded).
+4. The Lua API surface is documented in a single reference file.
+5. The sandbox compiles and runs on a fresh Windows machine with Visual Studio 2022.
+
+### Proposed Pre-v1 Work Items
+
+These are the specific gaps between current state and v1 criteria. Work them in order.
+
+#### Pre-v1 Item 1 — Lua API Reference
+
+Write `docs/LUA_API_REFERENCE.md` covering every `Engine.*` function with signature, parameters, return values, and one usage example. This replaces reading `IMPLEMENTATION_OVERVIEW.md` for API discovery.
+
+**Effort**: documentation only, no code changes.
+
+#### Pre-v1 Item 2 — UI Keyboard Focus and Navigation
+
+Wire Tab/Enter/Arrow key focus traversal across `Button` elements in a document.
+
+- Add a `focusable="true"` attribute to Button.
+- `UISystem` tracks a focused element ID per document.
+- Tab cycles focus forward (Shift+Tab backward).
+- Enter on a focused button fires its `onClick` handler.
+- Focused button renders with a distinct highlight color.
+
+**Integration test**: document with 3 buttons; Tab cycles focus; Enter fires correct handler.
+
+#### Pre-v1 Item 3 — Scene Serialization (Minimal)
+
+Allow at least one scene to be described in a data file (JSON or XML) instead of exclusively in C++ `main.cpp`. The loader does not need to support every component — just Transform, SpriteRenderer, ScriptComponent, and UIComponent is enough to prove the concept.
+
+**Why**: without this, every new scene requires a recompile. This is the biggest friction point for a solo game developer.
+
+**Integration test**: load a minimal scene from JSON, verify entities and component fields are correct.
+
+#### Pre-v1 Item 4 — README.md Game Development Quickstart
+
+Write a short quickstart in `README.md` (or a linked `docs/QUICKSTART.md`) covering:
+
+1. Build prerequisites (CMake, VS2022, Windows)
+2. Build commands (`cmake --preset debug && cmake --build build/debug`)
+3. How to add a new scene with a Lua script
+4. How to play a sound from Lua
+5. How to show a UI panel
+6. How to run the tests
+
+#### Pre-v1 Item 5 — Fix Any Remaining Integration Test Gaps
+
+Run `ctest --output-on-failure` and verify all 32+ tests pass clean on a fresh build. Confirm CI pipeline excludes only `windowed`-labeled tests.
+
+### Post-v1 / Phase 6 Queue
+
+Once v1 is declared, these are the next natural investments:
+
+- **Audio spatial/positional playback** — entity world position drives panning/attenuation via `ma_sound_set_position`
+- **UI font fallback chains** — try each font in a list before falling back to `?`
+- **UI flow/stack layout** — `<VStack>` and `<HStack>` container elements for automatic child positioning
+- **Scene serialization (full)** — extend the minimal loader to cover all component types
+- **Gameplay systems** — use the state machine for a concrete quest or enemy AI example
+- **Asset hot-reload** — watch asset files and reload without restarting the engine

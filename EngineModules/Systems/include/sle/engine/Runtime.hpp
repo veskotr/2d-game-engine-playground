@@ -9,6 +9,7 @@
 #include <sle/renderer/Shader.hpp>
 #include <sle/engine/TransformSystem.hpp>
 #include <sle/engine/AnimationSystem.hpp>
+#include <sle/engine/AudioSystem.hpp>
 #include <sle/engine/ScriptSystem.hpp>
 #include <sle/engine/StateMachineSystem.hpp>
 #include <sle/engine/PhysicsSystem.hpp>
@@ -83,6 +84,7 @@ private:
     RenderSystem renderSystem;
     sle::ui::UISystem uiSystem;
     SceneManager sceneManager;
+    AudioSystem audioSystem;
     ScriptApiImpl scriptApi;
     sle::scripting::ScriptEngine scriptEngine;
     std::shared_ptr<sle::renderer::Shader> defaultQuadShader;

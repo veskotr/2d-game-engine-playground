@@ -339,6 +339,45 @@ int l_setUIBinding(lua_State* L)
     return 1;
 }
 
+int l_playSound(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const char* path = luaL_checkstring(L, 2);
+    const bool loop = lua_toboolean(L, 3) != 0;
+    lua_pushboolean(L, detail::getApi(L)->playSound({id}, path, loop));
+    return 1;
+}
+
+int l_stopSound(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    lua_pushboolean(L, detail::getApi(L)->stopSound({id}));
+    return 1;
+}
+
+int l_setSoundVolume(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const float volume = static_cast<float>(luaL_checknumber(L, 2));
+    lua_pushboolean(L, detail::getApi(L)->setSoundVolume({id}, volume));
+    return 1;
+}
+
+int l_setSoundPitch(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    const float pitch = static_cast<float>(luaL_checknumber(L, 2));
+    lua_pushboolean(L, detail::getApi(L)->setSoundPitch({id}, pitch));
+    return 1;
+}
+
+int l_isSoundPlaying(lua_State* L)
+{
+    const uint32_t id = static_cast<uint32_t>(luaL_checkinteger(L, 1));
+    lua_pushboolean(L, detail::getApi(L)->isSoundPlaying({id}));
+    return 1;
+}
+
 } // namespace
 
 void registerEngineFunctions(lua_State* L, int engineTable, ScriptApi* api)
@@ -384,6 +423,13 @@ void registerEngineFunctions(lua_State* L, int engineTable, ScriptApi* api)
     detail::setEngineFunction(L, engineTable, api, "setAnimatorTarget", l_setAnimationTarget);
     detail::setEngineFunction(L, engineTable, api, "setAnimatorFloat",   l_setAnimatorFloat);
     detail::setEngineFunction(L, engineTable, api, "getAnimatorFloat",   l_getAnimatorFloat);
+
+    // Audio
+    detail::setEngineFunction(L, engineTable, api, "playSound",     l_playSound);
+    detail::setEngineFunction(L, engineTable, api, "stopSound",     l_stopSound);
+    detail::setEngineFunction(L, engineTable, api, "setSoundVolume", l_setSoundVolume);
+    detail::setEngineFunction(L, engineTable, api, "setSoundPitch",  l_setSoundPitch);
+    detail::setEngineFunction(L, engineTable, api, "isSoundPlaying", l_isSoundPlaying);
 }
 
 } // namespace sle::scripting

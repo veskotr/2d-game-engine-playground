@@ -15,6 +15,7 @@
 #include <sle/scene/components/CircleColliderComponent.hpp>
 #include <sle/scene/components/BoxZoneComponent.hpp>
 #include <sle/scene/components/CircleZoneComponent.hpp>
+#include <sle/scene/components/AudioComponent.hpp>
 #include <sle/scripting/ScriptResource.hpp>
 
 #include <filesystem>
@@ -362,6 +363,22 @@ int main()
     // Expose NPC as animator target for automatic UI bindings like
     // {{entity.target.npc.distance}} on the player's attached UI document.
     playerAnimator.targetEntities["npc"] = npc.getID();
+
+    // Step-sound source on the player entity (triggered from Lua on movement).
+    // Pre-set the absolute path so Lua can trigger playback without needing
+    // to resolve paths itself (CWD differs between the binary dir and project root).
+    auto& playerAudio = registry.addComponent<components::AudioComponent>(player);
+    playerAudio.assetPath = resolveAssetPath("assets/sounds/gravel.ogg");
+    playerAudio.volume = 0.6f;
+
+    // Dedicated entity for the looping boss theme - auto-starts immediately.
+    const std::string bossThemeAsset = resolveAssetPath("assets/sounds/Great Boss.ogg");
+    auto themeEntity = scene.createEntity();
+    auto& themeAudio = registry.addComponent<components::AudioComponent>(themeEntity);
+    themeAudio.assetPath     = bossThemeAsset;
+    themeAudio.loop          = true;
+    themeAudio.volume        = 0.08f;
+    themeAudio.playRequested = true;
 
     // Visible area 1 (inner ring) and active zone.
     const auto npcInnerArea = scene.createEntity();

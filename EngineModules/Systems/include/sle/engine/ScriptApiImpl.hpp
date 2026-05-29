@@ -88,6 +88,12 @@ public:
     bool setAnimatorFloat(sle::scripting::ScriptEntityRef entity, const std::string& name, float value) override;
     bool getAnimatorFloat(sle::scripting::ScriptEntityRef entity, const std::string& name, float& outValue) const override;
 
+    bool playSound(sle::scripting::ScriptEntityRef entity, const std::string& assetPath, bool loop) override;
+    bool stopSound(sle::scripting::ScriptEntityRef entity) override;
+    bool setSoundVolume(sle::scripting::ScriptEntityRef entity, float volume) override;
+    bool setSoundPitch(sle::scripting::ScriptEntityRef entity, float pitch) override;
+    bool isSoundPlaying(sle::scripting::ScriptEntityRef entity) const override;
+
 private:
     Runtime& runtime;
     // Track subscriptions per entity for auto-cleanup

@@ -19,11 +19,9 @@ Architecture has been reworked to favor a component-attached UI document with tw
 
 ## Next Steps
 
-1. Expand widget layout rules beyond absolute `x/y/width/height`.
-2. Add a small UI example scene and layout asset.
-3. Add Lua-facing APIs for mutating UI bindings directly.
-4. Add keyboard focus and navigation for buttons and fields.
-5. Later polish queue: text wrapping, alignment controls, and fallback font chains.
+1. Add keyboard focus and navigation for buttons and fields.
+2. Add font fallback chains.
+3. Later polish queue: more layout primitives (padding, flow stacking).
 
 ## Status Checklist
 
@@ -40,3 +38,7 @@ Architecture has been reworked to favor a component-attached UI document with tw
 - [x] Implemented font-backed label and button text rendering.
 - [x] Connected `UIComponent` instances to runtime documents.
 - [x] Implemented Lua behavior hooks.
+- [x] Implemented text alignment (`textAlign="left|center|right"`).
+- [x] Implemented word wrapping (`wrap="true"` with element width as max line width).
+- [x] Implemented anchor-based positioning (`anchor="topleft|topcenter|topright|middleleft|center|middleright|bottomleft|bottomcenter|bottomright"`).
+- [x] Integration test for layout feature attributes.

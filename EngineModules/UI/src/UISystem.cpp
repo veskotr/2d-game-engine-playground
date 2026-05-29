@@ -291,6 +291,73 @@ glm::mat4 buildQuadModel(const glm::vec2& position, const glm::vec2& size, float
     return model;
 }
 
+// Measure the pixel width of a single line of text (stops at newline or end).
+float measureLineWidth(UIFontResource& font, float textScale, const std::string& line)
+{
+    float width = 0.0f;
+    uint32_t prev = 0;
+    std::size_t cursor = 0;
+    while (cursor < line.size())
+    {
+        uint32_t cp = 0;
+        if (!decodeUtf8CodePoint(line, cursor, cp))
+            break;
+        if (cp == '\n')
+            break;
+        width += font.getKerningAdvance(prev, cp) * textScale;
+        UIFontGlyphInfo g;
+        if (font.getGlyphInfo(cp, g))
+            width += g.advance * textScale;
+        prev = cp;
+    }
+    return width;
+}
+
+// Word-wrap `text` into lines that fit within `maxWidth` (world units). Respects explicit newlines.
+// Returns one string per line. If maxWidth <= 0 the entire text is returned as-is.
+std::vector<std::string> wrapTextToLines(UIFontResource& font, float textScale,
+                                         const std::string& text, float maxWidth)
+{
+    std::vector<std::string> result;
+
+    if (maxWidth <= 0.0f)
+    {
+        result.push_back(text);
+        return result;
+    }
+
+    std::string line;
+    std::string word;
+
+    const auto commitWord = [&]()
+    {
+        if (word.empty())
+            return;
+        const std::string candidate = line.empty() ? word : (line + " " + word);
+        if (!line.empty() && measureLineWidth(font, textScale, candidate) > maxWidth)
+        {
+            result.push_back(line);
+            line = word;
+        }
+        else
+        {
+            line = candidate;
+        }
+        word.clear();
+    };
+
+    for (const char c : text)
+    {
+        if (c == ' ' || c == '\t')       { commitWord(); }
+        else if (c == '\n')              { commitWord(); result.push_back(line); line.clear(); }
+        else                             { word += c; }
+    }
+    commitWord();
+    result.push_back(line);
+
+    return result;
+}
+
 glm::vec2 screenAnchorToWorld(const sle::core::Camera2D& camera)
 {
     return camera.getPosition();
@@ -353,10 +420,38 @@ void renderElement(
     if (yAxisDown)
         renderPosition.y -= size.y;
 
+    // --- Anchor: shift element so the named corner is placed at (x, y) ---
+    // "topleft" (default): no shift.
+    // In screen-space (yAxisDown): elementOrigin is the visual top-left.
+    //   middle-row anchors shift renderPosition up by size.y/2 (increase world-y).
+    //   bottom-row anchors shift by size.y.
+    // In world-space (yAxisDown=false): renderPosition is the visual bottom-left.
+    //   middle-row anchors shift down by size.y/2 (decrease world-y).
+    //   bottom-row anchors shift by size.y.
+    glm::vec2 anchorOffset{0.0f};
+    if (size.x > 0.0f || size.y > 0.0f)
+    {
+        const std::string anchor = getAttributeValue(element, "anchor");
+        if (!anchor.empty() && anchor != "topleft")
+        {
+            if (anchor == "topcenter" || anchor == "center" || anchor == "bottomcenter")
+                anchorOffset.x = -size.x * 0.5f;
+            else if (anchor == "topright" || anchor == "middleright" || anchor == "bottomright")
+                anchorOffset.x = -size.x;
+
+            if (anchor == "middleleft" || anchor == "center" || anchor == "middleright")
+                anchorOffset.y = yAxisDown ? size.y * 0.5f : -size.y * 0.5f;
+            else if (anchor == "bottomleft" || anchor == "bottomcenter" || anchor == "bottomright")
+                anchorOffset.y = yAxisDown ? size.y : -size.y;
+        }
+    }
+    const glm::vec2 anchoredOrigin   = elementOrigin   + anchorOffset;
+    const glm::vec2 anchoredRenderPos = renderPosition + anchorOffset;
+
     if (size.x > 0.0f && size.y > 0.0f && element.type != "Label")
     {
         renderer::QuadCommand cmd;
-        cmd.modelMatrix = buildQuadModel(renderPosition, size, rotation);
+        cmd.modelMatrix = buildQuadModel(anchoredRenderPos, size, rotation);
         cmd.shader_id = shaderID;
         cmd.layer = document.getDescriptor().layer;
         cmd.color = element.type == "Button"
@@ -368,64 +463,75 @@ void renderElement(
     const std::string text = !element.resolvedText.empty() ? element.resolvedText : element.text;
     if (!text.empty() && document.getFontResource())
     {
-        const auto& font = document.getFontResource();
-        const float requestedFontSize = parseFloat(element, "fontSize", font->getPixelHeight());
-        const float textScale = (requestedFontSize / std::max(font->getPixelHeight(), 1.0f)) * scaleFactor;
+        auto& font = *document.getFontResource();
+        const float requestedFontSize = parseFloat(element, "fontSize", font.getPixelHeight());
+        const float textScale = (requestedFontSize / std::max(font.getPixelHeight(), 1.0f)) * scaleFactor;
         const glm::vec4 textColor = parseColor(element, kDefaultLabelColor);
 
-        float penX = 0.0f;
-        float penY = font->getAscent() * textScale;
-        uint32_t previousCodePoint = 0;
-        std::size_t cursor = 0;
-        while (cursor < text.size())
+        // Determine text lines (wrapping or single-line with explicit newlines).
+        const std::string alignAttr = getAttributeValue(element, "textAlign"); // left|center|right
+        const bool doWrap = getAttributeValue(element, "wrap") == "true";
+        const float wrapWidth = doWrap ? size.x : 0.0f;
+        const std::vector<std::string> lines = wrapTextToLines(font, textScale, text, wrapWidth);
+
+        float penY = font.getAscent() * textScale;
+
+        for (const std::string& lineText : lines)
         {
-            uint32_t codePoint = 0;
-            if (!decodeUtf8CodePoint(text, cursor, codePoint))
-                break;
-
-            if (cursor == 0 && codePoint == 0xFEFF)
-                continue;
-
-            if (codePoint == '\n')
+            // Compute per-line starting X for alignment.
+            float penX = 0.0f;
+            if (!alignAttr.empty() && alignAttr != "left" && size.x > 0.0f)
             {
-                penX = 0.0f;
-                penY += font->getLineHeight() * textScale;
-                previousCodePoint = 0;
-                continue;
+                const float lineW = measureLineWidth(font, textScale, lineText);
+                if (alignAttr == "center")
+                    penX = (size.x - lineW) * 0.5f;
+                else if (alignAttr == "right")
+                    penX = size.x - lineW;
             }
 
-            penX += font->getKerningAdvance(previousCodePoint, codePoint) * textScale;
-
-            UIFontGlyphInfo glyphInfo;
-            if (!font->getGlyphInfo(codePoint, glyphInfo) || !glyphInfo.texture)
+            uint32_t previousCodePoint = 0;
+            std::size_t cursor = 0;
+            while (cursor < lineText.size())
             {
-                previousCodePoint = codePoint;
-                continue;
-            }
+                uint32_t codePoint = 0;
+                if (!decodeUtf8CodePoint(lineText, cursor, codePoint))
+                    break;
 
-            const glm::vec2 glyphOffset{
-                penX + glyphInfo.bearing.x * textScale,
-                penY + glyphInfo.bearing.y * textScale + glyphInfo.size.y * textScale
-            };
-            const glm::vec2 glyphPosition = elementOrigin + rotate2D(glyphOffset, rotation);
-            const glm::vec2 glyphSize = glyphInfo.size * textScale;
-            if (glyphSize.x <= 0.0f || glyphSize.y <= 0.0f)
-            {
+                penX += font.getKerningAdvance(previousCodePoint, codePoint) * textScale;
+
+                UIFontGlyphInfo glyphInfo;
+                if (!font.getGlyphInfo(codePoint, glyphInfo) || !glyphInfo.texture)
+                {
+                    previousCodePoint = codePoint;
+                    continue;
+                }
+
+                const glm::vec2 glyphOffset{
+                    penX + glyphInfo.bearing.x * textScale,
+                    penY + glyphInfo.bearing.y * textScale + glyphInfo.size.y * textScale
+                };
+                const glm::vec2 glyphPosition = anchoredOrigin + rotate2D(glyphOffset, rotation);
+                const glm::vec2 glyphSize = glyphInfo.size * textScale;
+                if (glyphSize.x <= 0.0f || glyphSize.y <= 0.0f)
+                {
+                    penX += glyphInfo.advance * textScale;
+                    continue;
+                }
+
+                renderer::QuadCommand glyphCommand;
+                glyphCommand.modelMatrix = buildQuadModel(glyphPosition, glyphSize, rotation);
+                glyphCommand.color = textColor;
+                glyphCommand.uvRect = {0.0f, 1.0f, 1.0f, 0.0f};
+                glyphCommand.texture_id = glyphInfo.texture->getID();
+                glyphCommand.shader_id = shaderID;
+                glyphCommand.layer = document.getDescriptor().layer;
+                ctx.renderer.submit(glyphCommand);
+
                 penX += glyphInfo.advance * textScale;
-                continue;
+                previousCodePoint = codePoint;
             }
 
-            renderer::QuadCommand glyphCommand;
-            glyphCommand.modelMatrix = buildQuadModel(glyphPosition, glyphSize, rotation);
-            glyphCommand.color = textColor;
-            glyphCommand.uvRect = {0.0f, 1.0f, 1.0f, 0.0f};
-            glyphCommand.texture_id = glyphInfo.texture->getID();
-            glyphCommand.shader_id = shaderID;
-            glyphCommand.layer = document.getDescriptor().layer;
-            ctx.renderer.submit(glyphCommand);
-
-            penX += glyphInfo.advance * textScale;
-            previousCodePoint = codePoint;
+            penY += font.getLineHeight() * textScale;
         }
     }
 
@@ -436,12 +542,12 @@ void renderElement(
             document.getDescriptor().ownerEntityId,
             element.id,
             handler,
-            {renderPosition, size}
+            {anchoredRenderPos, size}
         });
     }
 
     for (const auto& child : element.children)
-        renderElement(ctx, document, child, elementOrigin, scaleFactor, rotation, shaderID, yAxisDown, hitTargets);
+        renderElement(ctx, document, child, anchoredOrigin, scaleFactor, rotation, shaderID, yAxisDown, hitTargets);
 }
 
 void dispatchClick(

@@ -1,21 +1,46 @@
+// Integration test for the audio Lua API surface.
+// Verifies that Engine.playSound/stopSound/setSoundVolume/setSoundPitch/isSoundPlaying
+// route correctly through the ScriptApi interface.
+// No audio hardware is required — the spy never initialises miniaudio.
+
 #include <sle/scripting/ScriptApi.hpp>
 #include <sle/scripting/ScriptEngine.hpp>
 
 #include <glm/vec2.hpp>
 
-#include <iostream>
+#include <cassert>
+#include <cstdint>
 #include <string>
-#include <vector>
 
 namespace {
 
-class DummyScriptApi final : public sle::scripting::ScriptApi {
+class AudioSpy final : public sle::scripting::ScriptApi
+{
 public:
+    // ====== spy state ======
+    uint32_t playSoundEntity = 0;
+    std::string playSoundPath;
+    bool playSoundLoop = false;
+    bool playSoundCalled = false;
+
+    uint32_t stopSoundEntity = 0;
+    bool stopSoundCalled = false;
+
+    uint32_t volumeEntity = 0;
+    float volumeValue = -1.0f;
+
+    uint32_t pitchEntity = 0;
+    float pitchValue = -1.0f;
+
+    uint32_t isPlayingEntity = 0;
+    bool isPlayingResult = true; // return true so Lua can read it
+
+    // ====== ScriptApi ======
     float getDeltaTime() const override { return 0.016f; }
     glm::vec2 getWindowSize() const override { return {320.0f, 180.0f}; }
 
-    sle::scripting::ScriptEntityRef createEntity() override { return {}; }
-    bool isEntityAlive(sle::scripting::ScriptEntityRef) const override { return false; }
+    sle::scripting::ScriptEntityRef createEntity() override { return {++nextId_}; }
+    bool isEntityAlive(sle::scripting::ScriptEntityRef) const override { return true; }
     void destroyEntity(sle::scripting::ScriptEntityRef) override {}
     uint32_t getChildCount(sle::scripting::ScriptEntityRef) const override { return 0; }
     uint32_t destroyChildren(sle::scripting::ScriptEntityRef) override { return 0; }
@@ -43,9 +68,10 @@ public:
     bool hasScene(const std::string&) const override { return false; }
     bool switchScene(const std::string&) override { return false; }
     std::string getCurrentSceneName() const override { return {}; }
+
     bool setStateMachineBool(sle::scripting::ScriptEntityRef, const std::string&, bool) override { return false; }
     bool setStateMachineTrigger(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
-    bool getStateMachineCurrentState(sle::scripting::ScriptEntityRef, std::string&) const override { return false; }
+    bool getStateMachineCurrentState(sle::scripting::ScriptEntityRef, std::string& out) const override { out = "idle"; return true; }
     bool forceStateMachineState(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
     bool isStateMachineInState(sle::scripting::ScriptEntityRef, const std::string&) const override { return false; }
     bool sendStateMachineEvent(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
@@ -53,6 +79,7 @@ public:
     void log(const std::string&) override {}
     void warn(const std::string&) override {}
     void error(const std::string&) override {}
+    bool setUIBinding(const std::string&, const std::string&) override { return false; }
 
     bool addForce(sle::scripting::ScriptEntityRef, float, float) override { return false; }
     bool addImpulse(sle::scripting::ScriptEntityRef, float, float) override { return false; }
@@ -70,6 +97,7 @@ public:
     int subscribeEvent(const std::string&, uint32_t, int) override { return 0; }
     void unsubscribeEvent(int) override {}
     bool emitEvent(const std::string&, uint32_t, const std::string&) override { return false; }
+
     bool playAnimation(sle::scripting::ScriptEntityRef, const std::string&) override { return false; }
     bool stopAnimation(sle::scripting::ScriptEntityRef) override { return false; }
     bool pauseAnimation(sle::scripting::ScriptEntityRef) override { return false; }
@@ -81,39 +109,75 @@ public:
     bool setAnimationTarget(sle::scripting::ScriptEntityRef, const std::string&, sle::scripting::ScriptEntityRef) override { return false; }
     bool setAnimatorFloat(sle::scripting::ScriptEntityRef, const std::string&, float) override { return false; }
     bool getAnimatorFloat(sle::scripting::ScriptEntityRef, const std::string&, float&) const override { return false; }
-    bool playSound(sle::scripting::ScriptEntityRef, const std::string&, bool) override { return false; }
-    bool stopSound(sle::scripting::ScriptEntityRef) override { return false; }
-    bool setSoundVolume(sle::scripting::ScriptEntityRef, float) override { return false; }
-    bool setSoundPitch(sle::scripting::ScriptEntityRef, float) override { return false; }
-    bool isSoundPlaying(sle::scripting::ScriptEntityRef) const override { return false; }
-    bool setUIBinding(const std::string&, const std::string&) override { return false; }
+
+    // ====== AUDIO (spy) ======
+    bool playSound(sle::scripting::ScriptEntityRef e, const std::string& path, bool loop) override
+    {
+        playSoundEntity = e.id;
+        playSoundPath = path;
+        playSoundLoop = loop;
+        playSoundCalled = true;
+        return true;
+    }
+    bool stopSound(sle::scripting::ScriptEntityRef e) override
+    {
+        stopSoundEntity = e.id;
+        stopSoundCalled = true;
+        return true;
+    }
+    bool setSoundVolume(sle::scripting::ScriptEntityRef e, float v) override
+    {
+        volumeEntity = e.id;
+        volumeValue = v;
+        return true;
+    }
+    bool setSoundPitch(sle::scripting::ScriptEntityRef e, float p) override
+    {
+        pitchEntity = e.id;
+        pitchValue = p;
+        return true;
+    }
+    bool isSoundPlaying(sle::scripting::ScriptEntityRef e) const override
+    {
+        const_cast<AudioSpy*>(this)->isPlayingEntity = e.id;
+        return isPlayingResult;
+    }
+
+private:
+    uint32_t nextId_ = 0;
 };
 
 } // namespace
 
-int main() {
-    DummyScriptApi api;
+int main()
+{
+    AudioSpy spy;
     sle::scripting::ScriptEngine engine;
 
-    if (!engine.init(&api)) {
-        std::cerr << "ScriptEngine failed to initialize\n";
-        return 1;
-    }
+    assert(engine.init(&spy) && "ScriptEngine init failed");
 
-    const bool executed = engine.executeScriptAsset("tests/data/scripts/integration_script.lua");
-    if (!executed) {
-        std::cerr << "Failed to execute integration script asset\n";
-        engine.shutdown();
-        return 1;
-    }
+    assert(engine.executeScriptAsset("tests/data/scripts/audio_api_surface.lua") &&
+           "Failed to execute audio_api_surface.lua");
 
-    const bool callbackWorked = engine.callGlobalFunction("integration_mark", 42, "ok_token");
-    if (!callbackWorked) {
-        std::cerr << "Expected integration_mark global callback to execute successfully\n";
-        engine.shutdown();
-        return 1;
-    }
+    // playSound assertions
+    assert(spy.playSoundCalled && "playSound was not called");
+    assert(spy.playSoundPath == "assets/audio/coin.wav" && "wrong asset path");
+    assert(!spy.playSoundLoop && "loop should be false");
 
-    engine.shutdown();
+    // stopSound assertions
+    assert(spy.stopSoundCalled && "stopSound was not called");
+    assert(spy.stopSoundEntity == spy.playSoundEntity && "stopSound entity mismatch");
+
+    // volume
+    assert(spy.volumeEntity != 0 && "setSoundVolume entity missing");
+    assert(spy.volumeValue > 0.49f && spy.volumeValue < 0.51f && "volume mismatch");
+
+    // pitch
+    assert(spy.pitchEntity != 0 && "setSoundPitch entity missing");
+    assert(spy.pitchValue > 1.24f && spy.pitchValue < 1.26f && "pitch mismatch");
+
+    // isSoundPlaying
+    assert(spy.isPlayingEntity != 0 && "isSoundPlaying entity missing");
+
     return 0;
 }

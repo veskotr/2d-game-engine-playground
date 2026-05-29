@@ -6,6 +6,7 @@
 #include <sle/resources/Resources.hpp>
 #include <sle/renderer/Texture.hpp>
 #include <sle/scene/components/AnimatorComponent.hpp>
+#include <sle/scene/components/AudioComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
 #include <sle/scene/components/StateMachineComponent.hpp>
 #include <sle/scene/components/Transform.hpp>
@@ -930,6 +931,78 @@ bool ScriptApiImpl::getAnimatorFloat(
 
     outValue = it->second;
     return true;
+}
+
+bool ScriptApiImpl::playSound(
+    sle::scripting::ScriptEntityRef entity,
+    const std::string& assetPath,
+    bool loop)
+{
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* audio = registry.getComponent<sle::components::AudioComponent>(rawEntity);
+    if (!audio)
+        return false;
+
+    // Only override the stored path when the caller provides one.
+    if (!assetPath.empty())
+        audio->assetPath = assetPath;
+
+    if (audio->assetPath.empty())
+        return false;
+
+    audio->loop = loop;
+    audio->playRequested = true;
+    audio->stopRequested = false;
+    return true;
+}
+
+bool ScriptApiImpl::stopSound(sle::scripting::ScriptEntityRef entity)
+{
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* audio = registry.getComponent<sle::components::AudioComponent>(rawEntity);
+    if (!audio)
+        return false;
+
+    audio->stopRequested = true;
+    audio->playRequested = false;
+    return true;
+}
+
+bool ScriptApiImpl::setSoundVolume(sle::scripting::ScriptEntityRef entity, float volume)
+{
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* audio = registry.getComponent<sle::components::AudioComponent>(rawEntity);
+    if (!audio)
+        return false;
+
+    audio->volume = volume;
+    return true;
+}
+
+bool ScriptApiImpl::setSoundPitch(sle::scripting::ScriptEntityRef entity, float pitch)
+{
+    auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    auto* audio = registry.getComponent<sle::components::AudioComponent>(rawEntity);
+    if (!audio)
+        return false;
+
+    audio->pitch = pitch;
+    return true;
+}
+
+bool ScriptApiImpl::isSoundPlaying(sle::scripting::ScriptEntityRef entity) const
+{
+    auto& registry = const_cast<ScriptApiImpl*>(this)->runtime.getScene().getRegistry();
+    const sle::entity::Entity rawEntity(entity.id);
+    const auto* audio = registry.getComponent<sle::components::AudioComponent>(rawEntity);
+    if (!audio)
+        return false;
+
+    return audio->state == sle::components::AudioPlaybackState::Playing;
 }
 
 } // namespace sle

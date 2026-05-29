@@ -2,6 +2,8 @@ local SPEED = 85.0
 local NPC_ID = 2
 local PLAYER_ENTITY = nil
 local inOuterZone = false
+local stepCooldown = 0.0
+local STEP_INTERVAL = 0.32  -- seconds between gravel step sounds
 
 local distanceSub = nil
 local collisionBeginSub = nil
@@ -99,6 +101,14 @@ return {
         if Engine.Input.isKeyDown(Engine.Keys.W) then moveY = moveY + 1.0 end
 
         Engine.Physics.setVelocity(entity, moveX * SPEED, moveY * SPEED)
+
+        -- Play gravel step sound while moving, throttled by STEP_INTERVAL.
+        stepCooldown = math.max(0.0, stepCooldown - dt)
+        local isMoving = (moveX ~= 0.0 or moveY ~= 0.0)
+        if isMoving and stepCooldown <= 0.0 then
+            Engine.playSound(entity, "", false)  -- path pre-set in C++ via resolveAssetPath
+            stepCooldown = STEP_INTERVAL
+        end
 
         -- Distance display is updated by zone event stream while subscribed.
     end,

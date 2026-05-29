@@ -2,7 +2,7 @@
 Title: SLE 2D Engine - Comprehensive Architecture & Implementation Verification
 Version: Current (May 2026)
 Status: Verified Against Source Code
-Last Verified: Code exploration + documentation reconciliation complete
+Last Verified: May 2026 — Phases 0–5 complete (Events, State Machine, Animation, Audio, UI Polish)
 ---
 
 # SLE (Simple Little Engine) - Complete Architecture Reference
@@ -16,7 +16,13 @@ SLE is a **modular, data-driven 2D game engine** built in C++17 with:
 - **Dedicated Physics module** wrapping Box2D world/body/fixture management
 - **Command-based rendering** with GPU batching optimization
 - **Transform hierarchy** with dirty-flag optimization
+- **Generic state machine system** driving animation, behavior, and gameplay flow
+- **Generic property-animation system** with JSON clip assets and multi-track keyframe interpolation
+- **Audio system** (miniaudio + stb_vorbis) supporting WAV, MP3, FLAC, OGG
+- **UI system** with XML layouts, reactive bindings, screen/world-space modes, text alignment, word wrap, and anchor-based positioning
 - **Dependency injection** via Context struct for cross-module communication
+
+**Development Status**: Phases 0–5 complete. All core engine systems implemented and integration-tested. Ready for v1 planning.
 
 **Development Status**: Production-ready for 2D games with Lua scripting, Box2D physics, sprite rendering, physics debug overlays, and zone/area triggers.
 

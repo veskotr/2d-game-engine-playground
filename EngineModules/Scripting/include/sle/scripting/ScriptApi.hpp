@@ -116,6 +116,13 @@ public:
     virtual bool setAnimationTarget(ScriptEntityRef entity, const std::string& targetName, ScriptEntityRef targetEntity) = 0;
     virtual bool setAnimatorFloat(ScriptEntityRef entity, const std::string& name, float value) = 0;
     virtual bool getAnimatorFloat(ScriptEntityRef entity, const std::string& name, float& outValue) const = 0;
+
+    // ====== AUDIO ======
+    virtual bool playSound(ScriptEntityRef entity, const std::string& assetPath, bool loop) = 0;
+    virtual bool stopSound(ScriptEntityRef entity) = 0;
+    virtual bool setSoundVolume(ScriptEntityRef entity, float volume) = 0;
+    virtual bool setSoundPitch(ScriptEntityRef entity, float pitch) = 0;
+    virtual bool isSoundPlaying(ScriptEntityRef entity) const = 0;
 };
 
 } // namespace sle::scripting

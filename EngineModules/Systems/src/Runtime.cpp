@@ -185,6 +185,9 @@ namespace sle
         physicsWorld = std::make_unique<sle::physics::PhysicsWorld>(glm::vec2(0.0f, -9.81f));
         physicsWorld->setFixedTimestep(1.0f / 120.0f);
 
+        // Audio init is best-effort; failure is non-fatal (headless CI, no audio device, etc.)
+        audioSystem.init();
+
         return Result<bool>::success(true);
     }
 
@@ -274,6 +277,9 @@ namespace sle
             // are reflected in world transforms in the same frame.
             animationSystem.update(scene, dt);
             auto tAnimation = Clock::now();
+
+            // 1b. Process audio play/stop requests.
+            audioSystem.update(scene);
 
             // 2. Resolve world-space transforms (required by all other systems).
             transformSystem.update(ctx);

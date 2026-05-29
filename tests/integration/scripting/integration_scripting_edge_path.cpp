@@ -81,6 +81,11 @@ public:
     bool setAnimationTarget(sle::scripting::ScriptEntityRef, const std::string&, sle::scripting::ScriptEntityRef) override { return false; }
     bool setAnimatorFloat(sle::scripting::ScriptEntityRef, const std::string&, float) override { return false; }
     bool getAnimatorFloat(sle::scripting::ScriptEntityRef, const std::string&, float&) const override { return false; }
+    bool playSound(sle::scripting::ScriptEntityRef, const std::string&, bool) override { return false; }
+    bool stopSound(sle::scripting::ScriptEntityRef) override { return false; }
+    bool setSoundVolume(sle::scripting::ScriptEntityRef, float) override { return false; }
+    bool setSoundPitch(sle::scripting::ScriptEntityRef, float) override { return false; }
+    bool isSoundPlaying(sle::scripting::ScriptEntityRef) const override { return false; }
     bool setUIBinding(const std::string&, const std::string&) override { return false; }
 };
 

@@ -156,6 +156,14 @@ sle_add_integration_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+sle_add_integration_test(
+    integration_ui_layout_features_path
+    ui/integration_ui_layout_features_path.cpp
+    ui
+    LINK_LIBS sle::ui
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 # Renderer
 sle_add_integration_test(
     integration_renderer_happy_path
@@ -252,6 +260,14 @@ sle_add_integration_test(
 sle_add_integration_test(
     integration_scripting_animator_api_surface_path
     scripting/integration_scripting_animator_api_surface_path.cpp
+    scripting
+    LINK_LIBS sle::scripting
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_scripting_audio_api_surface_path
+    scripting/integration_scripting_audio_api_surface_path.cpp
     scripting
     LINK_LIBS sle::scripting
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

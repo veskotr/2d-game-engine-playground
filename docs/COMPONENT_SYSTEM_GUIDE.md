@@ -14,7 +14,7 @@ This document outlines:
 
 ### 1.1 Core Component Principles
 
-- **Data-only**: Components hold only data, no methods (ECS pattern)
+- **Data-centric**: Components hold data; methods are only allowed to enforce invariants (e.g. dirty-flag setters on `TransformComponent`). No game logic in components.
 - **Serializable**: Every component must serialize to/from Lua tables and JSON
 - **Independent**: Components don't know about each other
 - **Optional**: Entities can have any combination of components
@@ -26,7 +26,8 @@ This document outlines:
 When designing a new component:
 
 ```
-[ ] Define struct with public members (no methods)
+[ ] Define struct in namespace sle::components
+[ ] Use private fields + public getters/setters only when side-effects (dirty flags, invariants) are needed; otherwise prefer public fields
 [ ] Add to namespace sle::components
 [ ] Implement Lua serialization (→ LuaTable)
 [ ] Implement Lua deserialization (LuaTable →)
@@ -46,11 +47,30 @@ When designing a new component:
 // Scene/include/sle/scene/components/Transform.hpp
 namespace sle::components {
 
-struct Transform
+struct TransformComponent
 {
+public:
+    const glm::vec2& getPosition() const { return position; }
+    float getRotation() const             { return rotation; }
+    const glm::vec2& getScale() const    { return scale; }
+
+    void setPosition(const glm::vec2& value) { position = value; dirty = true; }
+    void setRotation(float value)            { rotation = value; dirty = true; }
+    void setScale(const glm::vec2& value)    { scale    = value; dirty = true; }
+
+    bool isDirty() const  { return dirty; }
+    void markDirty()      { dirty = true; }
+    void clearDirty()     { dirty = false; }
+
+    sle::entity::Entity getParent() const               { return parent; }
+    void setParent(sle::entity::Entity value)            { parent = value; dirty = true; }
+
+private:
     glm::vec2 position{0.0f};
     float rotation = 0.0f;
     glm::vec2 scale{1.0f, 1.0f};
+    bool dirty = true;
+    sle::entity::Entity parent{};
 };
 
 } // namespace sle::components
@@ -80,19 +100,21 @@ struct Transform
 
 ```cpp
 // Scene/include/sle/scene/components/SpriteRenderer.hpp
+#include <sle/renderer/TextureRegion.hpp>
+
 namespace sle::components {
 
 struct SpriteRenderer
 {
-    glm::vec4 color{1, 1, 1, 1};  // RGBA
-    glm::vec2 size{1, 1};          // Local size
-    uint32_t textureId = 0;        // OpenGL texture ID; 0 = white
+    glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f}; // RGBA tint; white = no tint
+    renderer::TextureRegion region;             // Source region (atlas slice or full texture)
+    int layer = 0;                              // Render layer; lower = further back
 };
 
 } // namespace sle::components
 ```
 
-**Note**: `textureId` is a raw GL ID, not a string path. The engine translates texture paths to IDs via Resources system.
+**Note**: `region` holds a `TextureRegion` (texture pointer + UV rect). Use `TextureRegion::fromPixels()` for atlas slices or animation frames. Region.texture == nullptr renders as untextured quad.
 
 ### 2.3 ScriptComponent
 
@@ -102,19 +124,14 @@ namespace sle::components {
 
 struct ScriptComponent
 {
-    std::string scriptAsset;           // Path to .lua file
-    bool enabled = true;               // Enable/disable
-    
-    // Internal (Lua registry refs)
-    uint32_t luaRefInit = LUA_NOREF;
-    uint32_t luaRefUpdate = LUA_NOREF;
-    uint32_t luaRefDestroy = LUA_NOREF;
-    
-    bool initialized = false;
+    std::string scriptAsset; // Path to .lua file
+    bool enabled = true;     // Enable/disable script execution
 };
 
 } // namespace sle::components
 ```
+
+**Note**: Lua registry refs and lifecycle state are managed entirely by `ScriptEngine`; they are not stored in the component.
 
 ---
 

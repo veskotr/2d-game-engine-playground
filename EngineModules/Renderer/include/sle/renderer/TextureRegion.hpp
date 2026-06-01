@@ -7,7 +7,7 @@ namespace sle::renderer
     struct TextureRegion
     {
         std::shared_ptr<Texture> texture;
-        glm::vec4 uv; // (u0, v0, u1, v1)
+        glm::vec4 uv{0.0f, 0.0f, 1.0f, 1.0f}; // (u0, v0, u1, v1)
 
         static TextureRegion fromPixels(
             std::shared_ptr<Texture> tex,

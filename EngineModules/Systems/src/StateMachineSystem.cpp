@@ -7,7 +7,7 @@
 #include <sle/scene/Registry.hpp>
 #include <sle/scene/components/StateMachineComponent.hpp>
 #include <sle/scene/components/StateMachineDefinitionResource.hpp>
-#include <sle/scripting/ScriptEngine.hpp>
+#include <sle/scripting/ScriptRuntime.hpp>
 
 namespace sle {
 
@@ -17,7 +17,7 @@ bool isTransitionSatisfied(
     const sle::components::StateTransition& transition,
     const sle::components::StateMachineComponent& sm,
     sle::entity::Entity entity,
-    sle::scripting::ScriptEngine* scriptEngine)
+    sle::scripting::ScriptRuntime* scriptRuntime)
 {
     switch (transition.type)
     {
@@ -36,10 +36,10 @@ bool isTransitionSatisfied(
             return sm.stateTimeSeconds >= transition.minTimeSeconds;
         case sle::components::StateTransitionType::LuaGuard:
         {
-            if (!scriptEngine || transition.luaGuardFunction.empty())
+            if (!scriptRuntime || transition.luaGuardFunction.empty())
                 return false;
             // Guard functions must return a boolean; false or invalid return blocks transition.
-            return scriptEngine->callGlobalBoolFunction(transition.luaGuardFunction, entity.getID());
+            return scriptRuntime->callGlobalBoolFunction(transition.luaGuardFunction, entity.getID());
         }
     }
 
@@ -48,13 +48,13 @@ bool isTransitionSatisfied(
 
 } // namespace
 
-void StateMachineSystem::update(sle::entity::Scene& scene, float dt, sle::scripting::ScriptEngine* scriptEngine)
+void StateMachineSystem::update(sle::entity::Scene& scene, float dt, sle::scripting::ScriptRuntime* scriptRuntime)
 {
     auto& registry = scene.getRegistry();
     auto& eventBus = scene.getEventBus();
 
     registry.view<sle::components::StateMachineComponent>(
-        [dt, &eventBus, scriptEngine](sle::entity::Entity entity, sle::components::StateMachineComponent& sm)
+        [dt, &eventBus, scriptRuntime](sle::entity::Entity entity, sle::components::StateMachineComponent& sm)
         {
             if (!sm.enabled)
                 return;
@@ -102,7 +102,7 @@ void StateMachineSystem::update(sle::entity::Scene& scene, float dt, sle::script
 
             for (const auto& transition : state->transitions)
             {
-                if (!isTransitionSatisfied(transition, sm, entity, scriptEngine))
+                if (!isTransitionSatisfied(transition, sm, entity, scriptRuntime))
                     continue;
 
                 if (transition.type == sle::components::StateTransitionType::Trigger && transition.consumeTrigger)

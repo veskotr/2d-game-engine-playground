@@ -161,7 +161,7 @@ int main() {
     };
 
     sle::ScriptSystem scriptSystem;
-    scriptSystem.setScriptEngine(&scriptEngine);
+    scriptSystem.setScriptRuntime(&scriptEngine);
 
     sle::StateMachineSystem stateMachineSystem;
 

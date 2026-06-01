@@ -4,6 +4,7 @@
 #include <sle/core/Log.hpp>
 #include <sle/engine/Runtime.hpp>
 #include <sle/engine/Context.hpp>
+#include <sle/engine/SceneLoader.hpp>
 #include <sle/events/ScriptEvents.hpp>
 #include <sle/resources/Resources.hpp>
 
@@ -28,6 +29,27 @@ namespace sle
     bool Runtime::registerScene(const std::string& sceneName, SceneManager::SceneBuilder builder)
     {
         return sceneManager.registerScene(sceneName, std::move(builder));
+    }
+
+    bool Runtime::registerSceneFromFile(const std::string& sceneName, const std::string& jsonPath)
+    {
+        if (sceneName.empty() || jsonPath.empty())
+            return false;
+
+        return sceneManager.registerScene(
+            sceneName,
+            [sceneName, jsonPath](Runtime& runtime)
+            {
+                auto loadResult = SceneLoader::load(jsonPath, runtime.getScene());
+                if (!loadResult.ok())
+                {
+                    sle::core::Log::error(
+                        "Failed to load scene '{}' from '{}': {}",
+                        sceneName,
+                        jsonPath,
+                        loadResult.error());
+                }
+            });
     }
 
     bool Runtime::hasScene(const std::string& sceneName) const
@@ -168,7 +190,7 @@ namespace sle
         {
             return Result<bool>::error("Failed to initialize ScriptEngine");
         }
-        scriptSystem.setScriptEngine(&scriptEngine);
+        scriptSystem.setScriptRuntime(&scriptEngine);
 
         auto uiResult = uiSystem.init(&scriptEngine);
         if (!uiResult.ok())
@@ -299,7 +321,7 @@ namespace sle
             // === RENDER PHASE ===
             renderer.beginFrame();
 
-            // 4. Submit sprite renders for all entities with transforms.
+            // Submit sprite renders for all entities with transforms.
             renderSystem.update(ctx);
             sle::ui::UIFrameContext uiCtx{scene, scene.getRegistry(), scene.getEventBus(), globalBus_, renderer, camera, scriptEngine, dt};
             uiSystem.update(uiCtx);

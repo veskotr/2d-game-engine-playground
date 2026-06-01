@@ -1,64 +1,77 @@
-﻿# SLE Documentation Index
+# SLE Documentation Index
 
-This index is the fastest path to the right document.
+This is the first stop for project context. Prefer the small docs listed here before opening older long-form references.
 
 ## Start Here
 
-If you read only three documents, read these in order:
+1. `CURRENT_TASK.md` - what is happening now and handoff notes.
+2. `PROJECT_MEMORY.md` - durable project context and known debt.
+3. `CONSTRAINTS.md` - architecture, ECS, scripting, rendering, testing, and doc rules.
+4. `DOCS_MAINTENANCE.md` - what to update before finishing a task.
 
-1. `ARCHITECTURE_VERIFIED.md` - verified architecture, module boundaries, and design rules.
-2. `IMPLEMENTATION_OVERVIEW.md` - current runtime behavior and what is actually implemented.
-3. `ENGINE_MASTER_PLAN.md` - consolidated implementation roadmap and execution plan.
+## Module Docs
 
-If you are an AI agent and need quick architectural context first:
-
-1. `AGENT_ARCHITECTURE_CONTEXT.md` - compact architecture retrieval pack.
-2. Then open the three core docs above.
-
-## Core Documents
-
-| Document | Purpose | When To Use |
-|---|---|---|
-| `ARCHITECTURE_VERIFIED.md` | Canonical architecture and dependency boundaries | Before any structural engine change |
-| `IMPLEMENTATION_OVERVIEW.md` | Current-state map of runtime loop and systems | Before implementation or debugging |
-| `ENGINE_MASTER_PLAN.md` | Consolidated roadmap and feature execution order | For planning and vibecoding implementation passes |
-| `AGENT_ARCHITECTURE_CONTEXT.md` | Fast architecture context for AI/tooling sessions | First stop when context window is limited |
-
-## Specialized References
-
-| Document | Purpose |
+| Module | File |
 |---|---|
-| `UI_PROGRESS.md` | UI implementation status and remaining tasks |
-| `COMPONENT_SYSTEM_GUIDE.md` | Component design patterns and extension practices |
-| `LUA_IMPLEMENTATION_QUICKSTART.md` | Lua scripting implementation checklist |
-| `OPTIMIZATIONS_CURRENT.md` | Implemented optimization summary and rationale |
-| `BOX2D_PHYSICS_INTEGRATION_PLAN.md` | Detailed physics integration notes |
-| `EVENT_SYSTEM_IMPLEMENTATION_PLAN.md` | Detailed event-system fixes and phased design |
+| Core | `modules/Core.md` |
+| Events | `modules/Events.md` |
+| Platform | `modules/Platform.md` |
+| Renderer | `modules/Renderer.md` |
+| Resources | `modules/Resources.md` |
+| Scene | `modules/Scene.md` |
+| Physics | `modules/Physics.md` |
+| Scripting | `modules/Scripting.md` |
+| UI | `modules/UI.md` |
+| Systems | `modules/Systems.md` |
 
-## Planning Workflow
+## Topic Docs
 
-Use this lightweight workflow for new feature work:
+| Topic | File |
+|---|---|
+| Architecture | `topics/Architecture.md` |
+| Runtime frame loop | `topics/Runtime.md` |
+| ECS and components | `topics/ECS.md` |
+| Scripting and Lua | `topics/Scripting.md` |
+| Rendering | `topics/Rendering.md` |
+| Events | `topics/Events.md` |
+| Physics | `topics/Physics.md` |
+| UI | `topics/UI.md` |
+| Testing | `topics/Testing.md` |
+| Roadmap | `topics/Roadmap.md` |
 
-1. Confirm architectural fit in `ARCHITECTURE_VERIFIED.md`.
-2. Confirm current code reality in `IMPLEMENTATION_OVERVIEW.md`.
-3. Pick the next slice from `ENGINE_MASTER_PLAN.md`.
-4. Use one specialized reference only if you need subsystem detail.
+## Legacy And Deep References
 
-## Document Roles
+These files are still useful for detailed background, but they may overlap with the smaller docs:
 
-To reduce duplicated planning content:
+- `ARCHITECTURE_VERIFIED.md`
+- `ARCHITECTURE.md`
+- `IMPLEMENTATION_OVERVIEW.md`
+- `ENGINE_MASTER_PLAN.md`
+- `COMPONENT_SYSTEM_GUIDE.md`
+- `SCRIPTING_CURRENT.md`
+- `SCENE_ECS_CURRENT.md`
+- `RENDERING_CURRENT.md`
+- `UI_PROGRESS.md`
+- `UI_IMPLEMENTATION_PLAN.md`
+- `BOX2D_PHYSICS_INTEGRATION_PLAN.md`
+- `EVENT_SYSTEM_IMPLEMENTATION_PLAN.md`
+- `OPTIMIZATIONS_CURRENT.md`
+- `KNOWN_ISSUES.md`
 
-- `ENGINE_MASTER_PLAN.md` is the single roadmap source of truth.
-- subsystem plan files remain implementation detail references.
-- `ARCHITECTURE.md` is historical/design-background context.
+If a legacy doc conflicts with the small docs, verify against code and update both the relevant small doc and the legacy doc or mark the legacy doc stale.
 
-## Quick FAQ
+## Agent Workflow
 
-- Where should sprint planning happen?
-  - Use `ENGINE_MASTER_PLAN.md`.
+Before coding:
 
-- Where should architecture decisions be validated?
-  - Use `ARCHITECTURE_VERIFIED.md`.
+1. Read `CURRENT_TASK.md`.
+2. Read `CONSTRAINTS.md`.
+3. Open the affected module and topic docs.
 
-- Where do I find exact current behavior?
-  - Use `IMPLEMENTATION_OVERVIEW.md`.
+Before finishing:
+
+1. Update `CURRENT_TASK.md` with final status and validation.
+2. Update affected module/topic docs.
+3. Update `PROJECT_MEMORY.md` for durable context.
+4. Update `CONSTRAINTS.md` if rules changed.
+5. Mention docs changed in the final response.

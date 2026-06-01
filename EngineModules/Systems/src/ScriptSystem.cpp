@@ -5,7 +5,7 @@
 #include <sle/scene/Entity.hpp>
 #include <sle/scene/Registry.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
-#include <sle/scripting/ScriptEngine.hpp>
+#include <sle/scripting/ScriptRuntime.hpp>
 
 namespace sle {
 
@@ -21,20 +21,20 @@ void ScriptSystem::ensureStateMachineSubscription(sle::events::EventBus& eventBu
         eventBus.subscribe<sle::events::StateMachineTransitionEvent>(
             [this](const sle::events::StateMachineTransitionEvent& event)
             {
-                if (!scriptEngine)
+                if (!scriptRuntime)
                     return;
 
                 if (!event.onExitCallback.empty())
-                    (void)scriptEngine->callEntityFunctionByName(event.entity.getID(), event.onExitCallback);
+                    (void)scriptRuntime->callEntityFunctionByName(event.entity.getID(), event.onExitCallback);
 
                 if (!event.onEnterCallback.empty())
-                    (void)scriptEngine->callEntityFunctionByName(event.entity.getID(), event.onEnterCallback);
+                    (void)scriptRuntime->callEntityFunctionByName(event.entity.getID(), event.onEnterCallback);
             }));
 }
 
 void ScriptSystem::update(Context& ctx)
 {
-    if (!scriptEngine)
+    if (!scriptRuntime)
         return;
 
     ensureStateMachineSubscription(ctx.eventBus);
@@ -49,9 +49,9 @@ void ScriptSystem::update(Context& ctx)
 
             activeScriptEntities.insert(ent.getID());
 
-            if (!scriptEngine->hasScript(ent.getID()))
+            if (!scriptRuntime->hasScript(ent.getID()))
             {
-                if (!scriptEngine->ensureScript(ent.getID(), script.scriptAsset))
+                if (!scriptRuntime->ensureScript(ent.getID(), script.scriptAsset))
                 {
                     sle::core::Log::error("Failed to initialize script {} for entity {}", script.scriptAsset, ent.getID());
                     script.enabled = false;
@@ -59,10 +59,10 @@ void ScriptSystem::update(Context& ctx)
                 }
             }
 
-            scriptEngine->runUpdate(ent.getID(), dt);
+            scriptRuntime->runUpdate(ent.getID(), dt);
         });
 
-    scriptEngine->syncEntities(activeScriptEntities);
+    scriptRuntime->syncEntities(activeScriptEntities);
 }
 
 } // namespace sle

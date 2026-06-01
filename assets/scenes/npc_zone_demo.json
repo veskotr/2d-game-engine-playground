@@ -1,0 +1,192 @@
+{
+  "scene": "npc_zone_demo",
+  "entities": [
+    {
+      "name": "Player",
+      "components": {
+        "Transform": {
+          "position": [163.2, 135.0],
+          "rotation": 0.0,
+          "scale": [28.0, 28.0]
+        },
+        "SpriteRenderer": {
+          "texture": "assets/textures/tile2.png",
+          "color": [1.0, 0.0, 0.0, 1.0],
+          "layer": 0
+        },
+        "RigidBody": {
+          "bodyType": "Dynamic",
+          "mass": 1.0,
+          "linearDamping": 6.0,
+          "angularDamping": 0.0,
+          "gravityScale": 0.0,
+          "velocity": [0.0, 0.0],
+          "angularVelocity": 0.0,
+          "fixedRotation": false,
+          "enabled": true
+        },
+        "CircleCollider": {
+          "offset": [0.0, 0.0],
+          "radius": 14.0,
+          "friction": 0.3,
+          "restitution": 0.1,
+          "density": 1.0,
+          "categoryBits": 1,
+          "maskBits": 65535,
+          "enabled": true
+        },
+        "Animator": {
+          "clip": "assets/animations/player_color_red_blue.clip.json",
+          "enabled": true,
+          "playing": true,
+          "speed": 1.0,
+          "targetEntities": {
+            "npc": 2
+          }
+        },
+        "Script": {
+          "asset": "assets/scripts/npc_zone_demo.lua",
+          "enabled": true
+        },
+        "UI": {
+          "layout": "assets/ui/player_distance_world_label.xml",
+          "font": "assets/fonts/Roboto-Regular.ttf",
+          "behavior": "",
+          "spaceMode": "World",
+          "visible": true,
+          "layer": 50,
+          "bindingScope": ""
+        },
+        "Audio": {
+          "asset": "assets/sounds/gravel.ogg",
+          "loop": false,
+          "volume": 0.6,
+          "pitch": 1.0,
+          "playRequested": false,
+          "stopRequested": false
+        }
+      }
+    },
+    {
+      "name": "NPC",
+      "components": {
+        "Transform": {
+          "position": [326.4, 135.0],
+          "rotation": 0.0,
+          "scale": [30.0, 30.0]
+        },
+        "SpriteRenderer": {
+          "texture": "assets/textures/tile2.png",
+          "color": [0.2, 0.95, 0.3, 1.0],
+          "layer": 0
+        },
+        "RigidBody": {
+          "bodyType": "Static",
+          "mass": 1.0,
+          "linearDamping": 0.0,
+          "angularDamping": 0.0,
+          "gravityScale": 1.0,
+          "velocity": [0.0, 0.0],
+          "angularVelocity": 0.0,
+          "fixedRotation": false,
+          "enabled": true
+        },
+        "CircleCollider": {
+          "offset": [0.0, 0.0],
+          "radius": 15.0,
+          "friction": 0.4,
+          "restitution": 0.0,
+          "density": 1.0,
+          "categoryBits": 1,
+          "maskBits": 65535,
+          "enabled": true
+        }
+      }
+    },
+    {
+      "name": "BossTheme",
+      "components": {
+        "Audio": {
+          "asset": "assets/sounds/Great Boss.ogg",
+          "loop": true,
+          "volume": 0.08,
+          "pitch": 1.0,
+          "playRequested": true,
+          "stopRequested": false
+        }
+      }
+    },
+    {
+      "name": "NPC Inner Area",
+      "components": {
+        "Transform": {
+          "position": [326.4, 135.0],
+          "rotation": 0.0,
+          "scale": [120.0, 120.0]
+        },
+        "SpriteRenderer": {
+          "texture": "assets/textures/tile2.png",
+          "color": [0.25, 0.7, 1.0, 0.18],
+          "layer": 0
+        },
+        "RigidBody": {
+          "bodyType": "Static",
+          "mass": 1.0,
+          "linearDamping": 0.0,
+          "angularDamping": 0.0,
+          "gravityScale": 1.0,
+          "velocity": [0.0, 0.0],
+          "angularVelocity": 0.0,
+          "fixedRotation": false,
+          "enabled": true
+        },
+        "CircleZone": {
+          "offset": [0.0, 0.0],
+          "zoneId": "npc_inner",
+          "radius": 60.0,
+          "categoryBits": 1,
+          "maskBits": 65535,
+          "enabled": true
+        }
+      }
+    },
+    {
+      "name": "NPC Outer Area",
+      "components": {
+        "Transform": {
+          "position": [326.4, 135.0],
+          "rotation": 0.0,
+          "scale": [180.0, 180.0]
+        },
+        "SpriteRenderer": {
+          "texture": "assets/textures/tile2.png",
+          "color": [0.25, 0.7, 1.0, 0.08],
+          "layer": 0
+        },
+        "RigidBody": {
+          "bodyType": "Static",
+          "mass": 1.0,
+          "linearDamping": 0.0,
+          "angularDamping": 0.0,
+          "gravityScale": 1.0,
+          "velocity": [0.0, 0.0],
+          "angularVelocity": 0.0,
+          "fixedRotation": false,
+          "enabled": true
+        },
+        "CircleZone": {
+          "offset": [0.0, 0.0],
+          "zoneId": "npc_outer",
+          "radius": 90.0,
+          "categoryBits": 1,
+          "maskBits": 65535,
+          "enabled": true
+        },
+        "Script": {
+          "asset": "assets/scripts/zone_distance_emitter.lua",
+          "enabled": true
+        }
+      }
+    }
+  ]
+}

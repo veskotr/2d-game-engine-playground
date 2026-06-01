@@ -1,0 +1,17 @@
+{
+  "scene": "test_unknown_component_scene",
+  "entities": [
+    {
+      "name": "probe",
+      "components": {
+        "Transform": {
+          "position": [4.0, 5.0],
+          "scale": [1.0, 1.0]
+        },
+        "NotARealComponent": {
+          "value": 123
+        }
+      }
+    }
+  ]
+}

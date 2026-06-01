@@ -37,6 +37,7 @@ add_subdirectory(EngineModules)
 # -------------------------
 # Standalone examples/samples
 # -------------------------
+add_subdirectory(engine_app)
 add_subdirectory(examples)
 
 # -------------------------

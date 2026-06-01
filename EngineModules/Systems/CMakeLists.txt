@@ -1,6 +1,7 @@
 add_library(sle_engine STATIC
     src/ScriptApiImpl.cpp
     src/SceneManager.cpp
+    src/SceneLoader.cpp
     src/Runtime.cpp
     src/AnimationSystem.cpp
     src/TransformSystem.cpp

@@ -39,6 +39,7 @@ public:
     std::size_t runForFrames(std::size_t maxFrames);
 
     bool registerScene(const std::string& sceneName, SceneManager::SceneBuilder builder);
+    bool registerSceneFromFile(const std::string& sceneName, const std::string& jsonPath);
     bool hasScene(const std::string& sceneName) const;
     sle::core::Result<bool> loadScene(const std::string& sceneName);
     sle::core::Result<bool> requestSceneSwitch(const std::string& sceneName);

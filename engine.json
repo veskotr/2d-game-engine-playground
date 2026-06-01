@@ -1,0 +1,16 @@
+{
+  "window": {
+    "title": "SLE Engine App",
+    "width": 480,
+    "height": 270,
+    "vsync": true,
+    "mode": "Windowed"
+  },
+  "startScene": "npc_zone_demo",
+  "scenes": [
+    {
+      "name": "npc_zone_demo",
+      "file": "assets/scenes/npc_zone_demo.json"
+    }
+  ]
+}

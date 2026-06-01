@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <sle/scripting/ScriptRuntime.hpp>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -21,23 +22,23 @@ struct ScriptInstance
     int destroyRef = -2;
 };
 
-class ScriptEngine
+class ScriptEngine : public ScriptRuntime
 {
 public:
     bool init(ScriptApi* api);
     void shutdown();
 
-    bool ensureScript(uint32_t entityId, const std::string& scriptAsset);
-    bool executeScriptAsset(const std::string& scriptAsset);
-    void runUpdate(uint32_t entityId, float dt);
+    bool ensureScript(uint32_t entityId, const std::string& scriptAsset) override;
+    bool executeScriptAsset(const std::string& scriptAsset) override;
+    void runUpdate(uint32_t entityId, float dt) override;
     void removeScript(uint32_t entityId);
-    bool hasScript(uint32_t entityId) const;
-    bool callEntityFunctionByName(uint32_t entityId, const std::string& functionName);
-    void syncEntities(const std::unordered_set<uint32_t>& activeEntities);
+    bool hasScript(uint32_t entityId) const override;
+    bool callEntityFunctionByName(uint32_t entityId, const std::string& functionName) override;
+    void syncEntities(const std::unordered_set<uint32_t>& activeEntities) override;
 
     void update(float dt);
-    bool callGlobalFunction(const std::string& functionName, uint32_t entityId = 0, const std::string& stringArg = {});
-    bool callGlobalBoolFunction(const std::string& functionName, uint32_t entityId = 0, const std::string& stringArg = {});
+    bool callGlobalFunction(const std::string& functionName, uint32_t entityId = 0, const std::string& stringArg = {}) override;
+    bool callGlobalBoolFunction(const std::string& functionName, uint32_t entityId = 0, const std::string& stringArg = {}) override;
     bool callEventCallback(
         int luaRef,
         const std::string& eventName,

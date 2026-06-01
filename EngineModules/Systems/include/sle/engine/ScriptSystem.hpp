@@ -7,7 +7,7 @@
 
 namespace sle::events { class EventBus; }
 
-namespace sle::scripting { class ScriptEngine; }
+namespace sle::scripting { class ScriptRuntime; }
 
 namespace sle {
 
@@ -18,13 +18,13 @@ struct Context;
 class ScriptSystem
 {
 public:
-    void setScriptEngine(sle::scripting::ScriptEngine* engine) { scriptEngine = engine; }
+    void setScriptRuntime(sle::scripting::ScriptRuntime* runtime) { scriptRuntime = runtime; }
     void update(Context& ctx);
 
 private:
     void ensureStateMachineSubscription(sle::events::EventBus& eventBus);
 
-    sle::scripting::ScriptEngine* scriptEngine = nullptr;
+    sle::scripting::ScriptRuntime* scriptRuntime = nullptr;
     std::unordered_set<uint32_t> activeScriptEntities;
     sle::events::EventBus* subscribedEventBus_ = nullptr;
     sle::events::ScopedSubscription stateMachineTransitionSubscription_;

@@ -258,6 +258,22 @@ sle_add_integration_test(
 )
 
 sle_add_integration_test(
+    integration_scene_loader_roundtrip_path
+    systems/integration_scene_loader_roundtrip_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_scene_loader_negative_path
+    systems/integration_scene_loader_negative_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
     integration_scripting_animator_api_surface_path
     scripting/integration_scripting_animator_api_surface_path.cpp
     scripting

@@ -552,11 +552,11 @@ void renderElement(
 
 void dispatchClick(
     UIFrameContext& ctx,
-    sle::scripting::ScriptEngine* scriptEngine,
+    sle::scripting::ScriptRuntime* scriptRuntime,
     const std::vector<HitTarget>& hitTargets,
     const glm::vec2& mousePoint)
 {
-    if (!scriptEngine || !sle::input::Input::getMouse().leftPressed)
+    if (!scriptRuntime || !sle::input::Input::getMouse().leftPressed)
         return;
 
     for (auto it = hitTargets.rbegin(); it != hitTargets.rend(); ++it)
@@ -565,16 +565,16 @@ void dispatchClick(
             continue;
 
         ctx.eventBus.emit(UIClickEvent{it->ownerEntityId, it->elementId, it->handler});
-        scriptEngine->callGlobalFunction(it->handler, it->ownerEntityId, it->elementId);
+        scriptRuntime->callGlobalFunction(it->handler, it->ownerEntityId, it->elementId);
         break;
     }
 }
 
 } // namespace
 
-sle::core::Result<bool> UISystem::init(sle::scripting::ScriptEngine* inScriptEngine)
+sle::core::Result<bool> UISystem::init(sle::scripting::ScriptRuntime* inScriptRuntime)
 {
-    scriptEngine = inScriptEngine;
+    scriptRuntime = inScriptRuntime;
     initialized = true;
     return sle::core::Result<bool>::success(true);
 }
@@ -596,7 +596,7 @@ void UISystem::shutdown()
 {
     documents.clear();
     entityDocuments.clear();
-    scriptEngine = nullptr;
+    scriptRuntime = nullptr;
     initialized = false;
 }
 
@@ -660,8 +660,8 @@ void UISystem::syncEntityDocuments(UIFrameContext& ctx)
         parseDocumentLayout(document);
         document.refreshBindings();
 
-        if (!document.isBehaviorLoaded() && !document.getDescriptor().behaviorAsset.empty() && scriptEngine)
-            document.setBehaviorLoaded(scriptEngine->executeScriptAsset(document.getDescriptor().behaviorAsset));
+        if (!document.isBehaviorLoaded() && !document.getDescriptor().behaviorAsset.empty() && scriptRuntime)
+            document.setBehaviorLoaded(scriptRuntime->executeScriptAsset(document.getDescriptor().behaviorAsset));
 
         entityDocuments[entity.getID()] = std::move(document);
     });
@@ -684,8 +684,8 @@ UIDocument& UISystem::createDocument(UIDocumentDescriptor descriptor)
     parseDocumentLayout(documents.back());
     documents.back().refreshBindings();
 
-    if (!documents.back().isBehaviorLoaded() && !documents.back().getDescriptor().behaviorAsset.empty() && scriptEngine)
-        documents.back().setBehaviorLoaded(scriptEngine->executeScriptAsset(documents.back().getDescriptor().behaviorAsset));
+    if (!documents.back().isBehaviorLoaded() && !documents.back().getDescriptor().behaviorAsset.empty() && scriptRuntime)
+        documents.back().setBehaviorLoaded(scriptRuntime->executeScriptAsset(documents.back().getDescriptor().behaviorAsset));
 
     return documents.back();
 }
@@ -785,7 +785,7 @@ void UISystem::submitDocument(UIFrameContext& ctx, UIDocument& document)
     hitTargets.reserve(16);
     renderElement(ctx, document, *document.getLayoutRoot(), basePosition, scaleFactor, rotation, defaultShaderID, yAxisDown, hitTargets);
 
-    dispatchClick(ctx, scriptEngine, hitTargets, mouseToWorldUiPoint(ctx.camera));
+    dispatchClick(ctx, scriptRuntime, hitTargets, mouseToWorldUiPoint(ctx.camera));
 }
 
 } // namespace sle::ui

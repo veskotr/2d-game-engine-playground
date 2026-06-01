@@ -1,0 +1,12 @@
+{
+  "scene": "test_malformed_scene",
+  "entities": [
+    {
+      "name": "broken",
+      "components": {
+        "Transform": {
+          "position": [1.0, 2.0]
+        }
+      }
+    }
+  ]

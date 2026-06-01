@@ -9,7 +9,7 @@ Last Verified: May 2026 — Phases 0–5 complete (Events, State Machine, Animat
 
 ## Executive Summary
 
-SLE is a **modular, data-driven 2D game engine** built in C++17 with:
+SLE is a **modular, data-driven 2D game engine** built in C++20 with:
 - **Strict one-way module dependencies** (no circular imports)
 - **Pure Entity-Component-System (ECS) architecture**
 - **Single Lua VM per engine** for scripting
@@ -22,9 +22,7 @@ SLE is a **modular, data-driven 2D game engine** built in C++17 with:
 - **UI system** with XML layouts, reactive bindings, screen/world-space modes, text alignment, word wrap, and anchor-based positioning
 - **Dependency injection** via Context struct for cross-module communication
 
-**Development Status**: Phases 0–5 complete. All core engine systems implemented and integration-tested. Ready for v1 planning.
-
-**Development Status**: Production-ready for 2D games with Lua scripting, Box2D physics, sprite rendering, physics debug overlays, and zone/area triggers.
+**Development Status**: Phases 0–5 complete. All core engine systems implemented and integration-tested. Ready for v1 planning. Production-ready for 2D games with Lua scripting, Box2D physics, sprite rendering, physics debug overlays, and zone/area triggers.
 
 ---
 
@@ -39,72 +37,75 @@ SLE is a **modular, data-driven 2D game engine** built in C++17 with:
 └─────────────────────────────────────────────────────────────────┘
                             ↑
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Runtime/Systems                          │
-│              (Orchestration, game loop, context)                │
+│                        Systems                                  │
+│    (Runtime, game loop, orchestration, all per-frame systems)   │
 │   Knows About: Everything below (orchestrator role)             │
 └─────────────────────────────────────────────────────────────────┘
                             ↑
                  ┌──────────────┐
-                 ↑              │
-             ┌───────────┐        │
-             │Scripting  │        │
-             │(Lua VM,   │        │
-             │BindLua)   │        │
-             └───────────┘        │
-                 ↑              │
+                 ↑              ↑
+             ┌───────────┐  ┌──────┐
+             │Scripting  │  │  UI  │
+             │(Lua VM,   │  │(XML  │
+             │BindLua)   │  │ docs)│
+             └───────────┘  └──────┘
+                 ↑              ↑
              ┌────────────────────┐
              │      Physics       │
              │ (Box2D world,      │
              │  fixtures, contacts│
              │  zones/areas)      │
              └────────────────────┘
-                 ↑              │
-          ┌────────┼──────────────┘
-          ↑        ↑
-      ┌──────────────┐    ┌──────────────┐
-      │ Scene (ECS)  │    │ Resources    │
-      │(Entities,    │    │(Asset        │
-      │Components,   │    │ loading,     │
-      │Hierarchy)    │    │pooling)      │
-      └──────────────┘    └──────────────┘
+                 ↑
+          ┌──────────────────────────┐
+          ↑              ↑           ↑
+      ┌──────────────┐  ┌──────────┐  ┌────────┐
+      │ Scene (ECS)  │  │Resources │  │ Events │
+      │(Entities,    │  │(Asset    │  │(EventBus│
+      │Components,   │  │ loading, │  │ types) │
+      │Hierarchy)    │  │pooling)  │  └────────┘
+      └──────────────┘  └──────────┘
           ↑                   ↑
           └───────────────────┘
                             ↑
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Renderer                                 │
-│      (OpenGL, shaders, batching, GPU, debug overlays)          │
+│      (OpenGL, shaders, batching, GPU, debug overlays,          │
+│       Camera2D)                                                 │
 │   Knows About: Core, Platform, nothing about Scene/Lua          │
 └─────────────────────────────────────────────────────────────────┘
                             ↑
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Platform                                 │
-│              (GLFW, Input, Window, Camera2D)                    │
+│              (GLFW, Input, Window)                              │
 │   Knows About: Core only (strict isolation)                     │
 └─────────────────────────────────────────────────────────────────┘
                             ↑
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Core                                    │
-│           (Log, Timer, Result, EventBus, Config)               │
+│           (Log, Timer, Result, EngineConfig)                    │
 │   Knows About: Standard library only                            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **Golden Rule**: Lower layers NEVER depend on higher layers. This is enforced at compile time via CMakeLists.txt target_link_libraries ordering.
 
-**Verified module order in CMake**: `Core -> Platform -> Renderer -> Resources -> Scene -> Physics -> Scripting -> Systems -> Sandbox`.
+**Verified module order in CMake**: `Core -> Platform -> Renderer -> Resources -> Scene -> Events -> Physics -> Scripting -> UI -> Systems -> Sandbox`.
 
 ### 1.2 Module Responsibilities (Verified Against Code)
 
 | Module | Responsibilities | Owns | Does NOT Own | External Dependencies |
 |--------|------------------|------|--------------|----------------------|
-| **Core** | Foundational utilities | Log, Result<T>, Timer, EngineConfig, EventBus | Nothing | stdlib |
-| **Platform** | OS integration, input, window | Window, Input, Camera2D, event polling | Rendering, entities | GLFW, OpenGL headers |
-| **Renderer** | GPU state, draw batching, shader ops, debug primitives | Shader, Texture, QuadCommand, LineCommand, PointCommand, batch state | Scene, Lua, input | OpenGL, Core, Platform |
+| **Core** | Foundational utilities | Log, Result<T>, Timer, EngineConfig | Nothing | stdlib |
+| **Events** | Engine-wide event primitives | EventBus, ScopedSubscription, CancellableEvent, event structs | Nothing event-dispatch-wise above Core | stdlib |
+| **Platform** | OS integration, input, window | Window, Input, event polling | Rendering, entities, camera | GLFW, OpenGL headers |
+| **Renderer** | GPU state, draw batching, shader ops, debug primitives, camera math | Shader, Texture, Camera2D, QuadCommand, LineCommand, PointCommand, batch state | Scene, Lua, input | OpenGL, Core, Platform |
 | **Resources** | Asset loading, caching, pooling | ResourcePool<T>, asset loading logic | Lifetime of entities/scripts | Core, Renderer |
-| **Scene** | Entity model, ECS, hierarchy | Entity, Registry, Components, Scene, hierarchy | Rendering pipeline, Lua | Core, Resources |
+| **Scene** | Entity model, ECS, hierarchy | Entity, Registry, Components, Scene, hierarchy | Rendering pipeline, Lua | Core, Events, Resources |
 | **Physics** | Box2D integration, body/fixture lifecycle, contact callbacks | PhysicsWorld, ContactListener, fixture zone mapping | ECS orchestration order, rendering | Box2D, Core, Scene |
 | **Scripting** | Lua VM lifecycle, bindings, script state | ScriptEngine, Lua VM, EngineAPI bindings | Scene data directly | Lua library, Core, Scene, Physics, Resources |
-| **Systems** | Game loop, orchestration, updates | TransformSystem, ScriptSystem, RenderSystem, PhysicsSystem, Runtime | Direct scene modification (via systems) | Everything (orchestrator) |
+| **UI** | XML layout documents, binding context, UI rendering | UISystem, UIDocument, UIBindingContext, UIResources | Game logic, physics | Events, Platform, Renderer, Resources, Scene, Scripting |
+| **Systems** | Game loop, orchestration, frame systems | TransformSystem, ScriptSystem, RenderSystem, PhysicsSystem, AudioSystem, AnimationSystem, StateMachineSystem, Runtime | Direct scene modification (via systems) | Everything (orchestrator) |
 
 ---
 
@@ -118,9 +119,9 @@ SLE is a **modular, data-driven 2D game engine** built in C++17 with:
 - **Lifetime**: Tracks creation frame, valid until destroyed
 - **Hierarchy**: Belongs to parent/children lists in Scene
 
-#### Components (Pure Data)
+#### Components
 All components follow these rules:
-1. **No methods** - only public data members
+1. **Encapsulated data** - fields are private where setter-side-effects (e.g. dirty flags) must be maintained; use public getters/setters in those cases
 2. **No logic** - behavior lives in Systems
 3. **Default-constructible** - `Component c = Component();` works
 4. **Serializable** - to/from Lua tables and JSON
@@ -634,49 +635,65 @@ public:
 ### 5.1 Frame Execution Order (Current Implementation)
 
 ```cpp
-// Runtime::run() main loop (from IMPLEMENTATION_OVERVIEW.md)
+// Runtime::run() main loop (simplified)
 
 while (isRunning) {
     // 1. Scene management
     SceneManager::processPendingSwitch();
-    
-    // 2. Input (CLEAR state BEFORE polling - important!)
-    Input::update();  // Clears pressed/released before polling
-    
+
+    // 2. Input (clears pressed/released state before new polling)
+    Input::update();
+
     // 3. Timing
     Timer::tick();
     float dt = Timer::getDeltaTime();
-    
-    // 4. Window events
-    Window::processEvents();
+
+    // 4. Window events + resize handling
+    Window::pollEvents();
+    if (windowResized) camera.setViewport(width, height);
     if (escapePressed || windowClosed) break;
-    
-    // 5. Build context
-    Context ctx{
-        .window = &window,
-        .input = &input,
-        .camera = &camera,
-        .scene = &scene,
-        .renderer = &renderer,
-        .scriptEngine = &scriptEngine,
-        .timer = &timer
-    };
-    
-    // 6. Update systems (in order)
-    TransformSystem::update(ctx);      // Compute world transforms
-    ScriptSystem::update(ctx);         // Run Lua update() callbacks
-    PhysicsSystem::update(ctx);        // Step physics (Box2D)
-    
-    // 7. Render submission
+
+    // 5. Build per-frame Context
+    Context ctx{ scene, registry, eventBus, globalBus, renderer, camera, physicsWorld, dt };
+
+    // 6. Flush deferred event queues from previous frame
+    ctx.eventBus.flushQueue();
+    ctx.globalBus.flushQueue();
+
+    // === LOGIC UPDATE PHASE ===
+    // 7. Animation update (before transform so animated locals reflect in same frame)
+    AnimationSystem::update(scene, dt);
+
+    // 8. Audio update (play/stop request processing)
+    AudioSystem::update(scene);
+
+    // 9. Transform update (compute world-space matrices)
+    TransformSystem::update(ctx);
+
+    // 10. Script update (run Lua update() callbacks)
+    ScriptSystem::update(ctx);
+
+    // 11. State machine update (evaluate transitions and Lua guards)
+    StateMachineSystem::update(scene, dt, &scriptEngine);
+
+    // 12. Physics update (step Box2D, sync transforms, drain contact events)
+    PhysicsSystem::update(ctx);
+
+    // === RENDER PHASE ===
+    // 13. Begin GPU frame
     renderer.beginFrame();
-    RenderSystem::update(ctx);         // Submit QuadCommands
-    renderer.endFrame();               // Batch and upload
-    
-    // 8. Display
+
+    // 14. Submit sprite/physics-debug render commands
+    RenderSystem::update(ctx);
+
+    // 15. Submit UI documents
+    UISystem::update(uiCtx);
+
+    // 16. Flush batches to GPU
+    renderer.endFrame();
+
+    // 17. Present
     window.swapBuffers();
-    
-    // 9. Profiling
-    LogFrameStats();  // avg ms per phase, logged once/sec
 }
 ```
 
@@ -701,7 +718,8 @@ All systems receive a single `Context` struct with shared frame services (refere
 struct Context {
     sle::entity::Scene& scene;
     sle::entity::Registry& registry;
-    sle::events::EventBus& eventBus;
+    sle::events::EventBus& eventBus;        // Per-scene event bus
+    sle::events::EventBus& globalBus;       // Engine-wide event bus (scene load/unload)
     sle::renderer::Renderer& renderer;
     const sle::core::Camera2D& camera;
     sle::physics::PhysicsWorld* physicsWorld;

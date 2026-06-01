@@ -4,7 +4,7 @@ SLE is a modular 2D game engine in C++ with strict module layering, ECS-based sc
 
 ## Highlights
 
-- Strict one-way architecture: `Core -> Platform -> Renderer -> Resources -> Scene -> Scripting -> Systems -> Runtime -> Sandbox`
+- Strict one-way architecture: `Core -> Events -> Platform -> Renderer -> Resources -> Scene -> Physics -> Scripting -> UI -> Systems -> Sandbox`
 - ECS scene model with hierarchy and transform propagation
 - Lua scripting through a controlled `ScriptApi` boundary
 - Command-driven renderer with batching and streaming uploads
@@ -13,7 +13,7 @@ SLE is a modular 2D game engine in C++ with strict module layering, ECS-based sc
 
 ## Repository Layout
 
-- `EngineModules/`: engine modules (`Core`, `Platform`, `Renderer`, `Resources`, `Scene`, `Scripting`, `Systems`, `Physics`, `Events`, `UI`)
+- `EngineModules/`: engine modules (`Core`, `Events`, `Platform`, `Renderer`, `Resources`, `Scene`, `Physics`, `Scripting`, `UI`, `Systems`)
 - `examples/`: runnable sample applications
 - `assets/`: shared runtime assets
 - `docs/`: architecture, implementation, and planning documentation

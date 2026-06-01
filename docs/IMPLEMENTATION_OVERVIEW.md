@@ -7,7 +7,7 @@ This document is the current-state map of the engine. It is meant to answer two 
 
 Some older docs in this repo describe intended design or partially outdated target-state APIs. This file reflects the code that is currently implemented.
 
-**Last updated: May 2026 â€” Phases 0â€“5 complete.**
+**Last updated: May 2026 — Phases 0–5 complete.**
 
 ## 1. Big Picture
 
@@ -27,9 +27,10 @@ The main application entry point is the Sandbox project. It configures a `Runtim
 
 The engine is split into layered modules with one-way dependencies:
 
-- **Core**: logging, timers, result/error helpers, config, EventBus
-- **Platform**: window creation, input handling, camera state, GLFW integration
-- **Renderer**: OpenGL shaders, textures, commands, batch submission
+- **Core**: logging, timers, result/error helpers, config, EngineConfig
+- **Events**: EventBus, event structs (CollisionEvents, ZoneEvents, ScriptEvents, StateMachineEvents, etc.), ScopedSubscription
+- **Platform**: window creation, input handling, GLFW integration
+- **Renderer**: OpenGL shaders, textures, Camera2D, commands, batch submission
 - **Resources**: asset loading and cached resource pools
 - **Scene**: entities, registry, components, hierarchy, scene lifetime
 - **Physics**: Box2D integration, body/fixture lifecycle, contact events, zone sensors
@@ -40,7 +41,7 @@ The engine is split into layered modules with one-way dependencies:
 
 The important rule is that lower layers do not depend on higher layers. For example, Renderer does not know about Lua, and Scene does not know about rendering.
 
-**Verified module order in CMake**: `Core â†’ Platform â†’ Renderer â†’ Resources â†’ Scene â†’ Physics â†’ Scripting â†’ UI â†’ Systems â†’ Sandbox`
+**Verified module order in CMake**: `Core → Platform → Renderer → Resources → Scene → Events → Physics → Scripting → UI → Systems → Sandbox`
 
 ## 3. Runtime Flow
 

@@ -6,7 +6,7 @@ Use this file as the first read for any architecture-sensitive task.
 
 Dependency chain:
 
-`Core -> Platform -> Renderer -> Resources -> Scene -> Scripting -> Systems -> Runtime -> Sandbox`
+`Core -> Events -> Platform -> Renderer -> Resources -> Scene -> Physics -> Scripting -> UI -> Systems -> Sandbox`
 
 Non-negotiable rule:
 
@@ -15,14 +15,16 @@ Non-negotiable rule:
 
 ## 2. Ownership Boundaries
 
-- Core: logging, timing, result/error types, event bus utilities
-- Platform: window, input, camera state
-- Renderer: GPU resources, batching, draw submission
+- Core: logging, timing, result/error types, EngineConfig
+- Events: EventBus, event structs (CollisionEvents, ZoneEvents, ScriptEvents, etc.), ScopedSubscription
+- Platform: window, input
+- Renderer: GPU resources, batching, draw submission, Camera2D
 - Resources: asset loading + cache ownership
 - Scene: ECS entities, components, hierarchy, scene event bus holder
+- Physics: Box2D world, body/fixture lifecycle, contact events
 - Scripting: Lua VM lifecycle, bindings, script callback execution via ScriptApi
-- Systems: frame orchestration systems (transform/script/physics/render)
-- Runtime: top-level run loop and system coordination
+- UI: XML layout documents, binding context, UI rendering
+- Systems: Runtime, frame orchestration systems (transform/script/physics/render/audio/animation/UI/state-machine)
 - Sandbox/examples: game-side usage and demos
 
 ## 3. Frame Pipeline (Current)
@@ -30,24 +32,28 @@ Non-negotiable rule:
 1. process pending scene switches
 2. update input
 3. tick timer
-4. build Context
-5. animation update
-6. transform update
-7. script update
-8. state machine update
-9. physics update
-10. renderer beginFrame
-11. render-system submit commands
-12. renderer endFrame
-13. swap buffers
+4. window poll events + resize handling
+5. build Context
+6. flush deferred event queues (scene + global buses)
+7. animation update
+8. audio update (play/stop request processing)
+9. transform update
+10. script update
+11. state machine update
+12. physics update
+13. renderer beginFrame
+14. render-system submit commands (sprites + physics debug)
+15. UISystem update
+16. renderer endFrame
+17. swap buffers
 
 ## 4. Critical Architecture Invariants
 
 - Scene is data and structure; no rendering or Lua ownership in Scene types.
 - Renderer consumes commands; it does not query ECS directly.
 - Script access to engine services goes through ScriptApi.
-- Transform mutations maintain dirty propagation rules.
-- New components are data-only and serializable.
+- Transform mutations must go through setters to maintain dirty propagation.
+- New components are data-centric and serializable; methods are allowed only to enforce invariants (e.g. dirty flags).
 
 ## 5. First Files To Open By Task Type
 

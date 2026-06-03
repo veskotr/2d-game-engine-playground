@@ -1,0 +1,34 @@
+{
+  "type": "map",
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "width": 40,
+  "height": 1,
+  "tilewidth": 32,
+  "tileheight": 32,
+  "infinite": false,
+  "layers": [
+    {
+      "type": "tilelayer",
+      "name": "ground",
+      "visible": true,
+      "data": [
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 1, 0, 0, 0, 0, 0, 0
+      ]
+    }
+  ],
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "tilewidth": 32,
+      "tileheight": 32,
+      "columns": 1,
+      "tilecount": 1,
+      "image": "../../../assets/textures/does_not_exist_for_chunk_test.png",
+      "imagewidth": 32,
+      "imageheight": 32
+    }
+  ]
+}

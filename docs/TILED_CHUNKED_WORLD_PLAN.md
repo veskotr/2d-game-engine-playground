@@ -30,7 +30,7 @@ Current implementation snapshot (June 2, 2026):
 - Done: first chunk-runtime primitive exists for chunk coordinate math, chunk bounds, and camera/focus active-window calculation
 - Done: first chunk lifecycle event scaffold exists through `ChunkEvents` + `ChunkActivityTracker`
 - Done: first chunk ownership index can group chunk-tagged entities by chunk coordinate
-- Not done: runtime wiring that applies chunk activation automatically in live map-backed scenes, tilemap `A*`, and the integrated authored demo
+- Not done: richer chunk runtime state transitions, more efficient chunk-owned tile/runtime data, tilemap `A*`, and the integrated authored demo
 
 ## 1. Why These Features Belong Together
 
@@ -209,7 +209,9 @@ Current slice status (June 2, 2026):
 - Done: first reusable chunk activation controller can auto-toggle existing entity component flags from active chunk sets
 - Done: per-entity chunk activation overrides now support inherit/events-only/always-active/auto-toggle plus keep-* preservation flags
 - Done: map-backed scenes now preserve chunk grid metadata as part of the loaded scene state
-- Remaining: runtime wiring that feeds live chunk windows into the controller for map-backed scenes
+- Done: runtime wiring now feeds live camera-driven chunk windows into the controller for map-backed scenes
+- Done: imported tile-layer entities now participate in chunk activation through render visibility toggling
+- Remaining: richer loaded/sleeping state transitions and more efficient chunk-owned tile/runtime behavior
 
 ### Why 16x16 First
 
@@ -340,7 +342,8 @@ Current slice status (June 2, 2026):
 - Done: chunk activation/deactivation event types are defined
 - Done: a reusable tracker can diff active windows and publish activation/deactivation through the existing event bus
 - Done: integration coverage proves event order/content for camera/focus-driven chunk transitions
-- Remaining: runtime/system integration that consumes ownership + chunk windows inside live scenes, plus richer loaded/sleeping state transitions
+- Done: runtime/system integration now consumes ownership + chunk windows inside live scenes for activation toggling
+- Remaining: richer loaded/sleeping state transitions and broader chunk participation beyond the current entity-and-visibility activation path
 
 ## 4.4 Stream C4 - Tilemap A* Pathfinding
 

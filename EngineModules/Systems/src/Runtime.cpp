@@ -48,6 +48,7 @@ namespace sle
 
     Runtime::Runtime(const sle::core::EngineConfig &config)
         : config(config)
+        , chunkRuntimeState(config.chunkActivation)
         , scriptApi(*this)
     {
     }
@@ -87,9 +88,17 @@ namespace sle
     {
         auto result = sceneManager.loadScene(sceneName, *this, scene);
         if (result.ok())
+        {
+            refreshChunkRuntimeState();
             Log::info("Loaded scene: {}", sceneName);
+        }
 
         return result;
+    }
+
+    void Runtime::refreshChunkRuntimeState()
+    {
+        chunkRuntimeState.refreshFromScene(scene);
     }
 
     Result<bool> Runtime::requestSceneSwitch(const std::string& sceneName)
@@ -281,10 +290,15 @@ namespace sle
 
         while (!window.shouldClose() && (!bounded || executedFrames < maxFrames))
         {
+            const std::string previousSceneName = sceneManager.getCurrentSceneName();
             auto switchResult = sceneManager.processPendingSwitch(*this, scene);
             if (!switchResult.ok())
             {
                 Log::error("Failed to switch pending scene: {}", switchResult.error());
+            }
+            else if (previousSceneName != sceneManager.getCurrentSceneName())
+            {
+                refreshChunkRuntimeState();
             }
 
             Input::update();
@@ -334,6 +348,10 @@ namespace sle
             ctx.globalBus.flushQueue();
 
             // === LOGIC UPDATE PHASE ===
+            // 0. Update chunk activation before simulation-heavy systems so
+            // inactive chunk residents can skip work in the same frame.
+            chunkRuntimeState.update(scene, camera.getPosition());
+
             // 1. Advance animations before transform solve so animated local transforms
             // are reflected in world transforms in the same frame.
             animationSystem.update(scene, dt);

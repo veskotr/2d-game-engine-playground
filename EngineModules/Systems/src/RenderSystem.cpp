@@ -141,6 +141,9 @@ void RenderSystem::update(Context& ctx)
     ctx.registry.view<components::WorldTransformComponent, components::SpriteRenderer>(
         [this, &renderer = ctx.renderer, &camera = ctx.camera](entity::Entity, components::WorldTransformComponent& world, components::SpriteRenderer& sprite)
         {
+            if (!sprite.visible)
+                return;
+
             if (!isSpriteVisible(world, camera))
                 return;
 

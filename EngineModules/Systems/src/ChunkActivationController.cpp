@@ -10,6 +10,7 @@
 #include <sle/scene/components/CircleZoneComponent.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
+#include <sle/scene/components/SpriteRenderer.hpp>
 #include <sle/scene/components/StateMachineComponent.hpp>
 #include <sle/scene/components/UIComponent.hpp>
 
@@ -143,6 +144,12 @@ void ChunkActivationController::applyEntityState(
     {
         if (auto* ui = registry.getComponent<sle::components::UIComponent>(entity))
             ui->visible = active;
+    }
+
+    if (config.affectRendering && (!activation->keepRenderingWhenInactive || active))
+    {
+        if (auto* sprite = registry.getComponent<sle::components::SpriteRenderer>(entity))
+            sprite->visible = active;
     }
 }
 

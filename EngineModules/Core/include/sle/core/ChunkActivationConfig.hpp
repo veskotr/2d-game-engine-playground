@@ -15,6 +15,7 @@ struct ChunkActivationConfig
 {
     ChunkActivationMode mode = ChunkActivationMode::EventsOnly;
 
+    bool affectRendering = true;
     bool affectScripts = true;
     bool affectStateMachines = true;
     bool affectAnimation = true;

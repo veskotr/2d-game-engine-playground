@@ -12,6 +12,9 @@ struct SpriteRenderer
     // RGBA tint applied to the sprite. White (1,1,1,1) = no tint.
     glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
 
+    // Visibility flag used by higher-level runtime systems such as chunk activation.
+    bool visible = true;
+
     // Source texture region. region.texture == nullptr means untextured.
     // Use TextureRegion::fromPixels() for atlas slices and animation frames.
     // The default UV covers the full texture.

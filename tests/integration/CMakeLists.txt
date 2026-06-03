@@ -298,6 +298,14 @@ sle_add_integration_test(
 )
 
 sle_add_integration_test(
+    integration_tiled_tile_chunk_visibility_path
+    systems/integration_tiled_tile_chunk_visibility_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
     integration_chunk_ownership_index_path
     systems/integration_chunk_ownership_index_path.cpp
     systems
@@ -324,6 +332,14 @@ sle_add_integration_test(
 sle_add_integration_test(
     integration_chunk_activation_controller_path
     systems/integration_chunk_activation_controller_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_chunk_scene_runtime_state_path
+    systems/integration_chunk_scene_runtime_state_path.cpp
     systems
     LINK_LIBS sle::engine
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

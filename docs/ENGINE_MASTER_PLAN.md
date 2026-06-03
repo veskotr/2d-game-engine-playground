@@ -667,9 +667,10 @@ The criteria:
 
 1. All Phase 0–5 systems work end-to-end in the sandbox demo without crashes or audio/render artifacts.
 2. A developer can define a new scene, attach scripts, physics, audio, and UI in C++ and Lua without reading engine source code.
-3. Integration tests pass clean in CI (no windowed tests excluded).
-4. The Lua API surface is documented in a single reference file.
-5. The sandbox compiles and runs on a fresh Windows machine with Visual Studio 2022.
+3. A developer can launch a project from data/config files, including runtime and window configuration, without needing to hardcode `EngineConfig` in C++ for normal setup.
+4. Integration tests pass clean in CI (no windowed tests excluded).
+5. The Lua API surface is documented in a single reference file.
+6. The sandbox compiles and runs on a fresh Windows machine with Visual Studio 2022.
 
 ### Proposed Pre-v1 Work Items
 
@@ -712,9 +713,45 @@ Write a short quickstart in `README.md` (or a linked `docs/QUICKSTART.md`) cover
 5. How to show a UI panel
 6. How to run the tests
 
-#### Pre-v1 Item 5 — Fix Any Remaining Integration Test Gaps
+#### Pre-v1 Item 6 — Fix Any Remaining Integration Test Gaps
 
 Run `ctest --output-on-failure` and verify all 32+ tests pass clean on a fresh build. Confirm CI pipeline excludes only `windowed`-labeled tests.
+
+#### Pre-v1 Item 5 — JSON Runtime Configuration
+
+Add a data-driven runtime configuration path so an engine app can boot from config files instead of requiring C++ setup for normal window/runtime options.
+
+Minimum scope:
+
+1. Load runtime config from a JSON file.
+2. Support at least:
+   - window title
+   - width / height
+   - screen mode
+   - vsync
+   - target FPS
+   - background color
+3. Map cleanly onto `EngineConfig` without duplicating runtime behavior.
+4. Keep code-side `EngineConfig` support, but make JSON the preferred path for config-only applications.
+5. Fail clearly on invalid config values and keep defaults predictable.
+
+Why:
+
+- this is a direct requirement for projects that should run only from config files
+- it reduces recompilation friction for packaged/sample games
+- it complements scene/data-driven work by making boot/runtime setup data-driven too
+
+Suggested implementation direction:
+
+- add a small `RuntimeConfigLoader` or `EngineConfigLoader`
+- support one canonical JSON file such as `engine_config.json`
+- allow the standalone app/bootstrap path to consume it before runtime initialization
+
+Integration test:
+
+- load a deterministic JSON config file
+- verify parsed `EngineConfig` fields match expected values
+- verify invalid fields return a readable error or safe fallback behavior
 
 ### Post-v1 / Phase 6 Queue
 

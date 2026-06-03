@@ -14,6 +14,7 @@
 #include <sle/engine/StateMachineSystem.hpp>
 #include <sle/engine/PhysicsSystem.hpp>
 #include <sle/engine/RenderSystem.hpp>
+#include <sle/engine/ChunkSceneRuntimeState.hpp>
 #include <sle/engine/SceneManager.hpp>
 #include <sle/engine/ScriptApiImpl.hpp>
 #include <sle/engine/Context.hpp>
@@ -70,6 +71,7 @@ public:
 
 private:
     std::size_t runMainLoop(bool bounded, std::size_t maxFrames);
+    void refreshChunkRuntimeState();
 
     sle::core::EngineConfig config;
 
@@ -93,6 +95,7 @@ private:
     std::shared_ptr<sle::renderer::Shader> defaultDebugShader;
     sle::core::Camera2D camera{static_cast<float>(config.width), static_cast<float>(config.height)};
     sle::core::Timer timer;
+    ChunkSceneRuntimeState chunkRuntimeState;
     std::size_t debugFpsDocumentIndex = std::numeric_limits<std::size_t>::max();
 };
 

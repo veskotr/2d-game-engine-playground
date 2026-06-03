@@ -203,6 +203,7 @@ void loadTileLayer(
     int mapHeight,
     int mapTileWidth,
     int mapTileHeight,
+    const sle::ChunkManager& chunkManager,
     sle::entity::Scene& scene,
     const std::string& tmjPath,
     int renderLayerBase)
@@ -267,6 +268,11 @@ void loadTileLayer(
             auto& sprite = registry.addComponent<sle::components::SpriteRenderer>(entity);
             sprite.region = makeRegionFromTiledTile(*tileset, static_cast<int>(rawGid) - tileset->firstGid);
             sprite.layer = renderLayerBase;
+
+            const sle::ChunkCoord homeChunk = chunkManager.worldToChunk(transform.getPosition());
+            auto& chunkActivation = registry.addComponent<sle::components::ChunkActivationComponent>(entity);
+            chunkActivation.homeChunkX = homeChunk.x;
+            chunkActivation.homeChunkY = homeChunk.y;
         }
     }
 }
@@ -454,6 +460,7 @@ sle::core::Result<bool> TiledMapLoader::load(const std::string& tmjPath, sle::en
                 mapHeight,
                 mapTileWidth,
                 mapTileHeight,
+                chunkManager,
                 scene,
                 tmjPath,
                 tileLayerIndex);

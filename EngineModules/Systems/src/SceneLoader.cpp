@@ -179,6 +179,7 @@ void loadSpriteRenderer(const Json& componentJson, sle::entity::Entity entity, s
     }
 
     component.color = readVec4OrWarn(componentJson, "color", component.color, context);
+    component.visible = readValueOrWarn<bool>(componentJson, "visible", component.visible, context);
     component.layer = readValueOrWarn<int>(componentJson, "layer", component.layer, context);
 }
 

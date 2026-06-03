@@ -4,6 +4,7 @@ add_library(sle_engine STATIC
     src/ChunkActivityTracker.cpp
     src/ChunkManager.cpp
     src/ChunkOwnershipIndex.cpp
+    src/ChunkSceneRuntimeState.cpp
     src/SceneManager.cpp
     src/SceneLoader.cpp
     src/TiledMapLoader.cpp

@@ -23,6 +23,8 @@ In Progress.
 - Keep chunking camera-driven and optional to map-backed scenes only.
 - Land chunk runtime in small vertical slices: math/window primitives first, events/activation integration second.
 - Keep chunk-driven activation configurable: global engine mode first, per-entity override second.
+- After the `Tiled` map system reaches a stable milestone, pause and insert the next v1-facing roadmap item before continuing deeper into later systems.
+- The v1 roadmap now includes JSON-driven runtime configuration so config-only projects can define window/runtime options without recompiling C++.
 
 ## Files Changed For This Task
 
@@ -38,14 +40,17 @@ In Progress.
 - `EngineModules/Systems/include/sle/engine/ChunkActivityTracker.hpp`
 - `EngineModules/Systems/include/sle/engine/ChunkActivationController.hpp`
 - `EngineModules/Systems/include/sle/engine/ChunkMapComponent.hpp`
+- `EngineModules/Systems/include/sle/engine/ChunkSceneRuntimeState.hpp`
 - `EngineModules/Systems/include/sle/engine/ChunkOwnershipIndex.hpp`
 - `EngineModules/Systems/src/ChunkManager.cpp`
 - `EngineModules/Systems/src/ChunkActivityTracker.cpp`
 - `EngineModules/Systems/src/ChunkActivationController.cpp`
+- `EngineModules/Systems/src/ChunkSceneRuntimeState.cpp`
 - `EngineModules/Systems/src/ChunkOwnershipIndex.cpp`
 - `EngineModules/Events/include/sle/events/ChunkEvents.hpp`
 - `EngineModules/Core/include/sle/core/ChunkActivationConfig.hpp`
 - `EngineModules/Scene/include/sle/scene/components/ChunkActivationComponent.hpp`
+- `EngineModules/Scene/include/sle/scene/components/SpriteRenderer.hpp`
 - `EngineModules/Core/include/sle/core/EngineConfig.hpp`
 - `EngineModules/Renderer/include/sle/renderer/Renderer.hpp`
 - `EngineModules/Renderer/src/Renderer.cpp`
@@ -58,9 +63,11 @@ In Progress.
 - `tests/integration/systems/integration_chunk_manager_window_path.cpp`
 - `tests/integration/systems/integration_chunk_activity_tracker_events_path.cpp`
 - `tests/integration/systems/integration_chunk_activation_controller_path.cpp`
+- `tests/integration/systems/integration_chunk_scene_runtime_state_path.cpp`
 - `tests/integration/systems/integration_tiled_scene_loader_path.cpp`
 - `tests/integration/systems/integration_tiled_chunk_assignment_path.cpp`
 - `tests/integration/systems/integration_tiled_chunk_map_component_path.cpp`
+- `tests/integration/systems/integration_tiled_tile_chunk_visibility_path.cpp`
 - `tests/integration/systems/integration_chunk_ownership_index_path.cpp`
 - `tests/integration/CMakeLists.txt`
 
@@ -73,6 +80,8 @@ In Progress.
 - `cmake --build build/debug --config Debug --target integration_tiled_chunk_map_component_path` succeeded on June 2, 2026.
 - `cmake --build build/debug --config Debug --target integration_tiled_chunk_assignment_path` succeeded on June 2, 2026.
 - `cmake --build build/debug --config Debug --target integration_chunk_ownership_index_path` succeeded on June 2, 2026.
+- `cmake --build build/debug --config Debug --target integration_chunk_scene_runtime_state_path` succeeded on June 3, 2026.
+- `cmake --build build/debug --config Debug --target integration_tiled_tile_chunk_visibility_path` succeeded on June 3, 2026.
 - `cmake --build build/debug --config Debug --target example_sandbox` succeeded on June 2, 2026 after the UI alignment and F3 FPS overlay slice.
 - `ctest -C Debug -R integration_tiled_scene_loader_path --output-on-failure` passed on June 2, 2026.
 - `ctest -C Debug -R integration_chunk_manager_window_path --output-on-failure` passed on June 2, 2026.
@@ -81,6 +90,10 @@ In Progress.
 - `ctest -C Debug -R integration_tiled_chunk_map_component_path --output-on-failure` passed on June 2, 2026.
 - `ctest -C Debug -R integration_tiled_chunk_assignment_path --output-on-failure` passed on June 2, 2026.
 - `ctest -C Debug -R integration_chunk_ownership_index_path --output-on-failure` passed on June 2, 2026.
+- `ctest -C Debug -R integration_chunk_scene_runtime_state_path --output-on-failure` passed on June 3, 2026.
+- `ctest -C Debug -R integration_tiled_tile_chunk_visibility_path --output-on-failure` passed on June 3, 2026.
+- Regression check: `integration_scene_loader_roundtrip_path`, `integration_tiled_scene_loader_path`, `integration_tiled_chunk_assignment_path`, `integration_tiled_chunk_map_component_path`, `integration_tiled_tile_chunk_visibility_path`, `integration_chunk_ownership_index_path`, `integration_chunk_activation_controller_path`, and `integration_chunk_scene_runtime_state_path` all passed on June 3, 2026 after the tile visibility slice.
+- Regression check: `integration_tiled_scene_loader_path`, `integration_tiled_chunk_assignment_path`, `integration_tiled_chunk_map_component_path`, `integration_chunk_ownership_index_path`, `integration_chunk_activation_controller_path`, and `integration_chunk_scene_runtime_state_path` all passed on June 3, 2026 after the runtime hook slice.
 - Regression check: `integration_tiled_scene_loader_path`, `integration_tiled_chunk_assignment_path`, `integration_tiled_chunk_map_component_path`, `integration_chunk_ownership_index_path`, and `integration_chunk_activation_controller_path` all passed on June 2, 2026 after the chunk metadata slice.
 - Regression check: `integration_tiled_scene_loader_path`, `integration_tiled_chunk_assignment_path`, `integration_chunk_ownership_index_path`, `integration_chunk_manager_window_path`, and `integration_chunk_activity_tracker_events_path` all passed on June 2, 2026 after the chunk activation controller slice.
 - Regression check: `integration_scene_loader_roundtrip_path` and `integration_scene_loader_negative_path` both passed on June 2, 2026.
@@ -89,7 +102,8 @@ In Progress.
 
 1. Record `Stream C1` as partially complete in the chunked-world plan.
 2. Re-run the sandbox interactively to validate the world-space UI fix and the new F3 FPS overlay behavior.
-3. Wire the new chunk map metadata and activation controller into the runtime/update flow for map-backed scenes.
-4. Promote chunk state from test-time/controller-only logic into live scene-owned runtime state transitions.
-5. Extend activation policy to chunked tile/runtime content before tilemap `A*`.
-6. Keep documenting each completed slice as it lands.
+3. Promote chunk state from activation-only behavior into richer live scene-owned runtime state transitions.
+4. Move from per-tile entity loading toward chunk-owned tile/runtime data where that simplifies rendering and future pathfinding.
+5. Add walkability extraction and begin tilemap `A*`.
+6. Pause after the `Tiled` map milestone and schedule JSON runtime-config support into the next v1 implementation block.
+7. Keep documenting each completed slice as it lands.

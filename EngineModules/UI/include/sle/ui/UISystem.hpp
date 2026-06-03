@@ -20,6 +20,7 @@ public:
     void update(UIFrameContext& ctx);
     void setDefaultShaderID(uint32_t shaderID) { defaultShaderID = shaderID; }
     bool setBinding(const std::string& key, const UIValue& value);
+    bool setDocumentVisible(std::size_t index, bool visible);
 
     UIDocument& createDocument(UIDocumentDescriptor descriptor);
     const std::vector<UIDocument>& getDocuments() const { return documents; }

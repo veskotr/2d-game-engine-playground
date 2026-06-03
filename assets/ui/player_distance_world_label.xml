@@ -1,3 +1,3 @@
 <Panel id="distancePanel" x="-58" y="40" width="136" height="22" color="#0B1224A0">
-    <Label id="distanceLabel" x="8" y="4" fontSize="13" color="#E8F2FF">Dist: {{entity.target.npc.distance}}</Label>
+    <Label id="distanceLabel" x="8" y="0" width="120" height="22" fontSize="13" textVAlign="middle" color="#E8F2FF">Dist: {{entity.target.npc.distance}}</Label>
 </Panel>

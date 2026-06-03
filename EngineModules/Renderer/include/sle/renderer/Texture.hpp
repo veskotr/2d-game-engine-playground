@@ -6,13 +6,28 @@
 
 namespace sle::renderer {
 
+enum class TextureWrap
+{
+    Default,
+    Repeat,
+    ClampToEdge
+};
+
+enum class TextureFilter
+{
+    Default,
+    Linear,
+    Nearest,
+    LinearMipmapLinear
+};
+
 struct TextureLoadOptions
 {
     bool generateMipmaps = false;
-    int wrapS = 0;
-    int wrapT = 0;
-    int minFilter = 0;
-    int magFilter = 0;
+    TextureWrap wrapS = TextureWrap::Default;
+    TextureWrap wrapT = TextureWrap::Default;
+    TextureFilter minFilter = TextureFilter::Default;
+    TextureFilter magFilter = TextureFilter::Default;
 };
 
 class Texture

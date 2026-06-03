@@ -272,21 +272,13 @@ bool decodeUtf8CodePoint(const std::string& text, std::size_t& index, uint32_t& 
     return true;
 }
 
-glm::vec2 rotate2D(const glm::vec2& value, float radians)
+glm::mat4 buildQuadModel(const glm::vec2& pivot, const glm::vec2& position, const glm::vec2& size, float rotation)
 {
-    const float c = std::cos(radians);
-    const float s = std::sin(radians);
-    return {
-        value.x * c - value.y * s,
-        value.x * s + value.y * c
-    };
-}
-
-glm::mat4 buildQuadModel(const glm::vec2& position, const glm::vec2& size, float rotation)
-{
+    const glm::vec2 localOffset = position - pivot;
     glm::mat4 model(1.0f);
-    model = glm::translate(model, glm::vec3(position.x + size.x * 0.5f, position.y + size.y * 0.5f, 0.0f));
+    model = glm::translate(model, glm::vec3(pivot, 0.0f));
     model = glm::rotate(model, rotation, glm::vec3(0.0f, 0.0f, 1.0f));
+    model = glm::translate(model, glm::vec3(localOffset.x + size.x * 0.5f, localOffset.y + size.y * 0.5f, 0.0f));
     model = glm::scale(model, glm::vec3(size.x, size.y, 1.0f));
     return model;
 }
@@ -397,6 +389,7 @@ void renderElement(
     UIFrameContext& ctx,
     UIDocument& document,
     const UIElement& element,
+    const glm::vec2& documentPivot,
     const glm::vec2& parentOrigin,
     float scaleFactor,
     float rotation,
@@ -414,8 +407,7 @@ void renderElement(
         parseFloat(element, "x", 0.0f) * scaleFactor,
         parseFloat(element, "y", 0.0f) * scaleFactor * ySign
     };
-    const glm::vec2 rotatedOffset = rotate2D(localOffset, rotation);
-    const glm::vec2 elementOrigin = parentOrigin + rotatedOffset;
+    const glm::vec2 elementOrigin = parentOrigin + localOffset;
     glm::vec2 renderPosition = elementOrigin;
     if (yAxisDown)
         renderPosition.y -= size.y;
@@ -447,11 +439,12 @@ void renderElement(
     }
     const glm::vec2 anchoredOrigin   = elementOrigin   + anchorOffset;
     const glm::vec2 anchoredRenderPos = renderPosition + anchorOffset;
+    const glm::vec2 layoutTopLeft = anchoredRenderPos + glm::vec2{0.0f, size.y};
 
     if (size.x > 0.0f && size.y > 0.0f && element.type != "Label")
     {
         renderer::QuadCommand cmd;
-        cmd.modelMatrix = buildQuadModel(anchoredRenderPos, size, rotation);
+        cmd.modelMatrix = buildQuadModel(documentPivot, anchoredRenderPos, size, rotation);
         cmd.shader_id = shaderID;
         cmd.layer = document.getDescriptor().layer;
         cmd.color = element.type == "Button"
@@ -470,11 +463,24 @@ void renderElement(
 
         // Determine text lines (wrapping or single-line with explicit newlines).
         const std::string alignAttr = getAttributeValue(element, "textAlign"); // left|center|right
+        const std::string verticalAlignAttr = getAttributeValue(element, "textVAlign"); // top|middle|bottom
         const bool doWrap = getAttributeValue(element, "wrap") == "true";
         const float wrapWidth = doWrap ? size.x : 0.0f;
         const std::vector<std::string> lines = wrapTextToLines(font, textScale, text, wrapWidth);
 
-        float penY = font.getAscent() * textScale;
+        const glm::vec2 textTopLeft = size.y > 0.0f ? layoutTopLeft : anchoredOrigin;
+        const float lineHeight = font.getLineHeight() * textScale;
+        const float textBlockHeight = lineHeight * static_cast<float>(std::max<std::size_t>(1, lines.size()));
+        float baselineFromTop = font.getAscent() * textScale;
+
+        if (size.y > 0.0f)
+        {
+            const float freeSpace = std::max(0.0f, size.y - textBlockHeight);
+            if (verticalAlignAttr == "middle" || verticalAlignAttr == "center")
+                baselineFromTop += freeSpace * 0.5f;
+            else if (verticalAlignAttr == "bottom")
+                baselineFromTop += freeSpace;
+        }
 
         for (const std::string& lineText : lines)
         {
@@ -508,9 +514,9 @@ void renderElement(
 
                 const glm::vec2 glyphOffset{
                     penX + glyphInfo.bearing.x * textScale,
-                    penY + glyphInfo.bearing.y * textScale + glyphInfo.size.y * textScale
+                    -(baselineFromTop + glyphInfo.bearing.y * textScale + glyphInfo.size.y * textScale)
                 };
-                const glm::vec2 glyphPosition = anchoredOrigin + rotate2D(glyphOffset, rotation);
+                const glm::vec2 glyphPosition = textTopLeft + glyphOffset;
                 const glm::vec2 glyphSize = glyphInfo.size * textScale;
                 if (glyphSize.x <= 0.0f || glyphSize.y <= 0.0f)
                 {
@@ -519,7 +525,7 @@ void renderElement(
                 }
 
                 renderer::QuadCommand glyphCommand;
-                glyphCommand.modelMatrix = buildQuadModel(glyphPosition, glyphSize, rotation);
+                glyphCommand.modelMatrix = buildQuadModel(documentPivot, glyphPosition, glyphSize, rotation);
                 glyphCommand.color = textColor;
                 glyphCommand.uvRect = {0.0f, 1.0f, 1.0f, 0.0f};
                 glyphCommand.texture_id = glyphInfo.texture->getID();
@@ -531,7 +537,7 @@ void renderElement(
                 previousCodePoint = codePoint;
             }
 
-            penY += font.getLineHeight() * textScale;
+            baselineFromTop += lineHeight;
         }
     }
 
@@ -546,8 +552,9 @@ void renderElement(
         });
     }
 
+    const bool childLayoutYAxisDown = (size.x > 0.0f || size.y > 0.0f) ? true : yAxisDown;
     for (const auto& child : element.children)
-        renderElement(ctx, document, child, anchoredOrigin, scaleFactor, rotation, shaderID, yAxisDown, hitTargets);
+        renderElement(ctx, document, child, documentPivot, layoutTopLeft, scaleFactor, rotation, shaderID, childLayoutYAxisDown, hitTargets);
 }
 
 void dispatchClick(
@@ -590,6 +597,15 @@ bool UISystem::setBinding(const std::string& key, const UIValue& value)
         changed |= document.getBindings().set(key, value);
 
     return changed;
+}
+
+bool UISystem::setDocumentVisible(std::size_t index, bool visible)
+{
+    if (index >= documents.size())
+        return false;
+
+    documents[index].setVisible(visible);
+    return true;
 }
 
 void UISystem::shutdown()
@@ -783,7 +799,7 @@ void UISystem::submitDocument(UIFrameContext& ctx, UIDocument& document)
 
     std::vector<HitTarget> hitTargets;
     hitTargets.reserve(16);
-    renderElement(ctx, document, *document.getLayoutRoot(), basePosition, scaleFactor, rotation, defaultShaderID, yAxisDown, hitTargets);
+    renderElement(ctx, document, *document.getLayoutRoot(), basePosition, basePosition, scaleFactor, rotation, defaultShaderID, yAxisDown, hitTargets);
 
     dispatchClick(ctx, scriptRuntime, hitTargets, mouseToWorldUiPoint(ctx.camera));
 }

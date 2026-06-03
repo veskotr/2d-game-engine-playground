@@ -1,4 +1,6 @@
 #pragma once
+#include <sle/core/ChunkActivationConfig.hpp>
+#include <glm/vec4.hpp>
 #include <string>
 
 namespace sle::core {
@@ -21,6 +23,8 @@ struct EngineConfig
     ScreenMode screenMode = ScreenMode::Windowed;
 
     int targetFPS = 0;
+    glm::vec4 backgroundColor{0.75f, 0.75f, 0.75f, 1.0f};
+    ChunkActivationConfig chunkActivation{};
 };
 
 } // namespace sle::core

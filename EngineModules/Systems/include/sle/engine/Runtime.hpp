@@ -22,6 +22,7 @@
 #include <sle/physics/PhysicsWorld.hpp>
 
 #include <glm/vec2.hpp>
+#include <limits>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -92,6 +93,7 @@ private:
     std::shared_ptr<sle::renderer::Shader> defaultDebugShader;
     sle::core::Camera2D camera{static_cast<float>(config.width), static_cast<float>(config.height)};
     sle::core::Timer timer;
+    std::size_t debugFpsDocumentIndex = std::numeric_limits<std::size_t>::max();
 };
 
 } // namespace sle

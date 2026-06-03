@@ -79,7 +79,9 @@ bool UIFontResource::buildGlyph(uint32_t codepoint, UIFontGlyphInfo& outInfo)
 
     auto texture = std::make_shared<sle::renderer::Texture>();
     sle::renderer::TextureLoadOptions textureOptions;
-    textureOptions.generateMipmaps = true;
+    textureOptions.generateMipmaps = false;
+    textureOptions.minFilter = sle::renderer::TextureFilter::Linear;
+    textureOptions.magFilter = sle::renderer::TextureFilter::Linear;
     if (!texture->loadFromRGBAData(std::max(1, width), std::max(1, height), rgba.data(), textureOptions))
         return false;
 

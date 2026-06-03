@@ -10,10 +10,36 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <string>
 
 namespace sle
 {
+    namespace
+    {
+        std::string resolveAssetPath(const std::string& relativePath)
+        {
+            namespace fs = std::filesystem;
+
+            fs::path path(relativePath);
+            if (fs::exists(path))
+                return path.lexically_normal().generic_string();
+
+            fs::path current = fs::current_path();
+            while (!current.empty())
+            {
+                fs::path candidate = current / relativePath;
+                if (fs::exists(candidate))
+                    return candidate.lexically_normal().generic_string();
+
+                if (current == current.root_path())
+                    break;
+                current = current.parent_path();
+            }
+
+            return relativePath;
+        }
+    }
 
     using namespace sle::core;
     using namespace sle::entity;
@@ -162,6 +188,7 @@ namespace sle
         auto rendererResult = renderer.init();
         if (!rendererResult.ok())
             return Result<bool>::error(rendererResult.error());
+        renderer.setClearColor(config.backgroundColor);
 
         defaultQuadShader = Resources::create<Shader>(
             "default_quad_shader",
@@ -198,6 +225,17 @@ namespace sle
             return Result<bool>::error(uiResult.error());
         }
         uiSystem.setDefaultShaderID(defaultQuadShader->getID());
+
+        {
+            sle::ui::UIDocumentDescriptor descriptor;
+            descriptor.layoutAsset = resolveAssetPath("assets/ui/fps_hud.xml");
+            descriptor.fontAsset = resolveAssetPath("assets/fonts/Roboto-Regular.ttf");
+            descriptor.spaceMode = sle::components::UISpaceMode::Screen;
+            descriptor.visible = false;
+            descriptor.layer = 1000;
+            uiSystem.createDocument(std::move(descriptor));
+            debugFpsDocumentIndex = uiSystem.getDocuments().size() - 1;
+        }
 
         Input::init(window.getNative());
 
@@ -280,6 +318,7 @@ namespace sle
             {
                 const bool enabled = !renderSystem.isPhysicsDebugEnabled();
                 renderSystem.setPhysicsDebugEnabled(enabled);
+                uiSystem.setDocumentVisible(debugFpsDocumentIndex, enabled);
                 Log::info("Physics debug rendering: {}", enabled ? "ON" : "OFF");
             }
 

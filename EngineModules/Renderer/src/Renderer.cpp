@@ -132,7 +132,7 @@ namespace sle::renderer
     {
         activeInstanceVBOIndex = (activeInstanceVBOIndex + 1) % instanceVBOs.size();
 
-        GL_CALL(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
+        GL_CALL(glClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a));
         GL_CALL(glClear(GL_COLOR_BUFFER_BIT));
     }
 

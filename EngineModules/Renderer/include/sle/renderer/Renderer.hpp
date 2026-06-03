@@ -34,6 +34,7 @@ namespace sle::renderer
 
         void setCamera(const sle::core::Camera2D *cam);
         void setDebugShaderID(uint32_t shaderID) { debugProgram = shaderID; }
+        void setClearColor(const glm::vec4& color) { clearColor = color; }
 
     private:
         using OrderedBatchEntry = std::pair<BatchKey, std::vector<QuadCommand>*>;
@@ -54,6 +55,7 @@ namespace sle::renderer
         uint32_t debugVBO = 0;
         std::vector<LineCommand> lineCommands;
         std::vector<PointCommand> pointCommands;
+        glm::vec4 clearColor{0.75f, 0.75f, 0.75f, 1.0f};
 
         void createQuad();
         void createDebugPipeline();

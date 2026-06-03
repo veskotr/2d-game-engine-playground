@@ -1,0 +1,53 @@
+{
+  "type": "map",
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "width": 3,
+  "height": 3,
+  "tilewidth": 32,
+  "tileheight": 32,
+  "infinite": false,
+  "layers": [
+    {
+      "type": "objectgroup",
+      "name": "objects",
+      "visible": true,
+      "objects": [
+        {
+          "id": 1,
+          "name": "trigger_zone",
+          "type": "Zone",
+          "x": 32,
+          "y": 32,
+          "width": 32,
+          "height": 32,
+          "properties": [
+            { "name": "zoneId", "type": "string", "value": "map_zone" }
+          ]
+        },
+        {
+          "id": 2,
+          "name": "wall",
+          "type": "StaticCollider",
+          "x": 64,
+          "y": 64,
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": 3,
+          "name": "scripted_marker",
+          "type": "ScriptEntity",
+          "x": 0,
+          "y": 0,
+          "width": 32,
+          "height": 32,
+          "properties": [
+            { "name": "script", "type": "string", "value": "../../../assets/scripts/player_move.lua" }
+          ]
+        }
+      ]
+    }
+  ],
+  "tilesets": []
+}

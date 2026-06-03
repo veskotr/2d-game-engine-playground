@@ -1,7 +1,12 @@
 add_library(sle_engine STATIC
     src/ScriptApiImpl.cpp
+    src/ChunkActivationController.cpp
+    src/ChunkActivityTracker.cpp
+    src/ChunkManager.cpp
+    src/ChunkOwnershipIndex.cpp
     src/SceneManager.cpp
     src/SceneLoader.cpp
+    src/TiledMapLoader.cpp
     src/Runtime.cpp
     src/AnimationSystem.cpp
     src/TransformSystem.cpp

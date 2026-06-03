@@ -1,0 +1,16 @@
+{
+  "scene": "test_tiled_scene",
+  "tiledMap": "../maps/test_object_layer.tmj",
+  "entities": [
+    {
+      "name": "extra_entity",
+      "components": {
+        "Transform": {
+          "position": [5.0, 7.0],
+          "rotation": 0.0,
+          "scale": [2.0, 2.0]
+        }
+      }
+    }
+  ]
+}

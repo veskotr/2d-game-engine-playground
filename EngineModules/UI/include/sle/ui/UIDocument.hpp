@@ -45,6 +45,7 @@ public:
     void setLayoutResource(std::shared_ptr<UILayoutResource> resource) { layoutResource = std::move(resource); }
     void setFontResource(std::shared_ptr<UIFontResource> resource) { fontResource = std::move(resource); }
     void setBehaviorResource(std::shared_ptr<sle::scripting::ScriptResource> resource) { behaviorResource = std::move(resource); }
+    void setVisible(bool visible) { descriptor.visible = visible; }
     void setLayoutRoot(UIElement root);
     void setLastError(std::string error);
     void clearLastError();

@@ -10,6 +10,54 @@ namespace sle::renderer {
 
 using sle::core::Log;
 
+namespace {
+
+int toGLWrap(TextureWrap wrap, int fallback)
+{
+    switch (wrap)
+    {
+    case TextureWrap::Repeat:
+        return GL_REPEAT;
+    case TextureWrap::ClampToEdge:
+        return GL_CLAMP_TO_EDGE;
+    case TextureWrap::Default:
+    default:
+        return fallback;
+    }
+}
+
+int toGLMinFilter(TextureFilter filter, bool generateMipmaps)
+{
+    switch (filter)
+    {
+    case TextureFilter::Linear:
+        return GL_LINEAR;
+    case TextureFilter::Nearest:
+        return GL_NEAREST;
+    case TextureFilter::LinearMipmapLinear:
+        return GL_LINEAR_MIPMAP_LINEAR;
+    case TextureFilter::Default:
+    default:
+        return generateMipmaps ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR;
+    }
+}
+
+int toGLMagFilter(TextureFilter filter)
+{
+    switch (filter)
+    {
+    case TextureFilter::Nearest:
+        return GL_NEAREST;
+    case TextureFilter::LinearMipmapLinear:
+    case TextureFilter::Linear:
+    case TextureFilter::Default:
+    default:
+        return GL_LINEAR;
+    }
+}
+
+} // namespace
+
 Texture::~Texture()
 {
     if (textureID != 0)
@@ -41,12 +89,10 @@ bool Texture::loadFromFiles(const std::string& imagePath, const TextureLoadOptio
     GL_CALL(glGenTextures(1, &textureID));
     GL_CALL(glBindTexture(GL_TEXTURE_2D, textureID));
 
-    const int wrapS = options.wrapS != 0 ? options.wrapS : GL_REPEAT;
-    const int wrapT = options.wrapT != 0 ? options.wrapT : GL_REPEAT;
-    const int minFilter = options.minFilter != 0
-        ? options.minFilter
-        : (options.generateMipmaps ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
-    const int magFilter = options.magFilter != 0 ? options.magFilter : GL_LINEAR;
+    const int wrapS = toGLWrap(options.wrapS, GL_REPEAT);
+    const int wrapT = toGLWrap(options.wrapT, GL_REPEAT);
+    const int minFilter = toGLMinFilter(options.minFilter, options.generateMipmaps);
+    const int magFilter = toGLMagFilter(options.magFilter);
 
     GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapS));
     GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapT));
@@ -79,12 +125,10 @@ bool Texture::loadFromRGBAData(int textureWidth, int textureHeight, const unsign
     GL_CALL(glGenTextures(1, &textureID));
     GL_CALL(glBindTexture(GL_TEXTURE_2D, textureID));
 
-    const int wrapS = options.wrapS != 0 ? options.wrapS : GL_CLAMP_TO_EDGE;
-    const int wrapT = options.wrapT != 0 ? options.wrapT : GL_CLAMP_TO_EDGE;
-    const int minFilter = options.minFilter != 0
-        ? options.minFilter
-        : (options.generateMipmaps ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
-    const int magFilter = options.magFilter != 0 ? options.magFilter : GL_LINEAR;
+    const int wrapS = toGLWrap(options.wrapS, GL_CLAMP_TO_EDGE);
+    const int wrapT = toGLWrap(options.wrapT, GL_CLAMP_TO_EDGE);
+    const int minFilter = toGLMinFilter(options.minFilter, options.generateMipmaps);
+    const int magFilter = toGLMagFilter(options.magFilter);
 
     GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapS));
     GL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapT));

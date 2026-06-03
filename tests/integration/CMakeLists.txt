@@ -274,6 +274,62 @@ sle_add_integration_test(
 )
 
 sle_add_integration_test(
+    integration_tiled_scene_loader_path
+    systems/integration_tiled_scene_loader_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_tiled_chunk_assignment_path
+    systems/integration_tiled_chunk_assignment_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_tiled_chunk_map_component_path
+    systems/integration_tiled_chunk_map_component_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_chunk_ownership_index_path
+    systems/integration_chunk_ownership_index_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_chunk_manager_window_path
+    systems/integration_chunk_manager_window_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_chunk_activity_tracker_events_path
+    systems/integration_chunk_activity_tracker_events_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_chunk_activation_controller_path
+    systems/integration_chunk_activation_controller_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
     integration_scripting_animator_api_surface_path
     scripting/integration_scripting_animator_api_surface_path.cpp
     scripting

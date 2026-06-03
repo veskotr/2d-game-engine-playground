@@ -1,4 +1,5 @@
 #include <sle/engine/SceneLoader.hpp>
+#include <sle/engine/TiledMapLoader.hpp>
 
 #include <sle/core/Log.hpp>
 #include <sle/renderer/Texture.hpp>
@@ -406,13 +407,29 @@ sle::core::Result<bool> SceneLoader::load(const std::string& jsonPath, sle::enti
     if (!root.is_object())
         return sle::core::Result<bool>::error("Scene JSON root must be an object: " + jsonPath);
 
-    if (!root.contains("entities") || !root["entities"].is_array())
-        return sle::core::Result<bool>::error("Scene JSON must contain an 'entities' array: " + jsonPath);
+    const bool hasTiledMap = root.contains("tiledMap") && root["tiledMap"].is_string();
+    const bool hasEntities = root.contains("entities") && root["entities"].is_array();
+    if (!hasTiledMap && !hasEntities)
+        return sle::core::Result<bool>::error("Scene JSON must contain a 'tiledMap' string and/or an 'entities' array: " + jsonPath);
+
+    namespace fs = std::filesystem;
+    const fs::path sceneDirectory = fs::path(jsonPath).parent_path();
+
+    if (hasTiledMap)
+    {
+        const std::string tiledMapPath = root["tiledMap"].get<std::string>();
+        const std::string resolvedTiledMapPath =
+            resolveAssetPath((sceneDirectory / fs::path(tiledMapPath)).lexically_normal().generic_string());
+        auto tiledLoadResult = sle::TiledMapLoader::load(resolvedTiledMapPath, scene);
+        if (!tiledLoadResult.ok())
+            return tiledLoadResult;
+    }
 
     auto& registry = scene.getRegistry();
 
     std::size_t entityIndex = 0;
-    for (const auto& entityJson : root["entities"])
+    const Json& entities = hasEntities ? root["entities"] : Json::array();
+    for (const auto& entityJson : entities)
     {
         if (!entityJson.is_object())
         {

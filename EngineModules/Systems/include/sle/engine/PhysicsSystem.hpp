@@ -1,5 +1,6 @@
 #pragma once
 #include <sle/engine/Context.hpp>
+#include <sle/scene/Entity.hpp>
 #include <unordered_map>
 #include <unordered_set>
 #include <cstdint>
@@ -20,10 +21,12 @@ class PhysicsSystem
 {
 public:
     void update(Context& ctx);
+    void releaseEntity(sle::entity::Scene& scene, sle::physics::PhysicsWorld* world, sle::entity::Entity entity);
 
 private:
     // Helper functions for component lifecycle
     void createNewPhysicsBodies(const Context& ctx);
+    void syncActivationAndFixtures(const Context& ctx);
     void syncTransformToPhysics(const Context& ctx);
     void stepPhysics(const Context& ctx);
     void syncPhysicsToTransform(const Context& ctx);

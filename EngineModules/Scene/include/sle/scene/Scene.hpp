@@ -4,6 +4,7 @@
 #include <sle/events/EventBus.hpp>
 #include <unordered_map>
 #include <vector>
+#include <memory>
 
 namespace sle::entity {
 
@@ -21,7 +22,8 @@ public:
 
     // Hierarchy
     // Pass an invalid Entity as parent to make the child a root.
-    void setParent(Entity child, Entity parent);
+    // Returns false for dead entities, self-parenting, or hierarchy cycles; no mutation.
+    bool setParent(Entity child, Entity parent);
     Entity getParent(Entity entity) const;
     const std::vector<Entity>& getChildren(Entity entity) const;
     const std::vector<Entity>& getRoots() const { return roots; }
@@ -48,6 +50,14 @@ public:
     // Destroys all entities and clears all hierarchy data.
     void destroy();
 
+    // Stage file-loaded data with fresh IDs, leaving this scene untouched.
+    std::unique_ptr<Scene> createStagingScene() const;
+    // Commit staged data. The live event bus keeps its address/token sequence,
+    // but old subscriptions and deferred scene events are cleared on success.
+    void replaceWith(Scene& staged);
+    // Reserve staging IDs before teardown callbacks can create live entities.
+    void reserveStagedEntityIds(const Scene& staged);
+
 private:
     void destroyEntityInternal(Entity entity);
     void detachFromParent(Entity entity);
@@ -55,7 +65,6 @@ private:
 
     Registry registry;
     sle::events::EventBus eventBus;
-    std::unordered_map<uint32_t, Entity> parentMap;                    // entityID -> parent (absent = root)
     std::unordered_map<uint32_t, std::vector<Entity>> childrenMap;     // entityID -> children
     std::vector<Entity> roots;
 

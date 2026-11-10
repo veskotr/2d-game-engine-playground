@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <unordered_set>
 
+namespace sle::entity { class Registry; }
+
 namespace sle::events { class EventBus; }
 
 namespace sle::scripting { class ScriptRuntime; }
@@ -13,8 +15,8 @@ namespace sle {
 
 struct Context;
 
-// Placeholder for future Lua/scripting integration.
-// Currently a no-op that can be extended to update script components.
+// Manages per-entity script lifetime and updates. Chunk suspension pauses updates
+// while preserving existing Lua instances.
 class ScriptSystem
 {
 public:
@@ -22,7 +24,7 @@ public:
     void update(Context& ctx);
 
 private:
-    void ensureStateMachineSubscription(sle::events::EventBus& eventBus);
+    void ensureStateMachineSubscription(sle::events::EventBus& eventBus, sle::entity::Registry& registry);
 
     sle::scripting::ScriptRuntime* scriptRuntime = nullptr;
     std::unordered_set<uint32_t> activeScriptEntities;

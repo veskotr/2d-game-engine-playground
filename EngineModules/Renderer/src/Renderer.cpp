@@ -92,11 +92,9 @@ namespace sle::renderer
             debugVAO = 0;
         }
 
-        if (debugProgram != 0)
-        {
-            GL_CALL(glDeleteProgram(debugProgram));
-            debugProgram = 0;
-        }
+        // The debug shader is borrowed through setDebugShaderID(); its owner
+        // releases the program while the context is still alive.
+        debugProgram = 0;
 
         batches.clear();
         lineCommands.clear();

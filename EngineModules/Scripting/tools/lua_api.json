@@ -1,0 +1,1293 @@
+{
+  "schema_version": 1,
+  "script_api": "../include/sle/scripting/ScriptApi.hpp",
+  "input_header": "../../Platform/include/sle/platform/Input.hpp",
+  "glfw_constants_reference": "GLFW 3 public key/button codes: https://www.glfw.org/docs/3.3/group__keys.html and group__buttons.html (stable ABI codes; no dependency checkout needed).",
+  "glfw_constants": {
+    "GLFW_KEY_A": 65,
+    "GLFW_KEY_C": 67,
+    "GLFW_KEY_D": 68,
+    "GLFW_KEY_S": 83,
+    "GLFW_KEY_W": 87,
+    "GLFW_KEY_Q": 81,
+    "GLFW_KEY_E": 69,
+    "GLFW_KEY_R": 82,
+    "GLFW_KEY_F": 70,
+    "GLFW_KEY_0": 48,
+    "GLFW_KEY_1": 49,
+    "GLFW_KEY_2": 50,
+    "GLFW_KEY_3": 51,
+    "GLFW_KEY_4": 52,
+    "GLFW_KEY_5": 53,
+    "GLFW_KEY_6": 54,
+    "GLFW_KEY_7": 55,
+    "GLFW_KEY_8": 56,
+    "GLFW_KEY_9": 57,
+    "GLFW_KEY_F3": 292,
+    "GLFW_KEY_UP": 265,
+    "GLFW_KEY_DOWN": 264,
+    "GLFW_KEY_LEFT": 263,
+    "GLFW_KEY_RIGHT": 262,
+    "GLFW_KEY_SPACE": 32,
+    "GLFW_KEY_ENTER": 257,
+    "GLFW_KEY_TAB": 258,
+    "GLFW_KEY_ESCAPE": 256,
+    "GLFW_KEY_LEFT_SHIFT": 340,
+    "GLFW_KEY_RIGHT_SHIFT": 344,
+    "GLFW_KEY_LEFT_CONTROL": 341,
+    "GLFW_KEY_RIGHT_CONTROL": 345,
+    "GLFW_MOUSE_BUTTON_LEFT": 0,
+    "GLFW_MOUSE_BUTTON_RIGHT": 1,
+    "GLFW_MOUSE_BUTTON_MIDDLE": 2
+  },
+  "tables": {
+    "engineTable": "Engine",
+    "physicsTable": "Engine.Physics",
+    "inputTable": "Engine.Input",
+    "cameraTable": "Engine.Camera",
+    "eventsTable": "Engine.Events",
+    "componentsTable": "Engine.Components",
+    "keysTable": "Engine.Keys",
+    "mouseButtonsTable": "Engine.MouseButtons"
+  },
+  "classes": {
+    "Vec2": {
+      "x": "number",
+      "y": "number"
+    },
+    "PhysicsRaycastHit": {
+      "entityId": "integer",
+      "point": "Vec2",
+      "normal": "Vec2",
+      "fraction": "number"
+    },
+    "WorldTransform": {
+      "position": "Vec2",
+      "rotation": "number",
+      "scale": "Vec2"
+    }
+  },
+  "internal_methods": {
+    "getExecutingEntity": "Runtime execution context and subscription lifecycle; not a gameplay operation.",
+    "isExecutingEntityScript": "Runtime execution context and subscription lifecycle; not a gameplay operation.",
+    "clearEventSubscriptions": "Runtime execution context and subscription lifecycle; not a gameplay operation.",
+    "clearScriptEventSubscriptions": "Runtime execution context and subscription lifecycle; not a gameplay operation.",
+    "pruneEventSubscriptions": "Runtime execution context and subscription lifecycle; not a gameplay operation.",
+    "eventSubscriptionCheckpoint": "Runtime execution context and subscription lifecycle; not a gameplay operation.",
+    "rollbackEventSubscriptions": "Runtime execution context and subscription lifecycle; not a gameplay operation.",
+    "clearAllEventSubscriptions": "Runtime execution context and subscription lifecycle; not a gameplay operation."
+  },
+  "functions": {
+    "Engine.Camera.getPosition": {
+      "method": "getCameraPosition",
+      "params": [],
+      "returns": [
+        "Vec2"
+      ]
+    },
+    "Engine.Camera.getZoom": {
+      "method": "getCameraZoom",
+      "params": [],
+      "returns": [
+        "number"
+      ]
+    },
+    "Engine.Camera.move": {
+      "method": "moveCamera",
+      "params": [
+        {
+          "name": "x",
+          "type": "number"
+        },
+        {
+          "name": "y",
+          "type": "number"
+        }
+      ],
+      "returns": []
+    },
+    "Engine.Camera.setPosition": {
+      "method": "setCameraPosition",
+      "params": [
+        {
+          "name": "x",
+          "type": "number"
+        },
+        {
+          "name": "y",
+          "type": "number"
+        }
+      ],
+      "returns": []
+    },
+    "Engine.Camera.setZoom": {
+      "method": "setCameraZoom",
+      "params": [
+        {
+          "name": "zoom",
+          "type": "number"
+        }
+      ],
+      "returns": []
+    },
+    "Engine.Components.find": {
+      "method": "findEntitiesWithComponent",
+      "params": [
+        {
+          "name": "componentName",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "integer[]"
+      ]
+    },
+    "Engine.Components.get": {
+      "method": "getComponent",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "componentName",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "table|nil"
+      ]
+    },
+    "Engine.Components.has": {
+      "method": "hasComponent",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "componentName",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Components.remove": {
+      "method": "removeComponent",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "componentName",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean",
+        "string|nil"
+      ]
+    },
+    "Engine.Components.set": {
+      "method": "setComponent",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "componentName",
+          "type": "string"
+        },
+        {
+          "name": "data",
+          "type": "table"
+        }
+      ],
+      "returns": [
+        "boolean",
+        "string|nil"
+      ]
+    },
+    "Engine.Events.emit": {
+      "method": "emitEvent",
+      "params": [
+        {
+          "name": "eventName",
+          "type": "string"
+        },
+        {
+          "name": "payload?",
+          "type": "string"
+        },
+        {
+          "name": "sourceEntity?",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Events.subscribe": {
+      "method": "subscribeEvent",
+      "params": [
+        {
+          "name": "eventName",
+          "type": "string"
+        },
+        {
+          "name": "callback",
+          "type": "fun(event: table)"
+        }
+      ],
+      "returns": [
+        "integer|nil"
+      ]
+    },
+    "Engine.Events.unsubscribe": {
+      "method": "unsubscribeEvent",
+      "params": [
+        {
+          "name": "handle",
+          "type": "integer"
+        }
+      ],
+      "returns": []
+    },
+    "Engine.Input.getMouseDelta": {
+      "method": "getMouseDelta",
+      "params": [],
+      "returns": [
+        "Vec2"
+      ]
+    },
+    "Engine.Input.getMousePosition": {
+      "method": "getMousePosition",
+      "params": [],
+      "returns": [
+        "Vec2"
+      ]
+    },
+    "Engine.Input.isKeyDown": {
+      "method": "isKeyDown",
+      "params": [
+        {
+          "name": "key",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Input.isKeyPressed": {
+      "method": "isKeyPressed",
+      "params": [
+        {
+          "name": "key",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Input.isKeyReleased": {
+      "method": "isKeyReleased",
+      "params": [
+        {
+          "name": "key",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Input.isMouseButtonDown": {
+      "method": "isMouseButtonDown",
+      "params": [
+        {
+          "name": "button",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Input.isMouseButtonPressed": {
+      "method": "isMouseButtonPressed",
+      "params": [
+        {
+          "name": "button",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Input.isMouseButtonReleased": {
+      "method": "isMouseButtonReleased",
+      "params": [
+        {
+          "name": "button",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Physics.addForce": {
+      "method": "addForce",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "x",
+          "type": "number"
+        },
+        {
+          "name": "y",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Physics.addImpulse": {
+      "method": "addImpulse",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "x",
+          "type": "number"
+        },
+        {
+          "name": "y",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Physics.getAngularVelocity": {
+      "method": "getAngularVelocity",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "number"
+      ]
+    },
+    "Engine.Physics.getGravityScale": {
+      "method": "getGravityScale",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "number|nil"
+      ]
+    },
+    "Engine.Physics.getVelocity": {
+      "method": "getVelocity",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "Vec2|nil"
+      ]
+    },
+    "Engine.Physics.isDebugEnabled": {
+      "method": "isPhysicsDebugEnabled",
+      "params": [],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Physics.isTouching": {
+      "method": "isTouching",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Physics.raycastAll": {
+      "method": "raycastAll",
+      "params": [
+        {
+          "name": "startX",
+          "type": "number"
+        },
+        {
+          "name": "startY",
+          "type": "number"
+        },
+        {
+          "name": "endX",
+          "type": "number"
+        },
+        {
+          "name": "endY",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "PhysicsRaycastHit[]"
+      ]
+    },
+    "Engine.Physics.raycastFirst": {
+      "method": "raycastFirst",
+      "params": [
+        {
+          "name": "startX",
+          "type": "number"
+        },
+        {
+          "name": "startY",
+          "type": "number"
+        },
+        {
+          "name": "endX",
+          "type": "number"
+        },
+        {
+          "name": "endY",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "PhysicsRaycastHit|nil"
+      ]
+    },
+    "Engine.Physics.setAngularVelocity": {
+      "method": "setAngularVelocity",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "velocity",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Physics.setDebugEnabled": {
+      "method": "setPhysicsDebugEnabled",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "boolean"
+        }
+      ],
+      "returns": []
+    },
+    "Engine.Physics.setGravityScale": {
+      "method": "setGravityScale",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "scale",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Physics.setVelocity": {
+      "method": "setVelocity",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "x",
+          "type": "number"
+        },
+        {
+          "name": "y",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.createEntity": {
+      "method": "createEntity",
+      "params": [],
+      "returns": [
+        "integer"
+      ]
+    },
+    "Engine.destroyChildren": {
+      "method": "destroyChildren",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "integer"
+      ]
+    },
+    "Engine.destroyEntity": {
+      "method": "destroyEntity",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": []
+    },
+    "Engine.error": {
+      "method": "error",
+      "params": [
+        {
+          "name": "message",
+          "type": "string"
+        }
+      ],
+      "returns": []
+    },
+    "Engine.getAnimatorFloat": {
+      "method": "getAnimatorFloat",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "number|nil"
+      ]
+    },
+    "Engine.getAnimatorTime": {
+      "method": "getAnimationTime",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "number"
+      ]
+    },
+    "Engine.getChildCount": {
+      "method": "getChildCount",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "integer"
+      ]
+    },
+    "Engine.getChildren": {
+      "method": "getChildren",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "integer[]"
+      ]
+    },
+    "Engine.getCurrentSceneName": {
+      "method": "getCurrentSceneName",
+      "params": [],
+      "returns": [
+        "string"
+      ]
+    },
+    "Engine.getDeltaTime": {
+      "method": "getDeltaTime",
+      "params": [],
+      "returns": [
+        "number"
+      ]
+    },
+    "Engine.getParent": {
+      "method": "getParent",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "integer|nil"
+      ]
+    },
+    "Engine.getState": {
+      "method": "getStateMachineCurrentState",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "string|nil"
+      ]
+    },
+    "Engine.getStateMachineState": {
+      "method": "getStateMachineCurrentState",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "string|nil"
+      ]
+    },
+    "Engine.getTransformPosition": {
+      "method": "getTransformPosition",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "Vec2|nil"
+      ]
+    },
+    "Engine.getTransformRotation": {
+      "method": "getTransformRotation",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "number|nil"
+      ]
+    },
+    "Engine.getTransformScale": {
+      "method": "getTransformScale",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "Vec2|nil"
+      ]
+    },
+    "Engine.getWindowSize": {
+      "method": "getWindowSize",
+      "params": [],
+      "returns": [
+        "Vec2"
+      ]
+    },
+    "Engine.getWorldTransform": {
+      "method": "getWorldTransform",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "WorldTransform|nil"
+      ]
+    },
+    "Engine.hasScene": {
+      "method": "hasScene",
+      "params": [
+        {
+          "name": "sceneName",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.isAnimatorPlaying": {
+      "method": "isAnimationPlaying",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.isEntityAlive": {
+      "method": "isEntityAlive",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.isSoundPlaying": {
+      "method": "isSoundPlaying",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.isState": {
+      "method": "isStateMachineInState",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "stateName",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.loadTexture": {
+      "method": "loadTexture",
+      "params": [
+        {
+          "name": "assetPath",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "integer"
+      ]
+    },
+    "Engine.log": {
+      "method": "log",
+      "params": [
+        {
+          "name": "message",
+          "type": "string"
+        }
+      ],
+      "returns": []
+    },
+    "Engine.pauseAnimator": {
+      "method": "pauseAnimation",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.playAnimator": {
+      "method": "playAnimation",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "assetPath",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.playSound": {
+      "method": "playSound",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "assetPath",
+          "type": "string"
+        },
+        {
+          "name": "loop?",
+          "type": "boolean"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.registerScene": {
+      "method": "registerScene",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "builderName",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.registerSceneFromFile": {
+      "method": "registerSceneFromFile",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.resumeAnimator": {
+      "method": "resumeAnimation",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.sendStateEvent": {
+      "method": "sendStateMachineEvent",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "eventName",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setAnimatorFloat": {
+      "method": "setAnimatorFloat",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setAnimatorSpeed": {
+      "method": "setAnimationSpeed",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "speed",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setAnimatorTarget": {
+      "method": "setAnimationTarget",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "targetName",
+          "type": "string"
+        },
+        {
+          "name": "targetEntity?",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setAnimatorTime": {
+      "method": "setAnimationTime",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "timeSeconds",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setParent": {
+      "method": "setParent",
+      "params": [
+        {
+          "name": "child",
+          "type": "integer"
+        },
+        {
+          "name": "parent?",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setSoundPitch": {
+      "method": "setSoundPitch",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "pitch",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setSoundVolume": {
+      "method": "setSoundVolume",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "volume",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setSpriteTexture": {
+      "method": "setSpriteTexture",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "assetPath",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setState": {
+      "method": "forceStateMachineState",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "stateName",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setStateMachineBool": {
+      "method": "setStateMachineBool",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "boolean"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setStateMachineTrigger": {
+      "method": "setStateMachineTrigger",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setTransformPosition": {
+      "method": "setTransformPosition",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "x",
+          "type": "number"
+        },
+        {
+          "name": "y",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setTransformRotation": {
+      "method": "setTransformRotation",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "rotation",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setTransformScale": {
+      "method": "setTransformScale",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        },
+        {
+          "name": "x",
+          "type": "number"
+        },
+        {
+          "name": "y",
+          "type": "number"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.setUIBinding": {
+      "method": "setUIBinding",
+      "params": [
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.stopAnimator": {
+      "method": "stopAnimation",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.stopSound": {
+      "method": "stopSound",
+      "params": [
+        {
+          "name": "entity",
+          "type": "integer"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.switchScene": {
+      "method": "switchScene",
+      "params": [
+        {
+          "name": "sceneName",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.warn": {
+      "method": "warn",
+      "params": [
+        {
+          "name": "message",
+          "type": "string"
+        }
+      ],
+      "returns": []
+    }
+  },
+  "constants": {
+    "Engine.Keys.A": "static_cast<int>(sle::input::Input::Key::A)",
+    "Engine.Keys.C": "static_cast<int>(sle::input::Input::Key::C)",
+    "Engine.Keys.D": "static_cast<int>(sle::input::Input::Key::D)",
+    "Engine.Keys.S": "static_cast<int>(sle::input::Input::Key::S)",
+    "Engine.Keys.W": "static_cast<int>(sle::input::Input::Key::W)",
+    "Engine.Keys.Q": "static_cast<int>(sle::input::Input::Key::Q)",
+    "Engine.Keys.E": "static_cast<int>(sle::input::Input::Key::E)",
+    "Engine.Keys.R": "static_cast<int>(sle::input::Input::Key::R)",
+    "Engine.Keys.F": "static_cast<int>(sle::input::Input::Key::F)",
+    "Engine.Keys.F3": "static_cast<int>(sle::input::Input::Key::F3)",
+    "Engine.Keys.UP": "static_cast<int>(sle::input::Input::Key::Up)",
+    "Engine.Keys.DOWN": "static_cast<int>(sle::input::Input::Key::Down)",
+    "Engine.Keys.LEFT": "static_cast<int>(sle::input::Input::Key::Left)",
+    "Engine.Keys.RIGHT": "static_cast<int>(sle::input::Input::Key::Right)",
+    "Engine.Keys.SPACE": "static_cast<int>(sle::input::Input::Key::Space)",
+    "Engine.Keys.ENTER": "static_cast<int>(sle::input::Input::Key::Enter)",
+    "Engine.Keys.TAB": "static_cast<int>(sle::input::Input::Key::Tab)",
+    "Engine.Keys.ESCAPE": "static_cast<int>(sle::input::Input::Key::Escape)",
+    "Engine.Keys.LEFT_SHIFT": "static_cast<int>(sle::input::Input::Key::LeftShift)",
+    "Engine.Keys.RIGHT_SHIFT": "static_cast<int>(sle::input::Input::Key::RightShift)",
+    "Engine.Keys.LEFT_CONTROL": "static_cast<int>(sle::input::Input::Key::LeftControl)",
+    "Engine.Keys.RIGHT_CONTROL": "static_cast<int>(sle::input::Input::Key::RightControl)",
+    "Engine.Keys.ZERO": "static_cast<int>(sle::input::Input::Key::Zero)",
+    "Engine.Keys.ONE": "static_cast<int>(sle::input::Input::Key::One)",
+    "Engine.Keys.TWO": "static_cast<int>(sle::input::Input::Key::Two)",
+    "Engine.Keys.THREE": "static_cast<int>(sle::input::Input::Key::Three)",
+    "Engine.Keys.FOUR": "static_cast<int>(sle::input::Input::Key::Four)",
+    "Engine.Keys.FIVE": "static_cast<int>(sle::input::Input::Key::Five)",
+    "Engine.Keys.SIX": "static_cast<int>(sle::input::Input::Key::Six)",
+    "Engine.Keys.SEVEN": "static_cast<int>(sle::input::Input::Key::Seven)",
+    "Engine.Keys.EIGHT": "static_cast<int>(sle::input::Input::Key::Eight)",
+    "Engine.Keys.NINE": "static_cast<int>(sle::input::Input::Key::Nine)",
+    "Engine.MouseButtons.LEFT": "static_cast<int>(sle::input::Input::MouseButton::Left)",
+    "Engine.MouseButtons.RIGHT": "static_cast<int>(sle::input::Input::MouseButton::Right)",
+    "Engine.MouseButtons.MIDDLE": "static_cast<int>(sle::input::Input::MouseButton::Middle)"
+  },
+  "component_audit": {
+    "include_roots": [
+      "../../*/include"
+    ],
+    "codecs_dir": "../../Systems/src/lua/components",
+    "registry": "../../Systems/src/ScriptApiImplComponents.cpp"
+  }
+}

@@ -8,9 +8,21 @@ SLE is a modular C++ 2D engine with ECS scene data, Lua scripting, command-based
 
 ## Current Architecture Model
 
-Module intent:
+Module dependencies form an acyclic graph, not a single linear chain. The
+`EngineModules/*/CMakeLists.txt` targets are authoritative. Direct engine-module
+links (consumer -> dependencies):
 
-`Core -> Events -> Platform -> Renderer -> Resources -> Scene -> Physics -> Scripting -> UI -> Systems -> examples`
+- `Core`: no engine-module dependencies.
+- `Events`, `Platform`: `Core`.
+- `Renderer`: `Core`, `Platform`.
+- `Resources`: `Core`, `Renderer`.
+- `Scene`: `Core`, `Events`, `Resources`, `Renderer`.
+- `Physics`: `Core`, `Scene`, `Events`.
+- `Scripting`: `Core`, `Platform`, `Scene`, `Resources`.
+- `UI`: `Events`, `Platform`, `Renderer`, `Resources`, `Scene`, `Scripting`.
+- `Systems` (`sle::engine`): all other engine modules.
+
+Applications and examples consume these modules.
 
 `Systems` is the orchestration layer. It may depend on lower engine modules and owns the runtime loop.
 
@@ -28,12 +40,16 @@ Module intent:
 
 - `Scene` currently depends on `Renderer` through `SpriteRenderer` and `TextureRegion`.
 - Some namespaces do not match module ownership.
-- Some systems still call `ScriptEngine` directly where a narrower script runtime boundary is desired.
+- Runtime owns `ScriptEngine`; systems use the narrower `ScriptRuntime` boundary.
 - Legacy large docs remain in `docs/`; new small docs under `docs/modules/` and `docs/topics/` are the preferred first read.
 
-## Current Worktree Note
+## Repository guidance
 
-As of the documentation cleanup, there were existing user/code changes in engine files. Documentation work should not revert or overwrite them.
+- `AGENTS.md` is the canonical repository instruction file.
+- Scoped scripting/test instructions add local conventions.
+- `CONTRIBUTING.md` owns build/test setup; `PLANS.md` describes substantial task plans.
+- Update context documents only when their facts change; avoid duplicate rulebooks.
+- Historical handoffs and roadmap files do not automatically define active work.
 
 ## How To Update This File
 

@@ -8,7 +8,7 @@
 
 #include <glm/vec2.hpp>
 
-#include <cassert>
+#include <iostream>
 #include <cstdint>
 #include <string>
 
@@ -154,30 +154,77 @@ int main()
     AudioSpy spy;
     sle::scripting::ScriptEngine engine;
 
-    assert(engine.init(&spy) && "ScriptEngine init failed");
+    if (!engine.init(&spy))
+    {
+        std::cerr << "ScriptEngine init failed\n";
+        return 1;
+    }
 
-    assert(engine.executeScriptAsset("tests/data/scripts/audio_api_surface.lua") &&
-           "Failed to execute audio_api_surface.lua");
+    if (!engine.executeScriptAsset("tests/data/scripts/audio_api_surface.lua"))
+    {
+        std::cerr << "Failed to execute audio_api_surface.lua\n";
+        return 1;
+    }
 
     // playSound assertions
-    assert(spy.playSoundCalled && "playSound was not called");
-    assert(spy.playSoundPath == "assets/audio/coin.wav" && "wrong asset path");
-    assert(!spy.playSoundLoop && "loop should be false");
+    if (!spy.playSoundCalled)
+    {
+        std::cerr << "playSound was not called\n";
+        return 1;
+    }
+    if (spy.playSoundPath != "assets/audio/coin.wav")
+    {
+        std::cerr << "wrong asset path\n";
+        return 1;
+    }
+    if (spy.playSoundLoop)
+    {
+        std::cerr << "loop should be false\n";
+        return 1;
+    }
 
     // stopSound assertions
-    assert(spy.stopSoundCalled && "stopSound was not called");
-    assert(spy.stopSoundEntity == spy.playSoundEntity && "stopSound entity mismatch");
+    if (!spy.stopSoundCalled)
+    {
+        std::cerr << "stopSound was not called\n";
+        return 1;
+    }
+    if (spy.stopSoundEntity != spy.playSoundEntity)
+    {
+        std::cerr << "stopSound entity mismatch\n";
+        return 1;
+    }
 
     // volume
-    assert(spy.volumeEntity != 0 && "setSoundVolume entity missing");
-    assert(spy.volumeValue > 0.49f && spy.volumeValue < 0.51f && "volume mismatch");
+    if (spy.volumeEntity == 0)
+    {
+        std::cerr << "setSoundVolume entity missing\n";
+        return 1;
+    }
+    if (!(spy.volumeValue > 0.49f && spy.volumeValue < 0.51f))
+    {
+        std::cerr << "volume mismatch\n";
+        return 1;
+    }
 
     // pitch
-    assert(spy.pitchEntity != 0 && "setSoundPitch entity missing");
-    assert(spy.pitchValue > 1.24f && spy.pitchValue < 1.26f && "pitch mismatch");
+    if (spy.pitchEntity == 0)
+    {
+        std::cerr << "setSoundPitch entity missing\n";
+        return 1;
+    }
+    if (!(spy.pitchValue > 1.24f && spy.pitchValue < 1.26f))
+    {
+        std::cerr << "pitch mismatch\n";
+        return 1;
+    }
 
     // isSoundPlaying
-    assert(spy.isPlayingEntity != 0 && "isSoundPlaying entity missing");
+    if (spy.isPlayingEntity == 0)
+    {
+        std::cerr << "isSoundPlaying entity missing\n";
+        return 1;
+    }
 
     return 0;
 }

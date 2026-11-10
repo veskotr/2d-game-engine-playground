@@ -30,7 +30,8 @@ OpenGL rendering backend, GPU resources, render commands, batching, and camera m
 
 - Renderer consumes commands; it does not query ECS directly.
 - Renderer must not depend on Lua or entity lifecycle.
-- Keep GPU ownership inside this module.
+- Renderer owns its buffers/VAOs and borrows the externally supplied debug shader
+  program ID. Shader resource owners delete programs; Renderer must not double-delete.
 
 ## Update This File When
 

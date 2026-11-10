@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 
 #include <sle/scripting/ScriptApi.hpp>
 #include <sle/events/ScopedSubscription.hpp>
@@ -13,6 +14,22 @@ class ScriptApiImpl : public sle::scripting::ScriptApi
 {
 public:
     explicit ScriptApiImpl(Runtime& runtime) : runtime(runtime) {}
+
+    bool hasComponent(sle::scripting::ScriptEntityRef, const std::string&) const override;
+    nlohmann::json getComponent(sle::scripting::ScriptEntityRef, const std::string&) const override;
+    bool setComponent(sle::scripting::ScriptEntityRef, const std::string&, const nlohmann::json&, std::string&) override;
+    bool removeComponent(sle::scripting::ScriptEntityRef, const std::string&, std::string&) override;
+    std::vector<uint32_t> findEntitiesWithComponent(const std::string&) const override;
+    std::vector<uint32_t> getChildren(sle::scripting::ScriptEntityRef) const override;
+    bool setTransformScale(sle::scripting::ScriptEntityRef, const glm::vec2&) override;
+    bool getTransformRotation(sle::scripting::ScriptEntityRef, float&) const override;
+    bool setTransformRotation(sle::scripting::ScriptEntityRef, float) override;
+    nlohmann::json getWorldTransform(sle::scripting::ScriptEntityRef) const override;
+    glm::dvec2 getMouseDelta() const override;
+    bool isMouseButtonDown(int) const override;
+    bool isMouseButtonPressed(int) const override;
+    bool isMouseButtonReleased(int) const override;
+    bool getGravityScale(sle::scripting::ScriptEntityRef, float&) const override;
 
     float getDeltaTime() const override;
     glm::vec2 getWindowSize() const override;
@@ -43,6 +60,8 @@ public:
     uint32_t loadTexture(const std::string& assetPath) override;
     bool setSpriteTexture(sle::scripting::ScriptEntityRef entity, const std::string& assetPath) override;
 
+    bool registerScene(const std::string& name, const std::string& builder) override;
+    bool registerSceneFromFile(const std::string& name, const std::string& path) override;
     bool hasScene(const std::string& sceneName) const override;
     bool switchScene(const std::string& sceneName) override;
     std::string getCurrentSceneName() const override;
@@ -72,6 +91,14 @@ public:
     void setPhysicsDebugEnabled(bool enabled) override;
     bool isPhysicsDebugEnabled() const override;
 
+    uint32_t getExecutingEntity() const override;
+    bool isExecutingEntityScript() const override;
+    void clearEventSubscriptions(uint32_t entityId) override;
+    void clearScriptEventSubscriptions(uint32_t entityId) override;
+    void pruneEventSubscriptions() override;
+    int eventSubscriptionCheckpoint() const override { return nextSubscriptionId_; }
+    void rollbackEventSubscriptions(uint32_t owner, int checkpoint, bool scriptOwned) override;
+    void clearAllEventSubscriptions() override;
     int subscribeEvent(const std::string& eventName, uint32_t entityId, int luaRef) override;
     void unsubscribeEvent(int subscriptionId) override;
     bool emitEvent(const std::string& eventName, uint32_t sourceEntity, const std::string& payload) override;
@@ -96,10 +123,16 @@ public:
 
 private:
     Runtime& runtime;
-    // Track subscriptions per entity for auto-cleanup
-    std::unordered_map<uint32_t, std::vector<sle::events::ScopedSubscription>> entitySubscriptions_;
-    // Track subscription ID to index mapping for unsubscribe
-    std::unordered_map<int, std::pair<uint32_t, size_t>> subscriptionIdToLocation_;
+    struct EventSubscription
+    {
+        uint32_t owner = 0;
+        int luaRef = -2;
+        bool scriptOwned = false;
+        std::shared_ptr<bool> active;
+        sle::events::ScopedSubscription handle;
+    };
+    bool canDispatchEvent(int subscriptionId) const;
+    std::unordered_map<int, EventSubscription> subscriptions_;
     int nextSubscriptionId_ = 1;
 };
 };// namespace sle

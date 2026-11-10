@@ -1,4 +1,5 @@
 #include <sle/engine/AnimationSystem.hpp>
+#include <sle/scene/ChunkActivity.hpp>
 
 #include <sle/core/Log.hpp>
 #include <sle/resources/Resources.hpp>
@@ -269,7 +270,7 @@ void AnimationSystem::update(sle::entity::Scene& scene, float dt)
     registry.view<sle::components::AnimatorComponent>(
         [dt, &registry](sle::entity::Entity entity, sle::components::AnimatorComponent& animator)
         {
-            if (!animator.enabled)
+            if (!animator.enabled || !sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Animation))
                 return;
 
             // State machine can drive clip selection through stateClipMap.

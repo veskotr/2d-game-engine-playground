@@ -1,3 +1,7 @@
+> Historical architecture reference. Claims and examples describe an earlier state.
+> For current dependencies and boundaries, use [Architecture](topics/Architecture.md)
+> and the relevant module/topic documents; verify behavior against source.
+
 # SLE (Simple Little Engine) Architecture Design
 
 > Historical design note: prefer `ARCHITECTURE_VERIFIED.md` for current architecture truth and `ENGINE_MASTER_PLAN.md` for active roadmap planning.

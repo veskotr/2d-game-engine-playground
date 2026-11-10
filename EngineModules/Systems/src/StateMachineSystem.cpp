@@ -1,4 +1,5 @@
 #include <sle/engine/StateMachineSystem.hpp>
+#include <sle/scene/ChunkActivity.hpp>
 
 #include <sle/core/Log.hpp>
 #include <sle/events/StateMachineEvents.hpp>
@@ -54,9 +55,9 @@ void StateMachineSystem::update(sle::entity::Scene& scene, float dt, sle::script
     auto& eventBus = scene.getEventBus();
 
     registry.view<sle::components::StateMachineComponent>(
-        [dt, &eventBus, scriptRuntime](sle::entity::Entity entity, sle::components::StateMachineComponent& sm)
+        [dt, &eventBus, &registry, scriptRuntime](sle::entity::Entity entity, sle::components::StateMachineComponent& sm)
         {
-            if (!sm.enabled)
+            if (!sm.enabled || !sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::StateMachines))
                 return;
 
             if (!sm.definition && !sm.definitionAsset.empty() && !sm.definitionAssetLoadAttempted)

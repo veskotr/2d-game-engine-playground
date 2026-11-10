@@ -4,10 +4,15 @@ This is the first stop for project context. Prefer the small docs listed here be
 
 ## Start Here
 
-1. `CURRENT_TASK.md` - what is happening now and handoff notes.
-2. `PROJECT_MEMORY.md` - durable project context and known debt.
-3. `CONSTRAINTS.md` - architecture, ECS, scripting, rendering, testing, and doc rules.
-4. `DOCS_MAINTENANCE.md` - what to update before finishing a task.
+1. [AGENTS.md](../AGENTS.md) - repository instructions and map.
+2. [CONTRIBUTING.md](../CONTRIBUTING.md) - setup and validation.
+3. [CONSTRAINTS.md](CONSTRAINTS.md) - architecture and subsystem invariants.
+4. [DOCS_MAINTENANCE.md](DOCS_MAINTENANCE.md) - documentation ownership.
+5. [PROJECT_MEMORY.md](PROJECT_MEMORY.md) - durable context and known debt.
+
+`CURRENT_TASK.md` contains a historical chunked-world handoff. Confirm its status
+against the current request and code before using it. Plans describe intent,
+not proof of completion.
 
 ## Module Docs
 
@@ -35,6 +40,7 @@ This is the first stop for project context. Prefer the small docs listed here be
 | Rendering | `topics/Rendering.md` |
 | Events | `topics/Events.md` |
 | Physics | `topics/Physics.md` |
+| Chunk activity | [Chunks](topics/Chunks.md) |
 | UI | `topics/UI.md` |
 | Testing | `topics/Testing.md` |
 | Roadmap | `topics/Roadmap.md` |
@@ -60,18 +66,8 @@ These files are still useful for detailed background, but they may overlap with 
 
 If a legacy doc conflicts with the small docs, verify against code and update both the relevant small doc and the legacy doc or mark the legacy doc stale.
 
-## Agent Workflow
+## Agent workflow
 
-Before coding:
-
-1. Read `CURRENT_TASK.md`.
-2. Read `CONSTRAINTS.md`.
-3. Open the affected module and topic docs.
-
-Before finishing:
-
-1. Update `CURRENT_TASK.md` with final status and validation.
-2. Update affected module/topic docs.
-3. Update `PROJECT_MEMORY.md` for durable context.
-4. Update `CONSTRAINTS.md` if rules changed.
-5. Mention docs changed in the final response.
+Follow [AGENTS.md](../AGENTS.md), read affected module/topic references on demand,
+and update documents whose facts changed. For substantial work, follow
+[PLANS.md](../PLANS.md). Do not update every context file for routine tasks.

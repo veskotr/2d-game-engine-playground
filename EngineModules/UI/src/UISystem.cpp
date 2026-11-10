@@ -1,4 +1,5 @@
 #include <sle/ui/UISystem.hpp>
+#include <sle/scene/ChunkActivity.hpp>
 
 #include <sle/events/EventBus.hpp>
 #include <sle/renderer/Camera2D.hpp>
@@ -651,6 +652,10 @@ void UISystem::syncEntityDocuments(UIFrameContext& ctx)
     ctx.registry.view<sle::components::UIComponent>([this, &ctx, &seenEntities](sle::entity::Entity entity, sle::components::UIComponent& component)
     {
         seenEntities.insert(entity.getID());
+        // Keep existing documents cached, and defer initial behavior/resource
+        // loading for UI belonging to a suspended chunk.
+        if (!sle::entity::isChunkActive(ctx.registry, entity, sle::components::ChunkSubsystem::Ui))
+            return;
 
         UIDocumentDescriptor descriptor;
         descriptor.ownerEntityId = entity.getID();
@@ -677,7 +682,7 @@ void UISystem::syncEntityDocuments(UIFrameContext& ctx)
         document.refreshBindings();
 
         if (!document.isBehaviorLoaded() && !document.getDescriptor().behaviorAsset.empty() && scriptRuntime)
-            document.setBehaviorLoaded(scriptRuntime->executeScriptAsset(document.getDescriptor().behaviorAsset));
+            document.setBehaviorLoaded(scriptRuntime->executeScriptAssetForEntity(document.getDescriptor().behaviorAsset, document.getDescriptor().ownerEntityId));
 
         entityDocuments[entity.getID()] = std::move(document);
     });
@@ -701,7 +706,7 @@ UIDocument& UISystem::createDocument(UIDocumentDescriptor descriptor)
     documents.back().refreshBindings();
 
     if (!documents.back().isBehaviorLoaded() && !documents.back().getDescriptor().behaviorAsset.empty() && scriptRuntime)
-        documents.back().setBehaviorLoaded(scriptRuntime->executeScriptAsset(documents.back().getDescriptor().behaviorAsset));
+        documents.back().setBehaviorLoaded(scriptRuntime->executeScriptAssetForEntity(documents.back().getDescriptor().behaviorAsset, documents.back().getDescriptor().ownerEntityId));
 
     return documents.back();
 }
@@ -769,6 +774,11 @@ bool UISystem::parseDocumentLayout(UIDocument& document)
 
 void UISystem::submitDocument(UIFrameContext& ctx, UIDocument& document)
 {
+    if (document.getDescriptor().ownerEntityId != 0 &&
+        !sle::entity::isChunkActive(ctx.registry, sle::entity::Entity(document.getDescriptor().ownerEntityId),
+            sle::components::ChunkSubsystem::Ui))
+        return;
+
     if (!document.getDescriptor().visible || !document.getLayoutRoot())
         return;
 

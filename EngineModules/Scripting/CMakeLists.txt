@@ -1,4 +1,6 @@
 add_library(sle_scripting STATIC
+    src/LuaBindingsComponents.cpp
+    src/LuaBindingsGameplay.cpp
     src/LuaBindings.cpp
     src/LuaBindingsEngine.cpp
     src/LuaBindingsPhysics.cpp
@@ -20,6 +22,7 @@ target_link_libraries(sle_scripting
         sle::platform
         sle::scene
         sle::resources
+        nlohmann_json::nlohmann_json
         lua::lua
 )
 
@@ -30,6 +33,8 @@ find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
     set(LUA_API_STUB_OUTPUT ${CMAKE_SOURCE_DIR}/assets/scripts/engine_api.lua)
     set(LUA_BINDINGS_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/LuaBindingsComponents.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/LuaBindingsGameplay.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/LuaBindings.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/LuaBindingsEngine.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/LuaBindingsPhysics.cpp
@@ -46,6 +51,9 @@ if(Python3_Interpreter_FOUND)
             --output ${LUA_API_STUB_OUTPUT}
         DEPENDS
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_lua_api_stub.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/lua_api.json
+            ${CMAKE_CURRENT_SOURCE_DIR}/include/sle/scripting/ScriptApi.hpp
+            ${CMAKE_SOURCE_DIR}/EngineModules/Platform/include/sle/platform/Input.hpp
             ${LUA_BINDINGS_SOURCES}
         COMMENT "Generating Lua API IntelliSense stub"
         VERBATIM

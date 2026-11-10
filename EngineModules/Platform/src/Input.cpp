@@ -9,6 +9,10 @@ glm::dvec2 Input::lastMousePos = {0.0, 0.0};
 
 void Input::init(GLFWwindow *window)
 {
+    keys = {};
+    mouse = {};
+    glfwGetCursorPos(window, &lastMousePos.x, &lastMousePos.y);
+    mouse.position = lastMousePos;
     glfwSetKeyCallback(window, keyCallback);
     glfwSetCursorPosCallback(window, cursorCallback);
     glfwSetMouseButtonCallback(window, mouseButtonCallback);
@@ -27,21 +31,23 @@ void Input::update()
     mouse.leftReleased = false;
     mouse.rightPressed = false;
     mouse.rightReleased = false;
+    mouse.middlePressed = false;
+    mouse.middleReleased = false;
 }
 
 bool Input::isKeyDown(int key)
 {
-    return keys[key].down;
+    return key >= 0 && key < static_cast<int>(keys.size()) && keys[key].down;
 }
 
 bool Input::isKeyPressed(int key)
 {
-    return keys[key].pressed;
+    return key >= 0 && key < static_cast<int>(keys.size()) && keys[key].pressed;
 }
 
 bool Input::isKeyReleased(int key)
 {
-    return keys[key].released;
+    return key >= 0 && key < static_cast<int>(keys.size()) && keys[key].released;
 }
 
 const MouseState &Input::getMouse()
@@ -98,13 +104,27 @@ void Input::mouseButtonCallback(GLFWwindow*, int button, int action, int)
             mouse.rightReleased = true;
         }
     }
+
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE)
+    {
+        if (action == GLFW_PRESS)
+        {
+            mouse.middlePressed = !mouse.middle;
+            mouse.middle = true;
+        }
+        else if (action == GLFW_RELEASE)
+        {
+            mouse.middle = false;
+            mouse.middleReleased = true;
+        }
+    }
 }
 
 void Input::cursorCallback(GLFWwindow*, double xpos, double ypos)
 {
     glm::dvec2 current = {xpos, ypos};
 
-    mouse.delta = current - lastMousePos;
+    mouse.delta += current - lastMousePos;
     mouse.position = current;
 
     lastMousePos = current;

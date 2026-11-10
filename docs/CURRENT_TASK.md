@@ -1,5 +1,9 @@
 # Current Task
 
+> Historical handoff: the sections below record the earlier chunked-world task.
+> They have not been revalidated by the AI setup cleanup. Follow the current
+> user request; do not automatically resume this work.
+
 ## Active Task
 
 Continue the chunked-world implementation after the first `Tiled` scene-integration slice landed.

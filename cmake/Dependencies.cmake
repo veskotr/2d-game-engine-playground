@@ -62,7 +62,7 @@ FetchContent_MakeAvailable(box2d)
 FetchContent_Declare(
     stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
-    GIT_TAG master
+    GIT_TAG d14d46f6b44456eb88beac58cba833a4135d4c89
 )
 FetchContent_MakeAvailable(stb)
 
@@ -83,7 +83,7 @@ target_include_directories(stb_truetype INTERFACE
 FetchContent_Declare(
     miniaudio
     GIT_REPOSITORY https://github.com/mackron/miniaudio.git
-    GIT_TAG master
+    GIT_TAG 877ea4a7c2601c7b0f2a44e83dfac42e6470fea6
 )
 FetchContent_MakeAvailable(miniaudio)
 
@@ -100,7 +100,7 @@ endif()
 FetchContent_Declare(
     pugixml
     GIT_REPOSITORY https://github.com/zeux/pugixml.git
-    GIT_TAG master
+    GIT_TAG f0a3faa76e04f35110257ca8713363dee3c890e8
 )
 FetchContent_MakeAvailable(pugixml)
 

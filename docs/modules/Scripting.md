@@ -31,6 +31,11 @@ Lua VM ownership, binding registration, script loading, and script callback exec
 - Lua access should use registered bindings and runtime bridge APIs.
 - Scripts must not own raw engine internals.
 
+Entity execution context supplies event-subscription ownership, including nested
+callbacks. Script removal releases entity-script subscriptions; UI execution owns
+its callbacks independently. Scene commits clear scene-global callbacks too. Failed
+initialization rolls back new registrations. See [Events](../topics/Events.md).
+
 ## Update This File When
 
 - Lua API, script lifecycle, binding registration, or script resource behavior changes.

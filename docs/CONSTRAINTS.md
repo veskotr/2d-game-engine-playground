@@ -12,11 +12,14 @@ This file is the compact rulebook for code and documentation work.
 
 ## ECS
 
-- Entities are lightweight IDs.
+- Entities are lightweight registry-local IDs; reject dead entities at insertion
+  and reject invalid/cyclic hierarchy mutations before changing scene state.
 - Components are data-centric and default-constructible when practical.
 - Behavior belongs in systems.
 - Systems should query through `Registry::view` and component access helpers.
 - Transform mutation must preserve dirty propagation.
+- Chunk suspension is derived runtime state; never overwrite gameplay enabled/visible
+  flags to implement chunk activation. Consumers must respect both states.
 
 ## Scripting
 
@@ -24,6 +27,8 @@ This file is the compact rulebook for code and documentation work.
 - Lua-facing access goes through registered bindings and runtime bridge APIs.
 - Scripts should not hold raw C++ ownership.
 - Lua errors should be logged and contained instead of crashing the engine.
+- Lua event subscriptions own their callback registry references and must release
+  them on unsubscribe, owner teardown, failed initialization, scene commit, or VM shutdown.
 
 ## Rendering
 
@@ -42,7 +47,8 @@ This file is the compact rulebook for code and documentation work.
 
 - Update docs in the same task as code behavior changes.
 - Keep new docs small and topic-specific.
-- Put temporary handoff details in `docs/CURRENT_TASK.md`.
+- Put temporary progress in the relevant task plan; see `PLANS.md`.
+- Treat `docs/CURRENT_TASK.md` as historical unless explicitly refreshed.
 - Put durable decisions in `docs/PROJECT_MEMORY.md`.
 - Put rules and invariants here.
 - Update affected `docs/modules/*.md` and `docs/topics/*.md`.

@@ -27,9 +27,14 @@ class ScriptEngine : public ScriptRuntime
 public:
     bool init(ScriptApi* api);
     void shutdown();
+    void clearSceneScripts();
+    uint32_t getExecutingEntity() const { return executingEntity; }
+    bool isExecutingEntityScript() const { return executingEntityScript; }
+    void releaseEventCallback(int luaRef);
 
     bool ensureScript(uint32_t entityId, const std::string& scriptAsset) override;
     bool executeScriptAsset(const std::string& scriptAsset) override;
+    bool executeScriptAssetForEntity(const std::string& scriptAsset, uint32_t entityId) override;
     void runUpdate(uint32_t entityId, float dt) override;
     void removeScript(uint32_t entityId);
     bool hasScript(uint32_t entityId) const override;
@@ -46,7 +51,7 @@ public:
         uint32_t entityB = 0,
         const std::string& zoneId = {},
         uint32_t sourceEntity = 0,
-        const std::string& payload = {});
+        const std::string& payload = {}, uint32_t ownerEntity = 0, bool ownerIsScript = false);
 
 private:
     bool callFunction(int ref, uint32_t entityId, float dt = -1.0f);
@@ -54,6 +59,8 @@ private:
 
     lua_State* L = nullptr;
     ScriptApi* api = nullptr;
+    uint32_t executingEntity = 0;
+    bool executingEntityScript = false;
     std::unordered_map<uint32_t, ScriptInstance> instances;
 };
 

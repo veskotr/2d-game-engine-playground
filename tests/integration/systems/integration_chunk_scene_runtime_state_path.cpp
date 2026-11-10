@@ -2,6 +2,7 @@
 #include <sle/engine/SceneLoader.hpp>
 #include <sle/events/ChunkEvents.hpp>
 #include <sle/scene/Scene.hpp>
+#include <sle/scene/ChunkActivity.hpp>
 #include <sle/scene/components/BoxColliderComponent.hpp>
 #include <sle/scene/components/BoxZoneComponent.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
@@ -51,19 +52,19 @@ int main()
     bool sawEnabledCollider = false;
 
     registry.view<sle::components::ScriptComponent>(
-        [&sawEnabledScript](sle::entity::Entity, sle::components::ScriptComponent& script)
+        [&](sle::entity::Entity entity, sle::components::ScriptComponent& script)
         {
-            sawEnabledScript = script.enabled;
+            sawEnabledScript = (script.enabled && sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Scripts));
         });
     registry.view<sle::components::BoxZoneComponent>(
-        [&sawEnabledZone](sle::entity::Entity, sle::components::BoxZoneComponent& zone)
+        [&](sle::entity::Entity entity, sle::components::BoxZoneComponent& zone)
         {
-            sawEnabledZone = zone.enabled;
+            sawEnabledZone = (zone.enabled && sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Zones));
         });
     registry.view<sle::components::BoxColliderComponent>(
-        [&sawEnabledCollider](sle::entity::Entity, sle::components::BoxColliderComponent& collider)
+        [&](sle::entity::Entity entity, sle::components::BoxColliderComponent& collider)
         {
-            sawEnabledCollider = collider.enabled;
+            sawEnabledCollider = (collider.enabled && sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Collision));
         });
 
     if (!sawEnabledScript || !sawEnabledZone || !sawEnabledCollider)
@@ -79,19 +80,19 @@ int main()
     bool sawDisabledCollider = false;
 
     registry.view<sle::components::ScriptComponent>(
-        [&sawDisabledScript](sle::entity::Entity, sle::components::ScriptComponent& script)
+        [&](sle::entity::Entity entity, sle::components::ScriptComponent& script)
         {
-            sawDisabledScript = !script.enabled;
+            sawDisabledScript = !(script.enabled && sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Scripts));
         });
     registry.view<sle::components::BoxZoneComponent>(
-        [&sawDisabledZone](sle::entity::Entity, sle::components::BoxZoneComponent& zone)
+        [&](sle::entity::Entity entity, sle::components::BoxZoneComponent& zone)
         {
-            sawDisabledZone = !zone.enabled;
+            sawDisabledZone = !(zone.enabled && sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Zones));
         });
     registry.view<sle::components::BoxColliderComponent>(
-        [&sawDisabledCollider](sle::entity::Entity, sle::components::BoxColliderComponent& collider)
+        [&](sle::entity::Entity entity, sle::components::BoxColliderComponent& collider)
         {
-            sawDisabledCollider = !collider.enabled;
+            sawDisabledCollider = !(collider.enabled && sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Collision));
         });
 
     if (!sawDisabledScript || !sawDisabledZone || !sawDisabledCollider)
@@ -103,9 +104,9 @@ int main()
     runtimeState.update(scene, {10.0f, 10.0f});
     bool sawReenabledScript = false;
     registry.view<sle::components::ScriptComponent>(
-        [&sawReenabledScript](sle::entity::Entity, sle::components::ScriptComponent& script)
+        [&](sle::entity::Entity entity, sle::components::ScriptComponent& script)
         {
-            sawReenabledScript = script.enabled;
+            sawReenabledScript = (script.enabled && sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Scripts));
         });
 
     if (!sawReenabledScript)

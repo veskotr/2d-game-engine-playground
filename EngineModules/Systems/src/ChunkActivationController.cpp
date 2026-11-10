@@ -2,17 +2,7 @@
 
 #include <sle/engine/ChunkActivityTracker.hpp>
 #include <sle/scene/Registry.hpp>
-#include <sle/scene/components/AnimatorComponent.hpp>
-#include <sle/scene/components/BoxColliderComponent.hpp>
-#include <sle/scene/components/BoxZoneComponent.hpp>
 #include <sle/scene/components/ChunkActivationComponent.hpp>
-#include <sle/scene/components/CircleColliderComponent.hpp>
-#include <sle/scene/components/CircleZoneComponent.hpp>
-#include <sle/scene/components/RigidBodyComponent.hpp>
-#include <sle/scene/components/ScriptComponent.hpp>
-#include <sle/scene/components/SpriteRenderer.hpp>
-#include <sle/scene/components/StateMachineComponent.hpp>
-#include <sle/scene/components/UIComponent.hpp>
 
 #include <algorithm>
 
@@ -22,13 +12,6 @@ namespace {
 bool containsChunk(const std::vector<ChunkCoord>& activeChunks, const ChunkCoord& coord)
 {
     return std::find(activeChunks.begin(), activeChunks.end(), coord) != activeChunks.end();
-}
-
-template <typename T>
-void setOptionalEnabled(sle::entity::Registry& registry, sle::entity::Entity entity, bool enabled)
-{
-    if (auto* component = registry.getComponent<T>(entity))
-        component->enabled = enabled;
 }
 
 } // namespace
@@ -51,6 +34,14 @@ void ChunkActivationController::applyActiveChunks(
     const ChunkOwnershipIndex& ownershipIndex,
     sle::entity::Registry& registry) const
 {
+    // Recompute rather than restore snapshots: gameplay may edit flags while
+    // suspended, and policy changes must release any old suspension immediately.
+    registry.view<components::ChunkActivationComponent>(
+        [](sle::entity::Entity, components::ChunkActivationComponent& activation)
+        {
+            activation.suspendedSubsystems = 0;
+        });
+
     if (config.mode == sle::core::ChunkActivationMode::Disabled ||
         config.mode == sle::core::ChunkActivationMode::EventsOnly)
     {
@@ -109,48 +100,24 @@ void ChunkActivationController::applyEntityState(
     sle::entity::Entity entity,
     bool active) const
 {
-    const auto* activation = registry.getComponent<sle::components::ChunkActivationComponent>(entity);
-    if (!activation)
+    auto* activation = registry.getComponent<components::ChunkActivationComponent>(entity);
+    if (!activation || active)
         return;
 
-    if (config.affectScripts && (!activation->keepScriptsWhenInactive || active))
-        setOptionalEnabled<sle::components::ScriptComponent>(registry, entity, active);
-
-    if (config.affectStateMachines)
-        setOptionalEnabled<sle::components::StateMachineComponent>(registry, entity, active);
-
-    if (config.affectAnimation)
-        setOptionalEnabled<sle::components::AnimatorComponent>(registry, entity, active);
-
-    if (!activation->keepPhysicsWhenInactive || active)
+    using Subsystem = components::ChunkSubsystem;
+    auto suspend = [&](Subsystem subsystem, bool affected)
     {
-        if (config.affectPhysics)
-            setOptionalEnabled<sle::components::RigidBodyComponent>(registry, entity, active);
-
-        if (config.affectCollision)
-        {
-            setOptionalEnabled<sle::components::BoxColliderComponent>(registry, entity, active);
-            setOptionalEnabled<sle::components::CircleColliderComponent>(registry, entity, active);
-        }
-
-        if (config.affectZones)
-        {
-            setOptionalEnabled<sle::components::BoxZoneComponent>(registry, entity, active);
-            setOptionalEnabled<sle::components::CircleZoneComponent>(registry, entity, active);
-        }
-    }
-
-    if (config.affectUi && (!activation->keepRenderingWhenInactive || active))
-    {
-        if (auto* ui = registry.getComponent<sle::components::UIComponent>(entity))
-            ui->visible = active;
-    }
-
-    if (config.affectRendering && (!activation->keepRenderingWhenInactive || active))
-    {
-        if (auto* sprite = registry.getComponent<sle::components::SpriteRenderer>(entity))
-            sprite->visible = active;
-    }
+        if (affected)
+            activation->suspendedSubsystems |= static_cast<std::uint8_t>(subsystem);
+    };
+    suspend(Subsystem::Scripts, config.affectScripts && !activation->keepScriptsWhenInactive);
+    suspend(Subsystem::StateMachines, config.affectStateMachines);
+    suspend(Subsystem::Animation, config.affectAnimation);
+    suspend(Subsystem::Physics, config.affectPhysics && !activation->keepPhysicsWhenInactive);
+    suspend(Subsystem::Collision, config.affectCollision && !activation->keepPhysicsWhenInactive);
+    suspend(Subsystem::Zones, config.affectZones && !activation->keepPhysicsWhenInactive);
+    suspend(Subsystem::Ui, config.affectUi && !activation->keepRenderingWhenInactive);
+    suspend(Subsystem::Rendering, config.affectRendering && !activation->keepRenderingWhenInactive);
 }
 
 } // namespace sle

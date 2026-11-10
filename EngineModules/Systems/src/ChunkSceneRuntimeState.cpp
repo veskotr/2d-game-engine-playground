@@ -2,6 +2,7 @@
 
 #include <sle/engine/ChunkMapComponent.hpp>
 #include <sle/scene/Scene.hpp>
+#include <sle/scene/components/ChunkActivationComponent.hpp>
 
 namespace sle {
 
@@ -12,6 +13,11 @@ ChunkSceneRuntimeState::ChunkSceneRuntimeState(sle::core::ChunkActivationConfig 
 
 void ChunkSceneRuntimeState::refreshFromScene(sle::entity::Scene& scene)
 {
+    scene.getRegistry().view<sle::components::ChunkActivationComponent>(
+        [](sle::entity::Entity, sle::components::ChunkActivationComponent& activation)
+        {
+            activation.suspendedSubsystems = 0;
+        });
     tracker.reset();
     ownershipIndex = {};
 

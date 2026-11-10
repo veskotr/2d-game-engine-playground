@@ -24,12 +24,16 @@ int l_subscribe(lua_State* L)
     // Copy callback to top before luaL_ref so argument stack remains valid.
     lua_pushvalue(L, 2);
     int luaRef = luaL_ref(L, LUA_REGISTRYINDEX);
-    
-    // Subscribe through ScriptApi
-    // For now, we use entity ID 0 as a placeholder for global event subscriptions
-    // In a more complete implementation, this would track the entity doing the subscription
-    int subId = detail::getApi(L)->subscribeEvent(eventName, 0, luaRef);
-    
+
+    auto* api = detail::getApi(L);
+    const int subId = api->subscribeEvent(eventName, api->getExecutingEntity(), luaRef);
+    if (subId <= 0)
+    {
+        luaL_unref(L, LUA_REGISTRYINDEX, luaRef);
+        lua_pushnil(L);
+        return 1;
+    }
+
     lua_pushinteger(L, subId);
     return 1;
 }
@@ -62,11 +66,11 @@ void registerEventsTable(lua_State* L, int engineTable, ScriptApi* api)
 {
     lua_newtable(L);
     const int eventsTable = lua_gettop(L);
-    
+
     detail::setTableFunction(L, eventsTable, api, "subscribe", l_subscribe);
     detail::setTableFunction(L, eventsTable, api, "unsubscribe", l_unsubscribe);
     detail::setTableFunction(L, eventsTable, api, "emit", l_emit);
-    
+
     lua_setfield(L, engineTable, "Events");
 }
 

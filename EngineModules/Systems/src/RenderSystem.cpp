@@ -1,4 +1,5 @@
 #include <sle/engine/RenderSystem.hpp>
+#include <sle/scene/ChunkActivity.hpp>
 #include <sle/scene/Scene.hpp>
 #include <sle/scene/components/WorldTransformComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
@@ -139,9 +140,9 @@ void submitCircleOutline(
 void RenderSystem::update(Context& ctx)
 {
     ctx.registry.view<components::WorldTransformComponent, components::SpriteRenderer>(
-        [this, &renderer = ctx.renderer, &camera = ctx.camera](entity::Entity, components::WorldTransformComponent& world, components::SpriteRenderer& sprite)
+        [this, &renderer = ctx.renderer, &camera = ctx.camera, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::SpriteRenderer& sprite)
         {
-            if (!sprite.visible)
+            if (!sprite.visible || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Rendering))
                 return;
 
             if (!isSpriteVisible(world, camera))
@@ -161,33 +162,33 @@ void RenderSystem::update(Context& ctx)
         return;
 
     ctx.registry.view<components::WorldTransformComponent, components::BoxColliderComponent>(
-        [&renderer = ctx.renderer](entity::Entity, components::WorldTransformComponent& world, components::BoxColliderComponent& box)
+        [&renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::BoxColliderComponent& box)
         {
-            if (!box.enabled)
+            if (!box.enabled || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Collision) || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Physics))
                 return;
             submitBoxOutline(renderer, world, box.offset, box.size, {0.20f, 0.85f, 1.00f, 1.0f}, 100000);
         });
 
     ctx.registry.view<components::WorldTransformComponent, components::CircleColliderComponent>(
-        [&renderer = ctx.renderer](entity::Entity, components::WorldTransformComponent& world, components::CircleColliderComponent& circle)
+        [&renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::CircleColliderComponent& circle)
         {
-            if (!circle.enabled)
+            if (!circle.enabled || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Collision) || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Physics))
                 return;
             submitCircleOutline(renderer, world, circle.offset, circle.radius, {0.20f, 0.85f, 1.00f, 1.0f}, 100000);
         });
 
     ctx.registry.view<components::WorldTransformComponent, components::BoxZoneComponent>(
-        [&renderer = ctx.renderer](entity::Entity, components::WorldTransformComponent& world, components::BoxZoneComponent& boxZone)
+        [&renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::BoxZoneComponent& boxZone)
         {
-            if (!boxZone.enabled)
+            if (!boxZone.enabled || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Zones) || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Physics))
                 return;
             submitBoxOutline(renderer, world, boxZone.offset, boxZone.size, {1.00f, 0.80f, 0.20f, 1.0f}, 100001);
         });
 
     ctx.registry.view<components::WorldTransformComponent, components::CircleZoneComponent>(
-        [&renderer = ctx.renderer](entity::Entity, components::WorldTransformComponent& world, components::CircleZoneComponent& circleZone)
+        [&renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::CircleZoneComponent& circleZone)
         {
-            if (!circleZone.enabled)
+            if (!circleZone.enabled || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Zones) || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Physics))
                 return;
             submitCircleOutline(renderer, world, circleZone.offset, circleZone.radius, {1.00f, 0.80f, 0.20f, 1.0f}, 100001);
         });

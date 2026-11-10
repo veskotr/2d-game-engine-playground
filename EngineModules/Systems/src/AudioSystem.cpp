@@ -93,6 +93,16 @@ void AudioSystem::releaseHandle(SoundHandle& handle)
     }
 }
 
+void AudioSystem::releaseEntity(sle::entity::Scene& scene, uint32_t entityId)
+{
+    auto* audio = scene.getRegistry().getComponent<sle::components::AudioComponent>(sle::entity::Entity(entityId));
+    if (!audio) return;
+    auto it = sounds_.find(audio->runtimeHandle);
+    if (it != sounds_.end()) { releaseHandle(it->second); sounds_.erase(it); }
+    audio->runtimeHandle = 0;
+    audio->state = sle::components::AudioPlaybackState::Stopped;
+}
+
 void AudioSystem::update(sle::entity::Scene& scene)
 {
     if (!initialized_)

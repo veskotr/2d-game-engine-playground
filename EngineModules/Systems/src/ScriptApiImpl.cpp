@@ -2,6 +2,8 @@
 
 #include <sle/core/Log.hpp>
 #include <sle/engine/Runtime.hpp>
+#include <sle/scene/ChunkActivity.hpp>
+#include <sle/scene/components/ScriptComponent.hpp>
 #include <sle/platform/Input.hpp>
 #include <sle/resources/Resources.hpp>
 #include <sle/renderer/Texture.hpp>
@@ -90,20 +92,20 @@ bool ScriptApiImpl::isEntityAlive(sle::scripting::ScriptEntityRef entity) const
 
 void ScriptApiImpl::destroyEntity(sle::scripting::ScriptEntityRef entity)
 {
-    // Auto-cleanup all event subscriptions for this entity
-    entitySubscriptions_.erase(entity.id);
-    
-    // Also remove any subscription ID mappings that point to this entity
-    auto it = subscriptionIdToLocation_.begin();
-    while (it != subscriptionIdToLocation_.end())
-    {
-        if (it->second.first == entity.id)
-            it = subscriptionIdToLocation_.erase(it);
-        else
-            ++it;
-    }
+    if (!isEntityAlive(entity))
+        return;
 
-    runtime.getScene().destroyEntity(sle::entity::Entity(entity.id));
+    auto& scene = runtime.getScene();
+    std::vector<sle::entity::Entity> pending{sle::entity::Entity(entity.id)};
+    while (!pending.empty())
+    {
+        const auto current = pending.back();
+        pending.pop_back();
+        const auto& children = scene.getChildren(current);
+        pending.insert(pending.end(), children.begin(), children.end());
+        clearEventSubscriptions(current.getID());
+    }
+    scene.destroyEntity(sle::entity::Entity(entity.id));
 }
 
 uint32_t ScriptApiImpl::getChildCount(sle::scripting::ScriptEntityRef parent) const
@@ -124,7 +126,7 @@ uint32_t ScriptApiImpl::destroyChildren(sle::scripting::ScriptEntityRef parent)
     std::vector<sle::entity::Entity> childrenCopy(children.begin(), children.end());
 
     for (sle::entity::Entity child : childrenCopy)
-        runtime.getScene().destroyEntity(child);
+        destroyEntity({child.getID()});
 
     return static_cast<uint32_t>(childrenCopy.size());
 }
@@ -142,12 +144,7 @@ bool ScriptApiImpl::setParent(
     if (parentEntity.valid() && !isEntityAlive(parent))
         return false;
 
-    runtime.getScene().setParent(childEntity, parentEntity);
-
-    if (auto* transform = runtime.getScene().getRegistry().getComponent<components::TransformComponent>(childEntity))
-        transform->setParent(parentEntity);
-
-    return true;
+    return runtime.getScene().setParent(childEntity, parentEntity);
 }
 
 sle::scripting::ScriptEntityRef ScriptApiImpl::getParent(sle::scripting::ScriptEntityRef entity) const
@@ -461,15 +458,13 @@ bool ScriptApiImpl::setVelocity(sle::scripting::ScriptEntityRef entity, float ve
     const sle::entity::Entity rawEntity(entity.id);
 
     auto* rigidBody = registry.getComponent<components::RigidBodyComponent>(rawEntity);
-    if (!rigidBody || rigidBody->box2dBodyId == 0)
+    if (!rigidBody)
         return false;
 
     auto* physicsWorld = runtime.getPhysicsWorld();
-    if (!physicsWorld)
-        return false;
-
     rigidBody->velocity = {velocityX, velocityY};
-    physicsWorld->setBodyVelocity(rigidBody->box2dBodyId, rigidBody->velocity);
+    if (physicsWorld && rigidBody->box2dBodyId != 0)
+        physicsWorld->setBodyVelocity(rigidBody->box2dBodyId, rigidBody->velocity);
     return true;
 }
 
@@ -498,15 +493,13 @@ bool ScriptApiImpl::setAngularVelocity(sle::scripting::ScriptEntityRef entity, f
     const sle::entity::Entity rawEntity(entity.id);
 
     auto* rigidBody = registry.getComponent<components::RigidBodyComponent>(rawEntity);
-    if (!rigidBody || rigidBody->box2dBodyId == 0)
+    if (!rigidBody)
         return false;
 
     auto* physicsWorld = runtime.getPhysicsWorld();
-    if (!physicsWorld)
-        return false;
-
     rigidBody->angularVelocity = angularVelocity;
-    physicsWorld->setBodyAngularVelocity(rigidBody->box2dBodyId, angularVelocity);
+    if (physicsWorld && rigidBody->box2dBodyId != 0)
+        physicsWorld->setBodyAngularVelocity(rigidBody->box2dBodyId, angularVelocity);
     return true;
 }
 
@@ -534,15 +527,13 @@ bool ScriptApiImpl::setGravityScale(sle::scripting::ScriptEntityRef entity, floa
     const sle::entity::Entity rawEntity(entity.id);
 
     auto* rigidBody = registry.getComponent<components::RigidBodyComponent>(rawEntity);
-    if (!rigidBody || rigidBody->box2dBodyId == 0)
+    if (!rigidBody)
         return false;
 
     auto* physicsWorld = runtime.getPhysicsWorld();
-    if (!physicsWorld)
-        return false;
-
     rigidBody->gravityScale = gravityScale;
-    physicsWorld->setBodyGravityScale(rigidBody->box2dBodyId, gravityScale);
+    if (physicsWorld && rigidBody->box2dBodyId != 0)
+        physicsWorld->setBodyGravityScale(rigidBody->box2dBodyId, gravityScale);
     return true;
 }
 
@@ -658,117 +649,130 @@ bool ScriptApiImpl::isPhysicsDebugEnabled() const
     return runtime.isPhysicsDebugEnabled();
 }
 
+uint32_t ScriptApiImpl::getExecutingEntity() const
+{
+    return runtime.getScriptEngine().getExecutingEntity();
+}
+
+bool ScriptApiImpl::isExecutingEntityScript() const
+{
+    return runtime.getScriptEngine().isExecutingEntityScript();
+}
+
+bool ScriptApiImpl::canDispatchEvent(int subscriptionId) const
+{
+    const auto it = subscriptions_.find(subscriptionId);
+    if (it == subscriptions_.end() || !*it->second.active)
+        return false;
+    const auto& subscription = it->second;
+    if (subscription.owner == 0)
+        return true; // Explicit scene-global subscription.
+    const auto& registry = runtime.getScene().getRegistry();
+    const sle::entity::Entity owner(subscription.owner);
+    if (!registry.hasEntity(owner) ||
+        !sle::entity::isChunkActive(registry, owner, components::ChunkSubsystem::Scripts))
+        return false;
+    const auto* script = registry.getComponent<components::ScriptComponent>(owner);
+    if (subscription.scriptOwned)
+        return script && script->enabled && runtime.getScriptEngine().hasScript(subscription.owner);
+    return true; // UI/global behavior ownership is independent of ScriptComponent.
+}
+
 int ScriptApiImpl::subscribeEvent(const std::string& eventName, uint32_t entityId, int luaRef)
 {
-    auto& eventBus = runtime.getScene().getEventBus();
-    int subId = nextSubscriptionId_++;
-
+    if (eventName.empty() || (entityId != 0 && !isEntityAlive({entityId})))
+        return 0;
+    const int id = nextSubscriptionId_++;
+    auto active = std::make_shared<bool>(true);
+    auto& bus = runtime.getScene().getEventBus();
+    const bool scriptOwned = isExecutingEntityScript();
+    auto dispatch = [this, active, id, luaRef, entityId, scriptOwned](const std::string& name,
+        uint32_t a, uint32_t b, const std::string& zone, uint32_t source, const std::string& payload)
+    {
+        // unsubscribe/scene teardown may happen during snapshot dispatch. A stale
+        // closure must not call a released (possibly reused) Lua registry ref.
+        if (*active && canDispatchEvent(id))
+            (void)runtime.getScriptEngine().callEventCallback(luaRef, name, a, b, zone, source, payload, entityId, scriptOwned);
+    };
+    sle::events::SubscriptionHandle handle;
     if (eventName == "collision.begin")
-    {
-        auto handle = eventBus.subscribe<sle::events::CollisionBeginEvent>(
-            [this, luaRef](const sle::events::CollisionBeginEvent& evt) {
-                (void)runtime.getScriptEngine().callEventCallback(
-                    luaRef,
-                    "collision.begin",
-                    evt.entityA.getID(),
-                    evt.entityB.getID());
-            });
-        entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
-        subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
-        return subId;
-    }
+        handle = bus.subscribe<sle::events::CollisionBeginEvent>([dispatch](const auto& e) { dispatch("collision.begin", e.entityA.getID(), e.entityB.getID(), {}, 0, {}); });
     else if (eventName == "collision.end")
-    {
-        auto handle = eventBus.subscribe<sle::events::CollisionEndEvent>(
-            [this, luaRef](const sle::events::CollisionEndEvent& evt) {
-                (void)runtime.getScriptEngine().callEventCallback(
-                    luaRef,
-                    "collision.end",
-                    evt.entityA.getID(),
-                    evt.entityB.getID());
-            });
-        entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
-        subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
-        return subId;
-    }
+        handle = bus.subscribe<sle::events::CollisionEndEvent>([dispatch](const auto& e) { dispatch("collision.end", e.entityA.getID(), e.entityB.getID(), {}, 0, {}); });
     else if (eventName == "zone.enter")
-    {
-        auto handle = eventBus.subscribe<sle::events::ZoneEnterEvent>(
-            [this, luaRef](const sle::events::ZoneEnterEvent& evt) {
-                (void)runtime.getScriptEngine().callEventCallback(
-                    luaRef,
-                    "zone.enter",
-                    evt.zoneEntity.getID(),
-                    evt.otherEntity.getID(),
-                    evt.zoneId);
-            });
-        entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
-        subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
-        return subId;
-    }
+        handle = bus.subscribe<sle::events::ZoneEnterEvent>([dispatch](const auto& e) { dispatch("zone.enter", e.zoneEntity.getID(), e.otherEntity.getID(), e.zoneId, 0, {}); });
     else if (eventName == "zone.exit")
-    {
-        auto handle = eventBus.subscribe<sle::events::ZoneExitEvent>(
-            [this, luaRef](const sle::events::ZoneExitEvent& evt) {
-                (void)runtime.getScriptEngine().callEventCallback(
-                    luaRef,
-                    "zone.exit",
-                    evt.zoneEntity.getID(),
-                    evt.otherEntity.getID(),
-                    evt.zoneId);
-            });
-        entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
-        subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
-        return subId;
-    }
-
-    // Any other event name is treated as a custom script event channel.
-    auto handle = eventBus.subscribe<sle::events::ScriptEvent>(
-        [this, luaRef](const sle::events::ScriptEvent& evt) {
-            (void)runtime.getScriptEngine().callEventCallback(
-                luaRef,
-                evt.name,
-                0,
-                0,
-                {},
-                evt.sourceEntity.getID(),
-                evt.payload);
-        },
-        [eventName](const sle::events::ScriptEvent& evt) {
-            return evt.name == eventName;
-        });
-    entitySubscriptions_[entityId].push_back(sle::events::ScopedSubscription(&eventBus, handle));
-    subscriptionIdToLocation_[subId] = {entityId, entitySubscriptions_[entityId].size() - 1};
-    return subId;
+        handle = bus.subscribe<sle::events::ZoneExitEvent>([dispatch](const auto& e) { dispatch("zone.exit", e.zoneEntity.getID(), e.otherEntity.getID(), e.zoneId, 0, {}); });
+    else
+        handle = bus.subscribe<sle::events::ScriptEvent>([dispatch](const auto& e) { dispatch(e.name, 0, 0, {}, e.sourceEntity.getID(), e.payload); },
+            [eventName](const auto& e) { return e.name == eventName; });
+    subscriptions_.emplace(id, EventSubscription{entityId, luaRef, scriptOwned, active,
+        sle::events::ScopedSubscription(&bus, handle)});
+    return id;
 }
 
 void ScriptApiImpl::unsubscribeEvent(int subscriptionId)
 {
-    auto it = subscriptionIdToLocation_.find(subscriptionId);
-    if (it == subscriptionIdToLocation_.end())
+    const auto it = subscriptions_.find(subscriptionId);
+    if (it == subscriptions_.end())
         return;
+    *it->second.active = false;
+    it->second.handle.reset();
+    runtime.getScriptEngine().releaseEventCallback(it->second.luaRef);
+    subscriptions_.erase(it);
+}
 
-    uint32_t entityId = it->second.first;
-    size_t index = it->second.second;
+void ScriptApiImpl::clearEventSubscriptions(uint32_t entityId)
+{
+    std::vector<int> ids;
+    for (const auto& [id, subscription] : subscriptions_)
+        if (subscription.owner == entityId)
+            ids.push_back(id);
+    for (int id : ids)
+        unsubscribeEvent(id);
+}
 
-    auto entityIt = entitySubscriptions_.find(entityId);
-    if (entityIt != entitySubscriptions_.end() && index < entityIt->second.size())
+void ScriptApiImpl::clearScriptEventSubscriptions(uint32_t entityId)
+{
+    std::vector<int> ids;
+    for (const auto& [id, subscription] : subscriptions_)
+        if (subscription.owner == entityId && subscription.scriptOwned)
+            ids.push_back(id);
+    for (int id : ids)
+        unsubscribeEvent(id);
+}
+
+void ScriptApiImpl::pruneEventSubscriptions()
+{
+    std::vector<int> ids;
+    const auto& registry = runtime.getScene().getRegistry();
+    for (const auto& [id, subscription] : subscriptions_)
     {
-        // Swap with last and pop for O(1) removal
-        if (index != entityIt->second.size() - 1)
-        {
-            std::swap(entityIt->second[index], entityIt->second.back());
-            
-            // Update the location tracking for swapped subscription
-            // This is a simplified version; a more robust implementation would track indices
-        }
-        entityIt->second.pop_back();
-
-        if (entityIt->second.empty())
-            entitySubscriptions_.erase(entityIt);
+        if (subscription.owner == 0) continue;
+        const sle::entity::Entity owner(subscription.owner);
+        const auto* script = registry.getComponent<components::ScriptComponent>(owner);
+        if (!registry.hasEntity(owner) || (subscription.scriptOwned &&
+            (!script || !script->enabled || !runtime.getScriptEngine().hasScript(subscription.owner))))
+            ids.push_back(id);
     }
+    for (int id : ids)
+        unsubscribeEvent(id);
+}
 
-    subscriptionIdToLocation_.erase(it);
+void ScriptApiImpl::rollbackEventSubscriptions(uint32_t owner, int checkpoint, bool scriptOwned)
+{
+    std::vector<int> ids;
+    for (const auto& [id, subscription] : subscriptions_)
+        if (id >= checkpoint && subscription.owner == owner && subscription.scriptOwned == scriptOwned)
+            ids.push_back(id);
+    for (int id : ids)
+        unsubscribeEvent(id);
+}
+
+void ScriptApiImpl::clearAllEventSubscriptions()
+{
+    while (!subscriptions_.empty())
+        unsubscribeEvent(subscriptions_.begin()->first);
 }
 
 bool ScriptApiImpl::emitEvent(const std::string& eventName, uint32_t sourceEntity, const std::string& payload)

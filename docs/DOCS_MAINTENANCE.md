@@ -1,64 +1,23 @@
-# Documentation Maintenance
+# Documentation maintenance
 
-Use this file when deciding which docs to update.
+[AGENTS.md](../AGENTS.md) is the canonical agent entry point.
+[CONTRIBUTING.md](../CONTRIBUTING.md) owns setup and validation instructions.
 
-## Canonical Files
+Update documentation when the facts it describes change:
 
-- `docs/CURRENT_TASK.md` - active task and handoff.
-- `docs/PROJECT_MEMORY.md` - durable project memory.
-- `docs/CONSTRAINTS.md` - rules and invariants.
-- `docs/README_DOCUMENTATION.md` - documentation map.
-- `docs/modules/*.md` - per-module current state.
-- `docs/topics/*.md` - cross-cutting topics and workflows.
+- `modules/` for module responsibilities, public APIs, dependencies, and known issues.
+- `topics/` for cross-module behavior, frame order, workflows, and test conventions.
+- `CONSTRAINTS.md` for architecture and subsystem invariants.
+- `PROJECT_MEMORY.md` for durable decisions and significant known debt.
+- A task-specific plan following [PLANS.md](../PLANS.md) for substantial work.
 
-## Update Rules
+Do not require updates to every context file for each task. Keep temporary progress
+in the relevant plan. `CURRENT_TASK.md` is a historical handoff unless explicitly
+updated for a current request; its presence does not authorize continuing old work.
 
-Update `CURRENT_TASK.md` for every non-trivial task:
+Older long-form references and implementation plans may describe past states or
+future intent. Verify relevant claims against code. Correct or mark stale sections
+when a task touches them; do not claim the entire document was reverified.
 
-- current status
-- files changed
-- validation run
-- unresolved follow-ups
-
-Update `PROJECT_MEMORY.md` when the project truth changes:
-
-- architecture decisions
-- ownership decisions
-- long-lived known debt
-- roadmap state that future agents need
-
-Update `CONSTRAINTS.md` when rules change:
-
-- dependency boundaries
-- testing gates
-- style rules
-- subsystem invariants
-
-Update module docs when code in that module changes:
-
-- public APIs
-- responsibilities
-- dependencies
-- important files
-- known issues
-
-Update topic docs when cross-module behavior changes:
-
-- frame order
-- scene/component model
-- scripting API
-- render pipeline
-- event/physics/UI behavior
-- testing commands or labels
-
-## Legacy Docs
-
-Older long-form docs are still useful as deep references, but they are not the preferred first-read path. If a legacy doc conflicts with the small docs, verify against code and then update the small docs plus the legacy doc or mark the legacy doc stale.
-
-## Completion Checklist
-
-- `CURRENT_TASK.md` reflects the final status.
-- All changed behavior has matching module/topic doc updates.
-- `PROJECT_MEMORY.md` is updated for durable decisions.
-- `CONSTRAINTS.md` is updated for new or changed rules.
-- Final response lists docs changed and validation run.
+Before finishing, check changed links and report actual validation. For a code
+change with no documentation impact, a brief explanation in the PR is sufficient.

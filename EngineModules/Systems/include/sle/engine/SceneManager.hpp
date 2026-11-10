@@ -18,6 +18,8 @@ public:
     using SceneBuilder = std::function<void(Runtime&)>;
 
     bool registerScene(const std::string& sceneName, SceneBuilder builder);
+    // File loads are staged; failure preserves the live scene and lifecycle state.
+    bool registerSceneFromFile(const std::string& sceneName, const std::string& jsonPath);
     bool hasScene(const std::string& sceneName) const;
 
     sle::core::Result<bool> loadScene(
@@ -32,7 +34,12 @@ public:
     const std::string& getCurrentSceneName() const { return currentSceneName; }
 
 private:
-    std::unordered_map<std::string, SceneBuilder> sceneBuilders;
+    struct SceneRegistration
+    {
+        SceneBuilder builder;
+        std::string jsonPath;
+    };
+    std::unordered_map<std::string, SceneRegistration> sceneBuilders;
     // Coalesced pending switch: if multiple requests arrive before processing,
     // the latest request replaces earlier ones.
     std::optional<std::string> pendingSceneName;

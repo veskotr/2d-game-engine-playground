@@ -17,6 +17,20 @@ namespace sle::scripting {
 
 namespace {
 constexpr int kLuaNoRef = -2; // LUA_REFNIL
+
+class ExecutionScope
+{
+public:
+    ExecutionScope(uint32_t& current, bool& source, uint32_t entity, bool script = false)
+        : current(current), source(source), previous(current), previousSource(source)
+    { current = entity; source = script; }
+    ~ExecutionScope() { current = previous; source = previousSource; }
+private:
+    uint32_t& current;
+    bool& source;
+    uint32_t previous;
+    bool previousSource;
+};
 }
 
 bool ScriptEngine::init(ScriptApi* inApi)
@@ -35,27 +49,39 @@ bool ScriptEngine::init(ScriptApi* inApi)
     return true;
 }
 
-void ScriptEngine::shutdown()
+void ScriptEngine::clearSceneScripts()
 {
     std::vector<uint32_t> ids;
     ids.reserve(instances.size());
     for (const auto& [entityId, _] : instances)
         ids.push_back(entityId);
-
     for (uint32_t id : ids)
         removeScript(id);
+    if (api)
+        api->clearAllEventSubscriptions();
+}
 
+void ScriptEngine::shutdown()
+{
+    clearSceneScripts();
     if (L)
     {
         lua_close(L);
         L = nullptr;
     }
-
     api = nullptr;
+    executingEntity = 0;
+}
+
+void ScriptEngine::releaseEventCallback(int luaRef)
+{
+    if (L && luaRef >= 0)
+        luaL_unref(L, LUA_REGISTRYINDEX, luaRef);
 }
 
 bool ScriptEngine::ensureScript(uint32_t entityId, const std::string& scriptAsset)
 {
+    ExecutionScope execution(executingEntity, executingEntityScript, entityId, true);
     if (!L || scriptAsset.empty())
         return false;
 
@@ -77,6 +103,7 @@ bool ScriptEngine::ensureScript(uint32_t entityId, const std::string& scriptAsse
     {
         sle::core::Log::error("Lua load error [{}]: {}", scriptAsset, lua_tostring(L, -1));
         lua_pop(L, 1);
+        if (api) api->clearScriptEventSubscriptions(entityId);
         return false;
     }
 
@@ -84,6 +111,7 @@ bool ScriptEngine::ensureScript(uint32_t entityId, const std::string& scriptAsse
     {
         sle::core::Log::error("Lua runtime error [{}]: {}", scriptAsset, lua_tostring(L, -1));
         lua_pop(L, 1);
+        if (api) api->clearScriptEventSubscriptions(entityId);
         return false;
     }
 
@@ -117,14 +145,23 @@ bool ScriptEngine::ensureScript(uint32_t entityId, const std::string& scriptAsse
 
     instances[entityId] = instance;
 
-    if (instance.initRef != kLuaNoRef)
-        return callFunction(instance.initRef, entityId);
+    if (instance.initRef != kLuaNoRef && !callFunction(instance.initRef, entityId))
+    {
+        removeScript(entityId);
+        return false;
+    }
 
     return true;
 }
 
 bool ScriptEngine::executeScriptAsset(const std::string& scriptAsset)
 {
+    return executeScriptAssetForEntity(scriptAsset, 0);
+}
+
+bool ScriptEngine::executeScriptAssetForEntity(const std::string& scriptAsset, uint32_t entityId)
+{
+    ExecutionScope execution(executingEntity, executingEntityScript, entityId);
     if (!L || scriptAsset.empty())
         return false;
 
@@ -138,11 +175,13 @@ bool ScriptEngine::executeScriptAsset(const std::string& scriptAsset)
         return false;
     }
 
+    const int checkpoint = api ? api->eventSubscriptionCheckpoint() : 0;
     const std::string& scriptSource = scriptResource->getSource();
     if (luaL_loadbuffer(L, scriptSource.c_str(), scriptSource.size(), scriptAsset.c_str()) != LUA_OK)
     {
         sle::core::Log::error("Lua load error [{}]: {}", scriptAsset, lua_tostring(L, -1));
         lua_pop(L, 1);
+        if (api) api->rollbackEventSubscriptions(entityId, checkpoint, false);
         return false;
     }
 
@@ -150,6 +189,7 @@ bool ScriptEngine::executeScriptAsset(const std::string& scriptAsset)
     {
         sle::core::Log::error("Lua runtime error [{}]: {}", scriptAsset, lua_tostring(L, -1));
         lua_pop(L, 1);
+        if (api) api->rollbackEventSubscriptions(entityId, checkpoint, false);
         return false;
     }
 
@@ -173,9 +213,13 @@ void ScriptEngine::removeScript(uint32_t entityId)
 
     auto it = instances.find(entityId);
     if (it == instances.end())
+    {
+        if (api) api->clearScriptEventSubscriptions(entityId);
         return;
+    }
 
-    ScriptInstance& instance = it->second;
+    const ScriptInstance instance = it->second;
+    instances.erase(it);
 
     if (instance.destroyRef != kLuaNoRef)
         (void)callFunction(instance.destroyRef, entityId);
@@ -189,7 +233,8 @@ void ScriptEngine::removeScript(uint32_t entityId)
     if (instance.tableRef != kLuaNoRef)
         luaL_unref(L, LUA_REGISTRYINDEX, instance.tableRef);
 
-    instances.erase(it);
+    if (api)
+        api->clearScriptEventSubscriptions(entityId);
 }
 
 bool ScriptEngine::hasScript(uint32_t entityId) const
@@ -199,6 +244,7 @@ bool ScriptEngine::hasScript(uint32_t entityId) const
 
 bool ScriptEngine::callEntityFunctionByName(uint32_t entityId, const std::string& functionName)
 {
+    ExecutionScope execution(executingEntity, executingEntityScript, entityId, true);
     if (!L || functionName.empty())
         return false;
 
@@ -252,6 +298,7 @@ void ScriptEngine::syncEntities(const std::unordered_set<uint32_t>& activeEntiti
 
     for (uint32_t entityId : toRemove)
         removeScript(entityId);
+    if (api) api->pruneEventSubscriptions();
 }
 
 void ScriptEngine::update(float)
@@ -260,6 +307,8 @@ void ScriptEngine::update(float)
 
 bool ScriptEngine::callGlobalFunction(const std::string& functionName, uint32_t entityId, const std::string& stringArg)
 {
+    const bool inheritedScript = executingEntityScript && executingEntity == entityId;
+    ExecutionScope execution(executingEntity, executingEntityScript, entityId, inheritedScript);
     if (!L || functionName.empty())
         return false;
 
@@ -295,6 +344,8 @@ bool ScriptEngine::callGlobalFunction(const std::string& functionName, uint32_t 
 
 bool ScriptEngine::callGlobalBoolFunction(const std::string& functionName, uint32_t entityId, const std::string& stringArg)
 {
+    const bool inheritedScript = executingEntityScript && executingEntity == entityId;
+    ExecutionScope execution(executingEntity, executingEntityScript, entityId, inheritedScript);
     if (!L || functionName.empty())
         return false;
 
@@ -343,8 +394,9 @@ bool ScriptEngine::callEventCallback(
     uint32_t entityB,
     const std::string& zoneId,
     uint32_t sourceEntity,
-    const std::string& payload)
+    const std::string& payload, uint32_t ownerEntity, bool ownerIsScript)
 {
+    ExecutionScope execution(executingEntity, executingEntityScript, ownerEntity, ownerIsScript);
     if (!L || luaRef == kLuaNoRef)
         return false;
 
@@ -414,6 +466,7 @@ int ScriptEngine::extractFunctionRef(int tableIndex, const char* functionName)
 
 bool ScriptEngine::callFunction(int ref, uint32_t entityId, float dt)
 {
+    ExecutionScope execution(executingEntity, executingEntityScript, entityId, true);
     if (!L || ref == kLuaNoRef)
         return false;
 

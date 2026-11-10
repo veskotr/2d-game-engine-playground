@@ -4,7 +4,6 @@
 #include <sle/core/Log.hpp>
 #include <sle/engine/Runtime.hpp>
 #include <sle/engine/Context.hpp>
-#include <sle/engine/SceneLoader.hpp>
 #include <sle/events/ScriptEvents.hpp>
 #include <sle/resources/Resources.hpp>
 
@@ -60,23 +59,7 @@ namespace sle
 
     bool Runtime::registerSceneFromFile(const std::string& sceneName, const std::string& jsonPath)
     {
-        if (sceneName.empty() || jsonPath.empty())
-            return false;
-
-        return sceneManager.registerScene(
-            sceneName,
-            [sceneName, jsonPath](Runtime& runtime)
-            {
-                auto loadResult = SceneLoader::load(jsonPath, runtime.getScene());
-                if (!loadResult.ok())
-                {
-                    sle::core::Log::error(
-                        "Failed to load scene '{}' from '{}': {}",
-                        sceneName,
-                        jsonPath,
-                        loadResult.error());
-                }
-            });
+        return sceneManager.registerSceneFromFile(sceneName, jsonPath);
     }
 
     bool Runtime::hasScene(const std::string& sceneName) const
@@ -178,7 +161,11 @@ namespace sle
     {
         scriptEngine.shutdown();
         scene.destroy();
-        // Clear resources BEFORE destroying window (while GL context is still valid)
+        // Release every runtime-owned GPU resource while the GL context is valid.
+        // Clearing the shared cache alone cannot release UI and shader references.
+        uiSystem.shutdown();
+        defaultQuadShader.reset();
+        defaultDebugShader.reset();
         Resources::clear();
         renderer.shutdown();
         window.destroy();
@@ -352,28 +339,29 @@ namespace sle
             // inactive chunk residents can skip work in the same frame.
             chunkRuntimeState.update(scene, camera.getPosition());
 
-            // 1. Advance animations before transform solve so animated local transforms
-            // are reflected in world transforms in the same frame.
+            // Advance animation before scripts and physics consume local transforms.
             animationSystem.update(scene, dt);
-            auto tAnimation = Clock::now();
 
             // 1b. Process audio play/stop requests.
             audioSystem.update(scene);
 
-            // 2. Resolve world-space transforms (required by all other systems).
-            transformSystem.update(ctx);
             auto t1 = Clock::now();
 
-            // 3. Update scripted entities (placeholder for Lua integration).
+            // Scripts can edit local transforms before physics synchronization.
             scriptSystem.update(ctx);
             auto t2 = Clock::now();
 
-            // 4. Update state machines after scripts mutate parameters/triggers.
+            // Update state machines after scripts mutate parameters/triggers.
             stateMachineSystem.update(scene, dt, &scriptEngine);
 
-            // 5. Step physics simulation and resolve collisions (placeholder for Box2D).
+            // Consume dirty local transforms, step physics, and write back results.
             physicsSystem.update(ctx);
             auto t3 = Clock::now();
+
+            // Resolve the final pose after all simulation writes. Doing this earlier
+            // clears dirty flags before physics and leaves rendering one frame behind.
+            transformSystem.update(ctx);
+            auto tTransform = Clock::now();
 
             // === RENDER PHASE ===
             renderer.beginFrame();
@@ -390,10 +378,10 @@ namespace sle
             window.swapBuffers();
             auto t6 = Clock::now();
 
-            transformMsAccum += Ms(t1 - tAnimation).count();
+            transformMsAccum += Ms(tTransform - t3).count();
             scriptMsAccum += Ms(t2 - t1).count();
             physicsMsAccum += Ms(t3 - t2).count();
-            renderSubmitMsAccum += Ms(t4 - t3).count();
+            renderSubmitMsAccum += Ms(t4 - tTransform).count();
             renderFlushMsAccum += Ms(t5 - t4).count();
             swapMsAccum += Ms(t6 - t5).count();
 

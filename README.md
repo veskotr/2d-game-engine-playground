@@ -16,7 +16,7 @@ SLE is a modular C++ 2D game engine with ECS scene data, Lua scripting, command-
 - `examples/` - runnable sample applications
 - `assets/` - shared runtime assets
 - `tests/` - smoke, integration, and harness tests
-- `docs/` - project memory, constraints, module docs, topic docs, and legacy deep references
+- `docs/` - constraints, module docs, topic docs, and historical references
 - `cmake/` - dependency setup and CMake helpers
 
 ## Build
@@ -61,7 +61,7 @@ From the repository root:
 build/debug/engine_app/Debug/engine_app.exe
 ```
 
-The default [`engine.json`](/C:/projects/engine/engine.json) starts `assets/scenes/npc_zone_demo.json`.
+The default [`engine.json`](engine.json) starts `assets/scenes/npc_zone_demo.json`.
 
 ## Run Tests
 
@@ -73,16 +73,13 @@ ctest --test-dir build/debug -C Debug --output-on-failure
 
 ## Documentation
 
-Start with `docs/README_DOCUMENTATION.md`.
+Start with [the documentation index](docs/README_DOCUMENTATION.md).
+For development setup and validation, read [CONTRIBUTING.md](CONTRIBUTING.md).
 
-The short context files are:
-
-- `docs/CURRENT_TASK.md`
-- `docs/PROJECT_MEMORY.md`
-- `docs/CONSTRAINTS.md`
-- `docs/DOCS_MAINTENANCE.md`
-
-Per-module docs live in `docs/modules/`. Cross-cutting topic docs live in `docs/topics/`.
+AI assistants start at [AGENTS.md](AGENTS.md). Scoped instructions cover
+[scripting](EngineModules/Scripting/AGENTS.md) and [tests](tests/AGENTS.md).
+Use [PLANS.md](PLANS.md) for substantial work. Historical task notes and roadmap
+plans provide background; they do not define a new session's task.
 
 ## Development Rules
 

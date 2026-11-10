@@ -2,6 +2,7 @@
 #include <sle/engine/ChunkActivationController.hpp>
 #include <sle/engine/ChunkOwnershipIndex.hpp>
 #include <sle/scene/Scene.hpp>
+#include <sle/scene/ChunkActivity.hpp>
 #include <sle/scene/components/AnimatorComponent.hpp>
 #include <sle/scene/components/BoxColliderComponent.hpp>
 #include <sle/scene/components/BoxZoneComponent.hpp>
@@ -79,33 +80,33 @@ int main()
 
     controller.applyActiveChunks({{0, 0}}, ownershipIndex, registry);
 
-    if (!expect(registry.getComponent<sle::components::ScriptComponent>(autoEntity)->enabled, "Auto entity should start active") ||
-        !expect(registry.getComponent<sle::components::UIComponent>(autoEntity)->visible, "Auto entity UI should start visible"))
+    if (!expect((registry.getComponent<sle::components::ScriptComponent>(autoEntity)->enabled && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::Scripts)), "Auto entity should start active") ||
+        !expect((registry.getComponent<sle::components::UIComponent>(autoEntity)->visible && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::Ui)), "Auto entity UI should start visible"))
     {
         return 1;
     }
 
     controller.applyActiveChunks({{5, 5}}, ownershipIndex, registry);
 
-    if (!expect(!registry.getComponent<sle::components::ScriptComponent>(autoEntity)->enabled, "Auto entity script should disable outside active chunk") ||
-        !expect(!registry.getComponent<sle::components::RigidBodyComponent>(autoEntity)->enabled, "Auto entity rigid body should disable outside active chunk") ||
-        !expect(!registry.getComponent<sle::components::StateMachineComponent>(autoEntity)->enabled, "Auto entity state machine should disable outside active chunk") ||
-        !expect(!registry.getComponent<sle::components::AnimatorComponent>(autoEntity)->enabled, "Auto entity animator should disable outside active chunk") ||
-        !expect(!registry.getComponent<sle::components::BoxColliderComponent>(autoEntity)->enabled, "Auto entity collider should disable outside active chunk") ||
-        !expect(!registry.getComponent<sle::components::BoxZoneComponent>(autoEntity)->enabled, "Auto entity zone should disable outside active chunk") ||
-        !expect(!registry.getComponent<sle::components::UIComponent>(autoEntity)->visible, "Auto entity UI should hide outside active chunk"))
+    if (!expect(!(registry.getComponent<sle::components::ScriptComponent>(autoEntity)->enabled && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::Scripts)), "Auto entity script should disable outside active chunk") ||
+        !expect(!(registry.getComponent<sle::components::RigidBodyComponent>(autoEntity)->enabled && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::Physics)), "Auto entity rigid body should disable outside active chunk") ||
+        !expect(!(registry.getComponent<sle::components::StateMachineComponent>(autoEntity)->enabled && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::StateMachines)), "Auto entity state machine should disable outside active chunk") ||
+        !expect(!(registry.getComponent<sle::components::AnimatorComponent>(autoEntity)->enabled && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::Animation)), "Auto entity animator should disable outside active chunk") ||
+        !expect(!(registry.getComponent<sle::components::BoxColliderComponent>(autoEntity)->enabled && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::Collision)), "Auto entity collider should disable outside active chunk") ||
+        !expect(!(registry.getComponent<sle::components::BoxZoneComponent>(autoEntity)->enabled && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::Zones)), "Auto entity zone should disable outside active chunk") ||
+        !expect(!(registry.getComponent<sle::components::UIComponent>(autoEntity)->visible && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::Ui)), "Auto entity UI should hide outside active chunk"))
     {
         return 1;
     }
 
-    if (!expect(registry.getComponent<sle::components::ScriptComponent>(eventsOnlyEntity)->enabled, "Events-only entity should not auto-toggle") ||
-        !expect(registry.getComponent<sle::components::ScriptComponent>(alwaysActiveEntity)->enabled, "Always-active entity should stay enabled") ||
-        !expect(registry.getComponent<sle::components::ScriptComponent>(keepEntity)->enabled, "keepScriptsWhenInactive should preserve script state") ||
-        !expect(registry.getComponent<sle::components::RigidBodyComponent>(keepEntity)->enabled, "keepPhysicsWhenInactive should preserve rigid body state") ||
-        !expect(registry.getComponent<sle::components::BoxColliderComponent>(keepEntity)->enabled, "keepPhysicsWhenInactive should preserve collider state") ||
-        !expect(registry.getComponent<sle::components::BoxZoneComponent>(keepEntity)->enabled, "keepPhysicsWhenInactive should preserve zone state") ||
-        !expect(registry.getComponent<sle::components::UIComponent>(keepEntity)->visible, "keepRenderingWhenInactive should preserve UI visibility") ||
-        !expect(!registry.getComponent<sle::components::StateMachineComponent>(keepEntity)->enabled, "State machine should still disable when not preserved"))
+    if (!expect((registry.getComponent<sle::components::ScriptComponent>(eventsOnlyEntity)->enabled && sle::entity::isChunkActive(registry, eventsOnlyEntity, sle::components::ChunkSubsystem::Scripts)), "Events-only entity should not auto-toggle") ||
+        !expect((registry.getComponent<sle::components::ScriptComponent>(alwaysActiveEntity)->enabled && sle::entity::isChunkActive(registry, alwaysActiveEntity, sle::components::ChunkSubsystem::Scripts)), "Always-active entity should stay enabled") ||
+        !expect((registry.getComponent<sle::components::ScriptComponent>(keepEntity)->enabled && sle::entity::isChunkActive(registry, keepEntity, sle::components::ChunkSubsystem::Scripts)), "keepScriptsWhenInactive should preserve script state") ||
+        !expect((registry.getComponent<sle::components::RigidBodyComponent>(keepEntity)->enabled && sle::entity::isChunkActive(registry, keepEntity, sle::components::ChunkSubsystem::Physics)), "keepPhysicsWhenInactive should preserve rigid body state") ||
+        !expect((registry.getComponent<sle::components::BoxColliderComponent>(keepEntity)->enabled && sle::entity::isChunkActive(registry, keepEntity, sle::components::ChunkSubsystem::Collision)), "keepPhysicsWhenInactive should preserve collider state") ||
+        !expect((registry.getComponent<sle::components::BoxZoneComponent>(keepEntity)->enabled && sle::entity::isChunkActive(registry, keepEntity, sle::components::ChunkSubsystem::Zones)), "keepPhysicsWhenInactive should preserve zone state") ||
+        !expect((registry.getComponent<sle::components::UIComponent>(keepEntity)->visible && sle::entity::isChunkActive(registry, keepEntity, sle::components::ChunkSubsystem::Ui)), "keepRenderingWhenInactive should preserve UI visibility") ||
+        !expect(!(registry.getComponent<sle::components::StateMachineComponent>(keepEntity)->enabled && sle::entity::isChunkActive(registry, keepEntity, sle::components::ChunkSubsystem::StateMachines)), "State machine should still disable when not preserved"))
     {
         return 1;
     }
@@ -116,12 +117,12 @@ int main()
 
     registry.getComponent<sle::components::ScriptComponent>(autoEntity)->enabled = true;
     disabledController.applyActiveChunks({}, ownershipIndex, registry);
-    if (!expect(registry.getComponent<sle::components::ScriptComponent>(autoEntity)->enabled, "Disabled global chunk activation should not change entity state"))
+    if (!expect((registry.getComponent<sle::components::ScriptComponent>(autoEntity)->enabled && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::Scripts)), "Disabled global chunk activation should not change entity state"))
         return 1;
 
     controller.applyActiveChunks({{0, 0}}, ownershipIndex, registry);
-    if (!expect(registry.getComponent<sle::components::ScriptComponent>(autoEntity)->enabled, "Auto entity script should re-enable when chunk becomes active again") ||
-        !expect(registry.getComponent<sle::components::UIComponent>(autoEntity)->visible, "Auto entity UI should re-show when chunk becomes active again"))
+    if (!expect((registry.getComponent<sle::components::ScriptComponent>(autoEntity)->enabled && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::Scripts)), "Auto entity script should re-enable when chunk becomes active again") ||
+        !expect((registry.getComponent<sle::components::UIComponent>(autoEntity)->visible && sle::entity::isChunkActive(registry, autoEntity, sle::components::ChunkSubsystem::Ui)), "Auto entity UI should re-show when chunk becomes active again"))
     {
         return 1;
     }

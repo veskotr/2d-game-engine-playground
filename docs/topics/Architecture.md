@@ -4,9 +4,21 @@
 
 SLE is a layered engine. Lower modules provide stable services, while higher modules coordinate behavior.
 
-Target module order:
+Module dependencies form an acyclic graph, not a single linear chain. The
+`EngineModules/*/CMakeLists.txt` targets are authoritative. Direct engine-module
+links (consumer -> dependencies):
 
-`Core -> Events -> Platform -> Renderer -> Resources -> Scene -> Physics -> Scripting -> UI -> Systems -> examples`
+- `Core`: no engine-module dependencies.
+- `Events`, `Platform`: `Core`.
+- `Renderer`: `Core`, `Platform`.
+- `Resources`: `Core`, `Renderer`.
+- `Scene`: `Core`, `Events`, `Resources`, `Renderer`.
+- `Physics`: `Core`, `Scene`, `Events`.
+- `Scripting`: `Core`, `Platform`, `Scene`, `Resources`.
+- `UI`: `Events`, `Platform`, `Renderer`, `Resources`, `Scene`, `Scripting`.
+- `Systems` (`sle::engine`): all other engine modules.
+
+Applications and examples consume these modules.
 
 ## Core Boundary Rules
 
@@ -20,7 +32,7 @@ Target module order:
 
 - `Scene` currently links `Renderer` because `SpriteRenderer` includes `TextureRegion`.
 - Some namespaces still reflect older ownership decisions.
-- Some systems still call `ScriptEngine` directly; this should move toward narrower script runtime interfaces.
+- Runtime owns `ScriptEngine`; systems use the narrower `ScriptRuntime` interface.
 
 ## Deep References
 

@@ -2,6 +2,13 @@
 
 namespace sle::entity {
 
+Registry Registry::makeEmpty() const
+{
+    Registry empty;
+    empty.nextEntityID = nextEntityID;
+    return empty;
+}
+
 Entity Registry::createEntity()
 {
     const uint32_t id = nextEntityID++;
@@ -11,7 +18,10 @@ Entity Registry::createEntity()
 
 void Registry::destroyEntity(Entity entity)
 {
-    aliveEntities.erase(entity.getID());
+    if (aliveEntities.erase(entity.getID()) == 0)
+        return;
+
+    parentMap.erase(entity.getID());
 
     for (auto& [_, pool] : pools)
     {

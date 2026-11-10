@@ -20,6 +20,9 @@ UI is attached to entities through `UIComponent`, but parsed document state is o
 - Lua handles behavior.
 - UI runtime state should not live inside ECS component pools.
 
+Chunk suspension gates UI submission/click handling without rewriting gameplay
+visibility or recreating cached documents; see [Chunks](Chunks.md).
+
 ## Update This File When
 
 - Layout attributes, binding behavior, rendering, input/click handling, or `UIComponent` semantics change.

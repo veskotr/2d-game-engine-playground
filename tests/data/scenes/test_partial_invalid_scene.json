@@ -1,0 +1,4 @@
+{"entities": [
+  {"components": {"Transform": {"position": [1, 2], "rotation": 0, "scale": [1, 1]}}},
+  {"components": {"Transform": {"position": ["invalid", 3]}}}
+]}

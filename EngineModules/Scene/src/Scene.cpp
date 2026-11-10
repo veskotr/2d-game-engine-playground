@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 #include <sle/scene/Scene.hpp>
 #include <sle/scene/components/Transform.hpp>
 
@@ -19,7 +20,7 @@ namespace sle::entity
 
     void Scene::destroyEntity(Entity entity)
     {
-        if (!entity.valid())
+        if (!registry.hasEntity(entity))
             return;
 
         destroyEntityInternal(entity);
@@ -38,16 +39,14 @@ namespace sle::entity
             childrenMap.erase(entity.getID());
         }
 
-        registry.destroyEntity(entity);
-
         detachFromParent(entity);
-        parentMap.erase(entity.getID());
+        registry.destroyEntity(entity);
     }
 
     void Scene::detachFromParent(Entity entity)
     {
-        auto parentIt = parentMap.find(entity.getID());
-        if (parentIt != parentMap.end())
+        auto parentIt = registry.parentMap.find(entity.getID());
+        if (parentIt != registry.parentMap.end())
         {
             // Remove from parent's children list
             auto& siblings = childrenMap[parentIt->second.getID()];
@@ -66,31 +65,42 @@ namespace sle::entity
         }
     }
 
-    void Scene::setParent(Entity child, Entity parent)
+    bool Scene::setParent(Entity child, Entity parent)
     {
-        if (!child.valid())
-            return;
+        if (!registry.hasEntity(child) || (parent.valid() && !registry.hasEntity(parent)))
+            return false;
+
+        // Validate before detaching: rejecting a cycle must preserve both structure
+        // and transform dirty state. Every accepted link keeps the hierarchy acyclic.
+        for (Entity ancestor = parent; ancestor.valid(); ancestor = getParent(ancestor))
+        {
+            if (ancestor == child)
+                return false;
+        }
 
         detachFromParent(child);
 
         if (parent.valid())
         {
-            parentMap[child.getID()] = parent;
+            registry.parentMap[child.getID()] = parent;
             childrenMap[parent.getID()].push_back(child);
         }
         else
         {
-            parentMap.erase(child.getID());
+            registry.parentMap.erase(child.getID());
             roots.push_back(child);
         }
 
+        if (auto* transform = registry.getComponent<components::TransformComponent>(child))
+            transform->setParent(parent);
         markTransformBranchDirty(child);
+        return true;
     }
 
     Entity Scene::getParent(Entity entity) const
     {
-        auto it = parentMap.find(entity.getID());
-        if (it == parentMap.end())
+        auto it = registry.parentMap.find(entity.getID());
+        if (it == registry.parentMap.end())
             return Entity{};
 
         return it->second;
@@ -113,13 +123,40 @@ namespace sle::entity
             destroyEntityInternal(root);
 
         roots.clear();
-        parentMap.clear();
+        registry.parentMap.clear();
         childrenMap.clear();
 
         // Scene teardown should fully reset per-scene event state.
         // Clearing queued events prevents stale deferred events from reaching
         // listeners registered by the next scene.
         eventBus.clearAll();
+    }
+
+    std::unique_ptr<Scene> Scene::createStagingScene() const
+    {
+        auto staged = std::make_unique<Scene>();
+        staged->registry = registry.makeEmpty();
+        return staged;
+    }
+
+    void Scene::reserveStagedEntityIds(const Scene& staged)
+    {
+        registry.nextEntityID = std::max(registry.nextEntityID, staged.registry.nextEntityID);
+    }
+
+    void Scene::replaceWith(Scene& staged)
+    {
+        if (&staged == this)
+            return;
+
+        staged.registry.nextEntityID = std::max(staged.registry.nextEntityID, registry.nextEntityID);
+        destroy();
+        // Never move EventBus: queued callbacks capture its address and scoped
+        // subscriptions refer to it. Only ECS and hierarchy storage is swapped.
+        using std::swap;
+        swap(registry, staged.registry);
+        swap(roots, staged.roots);
+        swap(childrenMap, staged.childrenMap);
     }
 
     void Scene::markTransformBranchDirty(Entity entity)

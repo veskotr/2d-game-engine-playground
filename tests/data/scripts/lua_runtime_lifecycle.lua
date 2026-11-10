@@ -1,0 +1,22 @@
+local C = Engine.Components
+assert(Engine.registerScene('lua_room', function()
+    body_entity = Engine.createEntity()
+    assert(C.set(body_entity,'RigidBody',{bodyType='Dynamic',gravityScale=0}))
+    assert(C.set(body_entity,'BoxCollider',{size={x=10,y=10}}))
+    assert(Engine.setTransformRotation(body_entity,0.75))
+end))
+function patch_body()
+    assert(C.set(body_entity,'RigidBody',{linearDamping=0.2}))
+end
+function configure_pending_body()
+    local e=Engine.createEntity()
+    assert(C.set(e,'RigidBody',{bodyType='Kinematic'}))
+    assert(Engine.Physics.setVelocity(e,3,4))
+    assert(Engine.Physics.setAngularVelocity(e,0.5))
+    assert(Engine.Physics.setGravityScale(e,0.25))
+    assert(Engine.Physics.getVelocity(e).x==3)
+    assert(Engine.Physics.getAngularVelocity(e)==0.5)
+    assert(Engine.Physics.getGravityScale(e)==0.25)
+    Engine.destroyEntity(e)
+end
+assert(Engine.registerScene('bad_builder',function() error('intentional builder error') end))

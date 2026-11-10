@@ -13,6 +13,8 @@ public:
 
     virtual bool ensureScript(uint32_t entityId, const std::string& scriptAsset) = 0;
     virtual bool executeScriptAsset(const std::string& scriptAsset) = 0;
+    virtual bool executeScriptAssetForEntity(const std::string& scriptAsset, uint32_t)
+    { return executeScriptAsset(scriptAsset); }
     virtual void runUpdate(uint32_t entityId, float dt) = 0;
     virtual bool hasScript(uint32_t entityId) const = 0;
     virtual bool callEntityFunctionByName(uint32_t entityId, const std::string& functionName) = 0;

@@ -1,6 +1,9 @@
 #pragma once
 #include <sle/scene/ComponentPool.hpp>
 #include <sle/scene/Entity.hpp>
+#include <sle/scene/components/Transform.hpp>
+#include <stdexcept>
+#include <type_traits>
 #include <memory>
 #include <unordered_set>
 #include <typeindex>
@@ -15,7 +18,12 @@ public:
     void destroyEntity(Entity entity);
     bool hasEntity(Entity entity) const;
 
-    // Construct or replace component T on entity. Returns a reference to the component.
+    // Empty storage that continues this registry's entity-ID sequence. Used to
+    // stage a replacement without exposing new entities to the live scene.
+    Registry makeEmpty() const;
+
+    // Construct or replace component T on a live entity; throws std::invalid_argument
+    // for dead/invalid entities. Transform parent data follows the scene hierarchy.
     template <typename T, typename... Args>
     T& addComponent(Entity entity, Args&&... args);
 
@@ -42,6 +50,11 @@ public:
     void view(Func func);
 
 private:
+    friend class Scene;
+    // Scene owns hierarchy operations; storage lives here so late-added transforms
+    // inherit the same authoritative parent data and staged swaps preserve it.
+    std::unordered_map<uint32_t, Entity> parentMap;
+
     uint32_t nextEntityID = 1;
     std::unordered_set<uint32_t> aliveEntities;
     std::unordered_map<std::type_index, std::unique_ptr<IComponentPool>> pools;
@@ -100,7 +113,16 @@ const ComponentPool<T>* Registry::findPool() const
 template <typename T, typename... Args>
 T& Registry::addComponent(Entity entity, Args&&... args)
 {
-    return ensurePool<T>().emplace(entity.getID(), std::forward<Args>(args)...);
+    if (!hasEntity(entity))
+        throw std::invalid_argument("Cannot add a component to a dead entity");
+
+    auto& component = ensurePool<T>().emplace(entity.getID(), std::forward<Args>(args)...);
+    if constexpr (std::is_same_v<T, sle::components::TransformComponent>)
+    {
+        auto it = parentMap.find(entity.getID());
+        component.setParent(it == parentMap.end() ? Entity{} : it->second);
+    }
+    return component;
 }
 
 // --- getComponent ---

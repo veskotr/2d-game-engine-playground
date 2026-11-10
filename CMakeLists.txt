@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-project(GameEngine LANGUAGES CXX)
+# GLAD and audio decoder targets compile C in this directory scope.
+# Enable C here so MSVC runtime selection also applies to those objects.
+project(GameEngine LANGUAGES C CXX)
 
 include(CTest)
 

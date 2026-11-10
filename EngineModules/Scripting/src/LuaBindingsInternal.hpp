@@ -6,6 +6,9 @@ namespace sle::scripting {
 
 class ScriptApi;
 
+void registerGameplayFunctions(lua_State*, int, ScriptApi*);
+void registerComponentsTable(lua_State*, int, ScriptApi*);
+
 void registerEngineFunctions(lua_State* L, int engineTable, ScriptApi* api);
 void registerPhysicsTable(lua_State* L, int engineTable, ScriptApi* api);
 void registerInputTable(lua_State* L, int engineTable, ScriptApi* api);

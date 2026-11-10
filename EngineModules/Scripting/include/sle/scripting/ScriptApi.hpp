@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 #include <glm/vec2.hpp>
@@ -24,6 +25,33 @@ class ScriptApi
 {
 public:
     virtual ~ScriptApi() = default;
+
+    virtual uint32_t getExecutingEntity() const { return 0; }
+    virtual bool isExecutingEntityScript() const { return false; }
+    virtual void clearEventSubscriptions(uint32_t) {}
+    virtual void clearScriptEventSubscriptions(uint32_t entity) { clearEventSubscriptions(entity); }
+    virtual void pruneEventSubscriptions() {}
+    virtual int eventSubscriptionCheckpoint() const { return 0; }
+    virtual void rollbackEventSubscriptions(uint32_t, int, bool) {}
+    virtual void clearAllEventSubscriptions() {}
+
+
+    // Gameplay component access; adapters validate patches before committing.
+    virtual bool hasComponent(ScriptEntityRef, const std::string&) const { return false; }
+    virtual nlohmann::json getComponent(ScriptEntityRef, const std::string&) const { return nullptr; }
+    virtual bool setComponent(ScriptEntityRef, const std::string&, const nlohmann::json&, std::string& error) { error = "Unsupported component"; return false; }
+    virtual bool removeComponent(ScriptEntityRef, const std::string&, std::string& error) { error = "Unsupported component"; return false; }
+    virtual std::vector<uint32_t> findEntitiesWithComponent(const std::string&) const { return {}; }
+    virtual std::vector<uint32_t> getChildren(ScriptEntityRef) const { return {}; }
+    virtual bool setTransformScale(ScriptEntityRef, const glm::vec2&) { return false; }
+    virtual bool getTransformRotation(ScriptEntityRef, float&) const { return false; }
+    virtual bool setTransformRotation(ScriptEntityRef, float) { return false; }
+    virtual nlohmann::json getWorldTransform(ScriptEntityRef) const { return nullptr; }
+    virtual glm::dvec2 getMouseDelta() const { return {}; }
+    virtual bool isMouseButtonDown(int) const { return false; }
+    virtual bool isMouseButtonPressed(int) const { return false; }
+    virtual bool isMouseButtonReleased(int) const { return false; }
+    virtual bool getGravityScale(ScriptEntityRef, float&) const { return false; }
 
     // ====== ENGINE STATE ======
     virtual float getDeltaTime() const = 0;
@@ -61,6 +89,8 @@ public:
     virtual bool setSpriteTexture(ScriptEntityRef entity, const std::string& assetPath) = 0;
 
     // ====== SCENES ======
+    virtual bool registerScene(const std::string&, const std::string&) { return false; }
+    virtual bool registerSceneFromFile(const std::string&, const std::string&) { return false; }
     virtual bool hasScene(const std::string& sceneName) const = 0;
     virtual bool switchScene(const std::string& sceneName) = 0;
     virtual std::string getCurrentSceneName() const = 0;

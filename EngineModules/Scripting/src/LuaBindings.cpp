@@ -19,6 +19,8 @@ void registerLuaBindings(lua_State* L, ScriptApi* api)
     registerCameraTable(L, engineTable, api);
     registerEventsTable(L, engineTable, api);
     registerConstantsTables(L, engineTable);
+    registerGameplayFunctions(L, engineTable, api);
+    registerComponentsTable(L, engineTable, api);
 
     lua_setglobal(L, "Engine");
 }

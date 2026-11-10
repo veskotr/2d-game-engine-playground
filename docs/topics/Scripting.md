@@ -17,6 +17,9 @@ Scripting uses one Lua VM per engine instance. C++ exposes a global `Engine` tab
 - Add new Lua operations through the binding layer and runtime API boundary.
 - Keep script errors contained and logged.
 
+Chunk suspension pauses entity updates while preserving Lua instances. Subscriptions infer entity/UI ownership from the current execution context; see
+[Events](Events.md) and [Chunks](Chunks.md).
+
 ## Update This File When
 
 - Lua API changes.

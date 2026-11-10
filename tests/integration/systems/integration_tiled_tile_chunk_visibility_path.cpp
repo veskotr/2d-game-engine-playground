@@ -1,6 +1,7 @@
 #include <sle/engine/ChunkSceneRuntimeState.hpp>
 #include <sle/engine/SceneLoader.hpp>
 #include <sle/scene/Scene.hpp>
+#include <sle/scene/ChunkActivity.hpp>
 #include <sle/scene/components/ChunkActivationComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
 
@@ -35,17 +36,17 @@ int main()
 
     auto& registry = scene.getRegistry();
     registry.view<sle::components::ChunkActivationComponent, sle::components::SpriteRenderer>(
-        [&](sle::entity::Entity, sle::components::ChunkActivationComponent& chunk, sle::components::SpriteRenderer& sprite)
+        [&](sle::entity::Entity entity, sle::components::ChunkActivationComponent& chunk, sle::components::SpriteRenderer& sprite)
         {
             if (chunk.homeChunkX == 0)
             {
                 sawOriginTile = true;
-                originVisibleAtOrigin = sprite.visible;
+                originVisibleAtOrigin = (sprite.visible && sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Rendering));
             }
             else if (chunk.homeChunkX == 2)
             {
                 sawFarTile = true;
-                farHiddenAtOrigin = !sprite.visible;
+                farHiddenAtOrigin = !(sprite.visible && sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Rendering));
             }
         });
 
@@ -66,12 +67,12 @@ int main()
     bool originHiddenFarAway = false;
     bool farVisibleFarAway = false;
     registry.view<sle::components::ChunkActivationComponent, sle::components::SpriteRenderer>(
-        [&](sle::entity::Entity, sle::components::ChunkActivationComponent& chunk, sle::components::SpriteRenderer& sprite)
+        [&](sle::entity::Entity entity, sle::components::ChunkActivationComponent& chunk, sle::components::SpriteRenderer& sprite)
         {
             if (chunk.homeChunkX == 0)
-                originHiddenFarAway = !sprite.visible;
+                originHiddenFarAway = !(sprite.visible && sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Rendering));
             else if (chunk.homeChunkX == 2)
-                farVisibleFarAway = sprite.visible;
+                farVisibleFarAway = (sprite.visible && sle::entity::isChunkActive(registry, entity, sle::components::ChunkSubsystem::Rendering));
         });
 
     if (!originHiddenFarAway || !farVisibleFarAway)

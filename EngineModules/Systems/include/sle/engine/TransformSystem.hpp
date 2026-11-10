@@ -14,7 +14,9 @@ namespace sle {
 // contribute a transform of their own but still propagate the accumulated
 // parent world transform to their children.
 //
-// Must be called before any rendering system reads WorldTransformComponent.
+// Run after animation, scripts, and physics have finished writing local transforms,
+// before rendering/UI read WorldTransformComponent. This pass clears local dirty
+// flags, so physics must consume local transform edits before it runs.
 class TransformSystem
 {
 public:

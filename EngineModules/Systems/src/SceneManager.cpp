@@ -1,5 +1,7 @@
 #include <sle/engine/SceneManager.hpp>
 #include <sle/engine/Runtime.hpp>
+#include <sle/engine/SceneLoader.hpp>
+#include <exception>
 #include <sle/events/SceneLifecycleEvents.hpp>
 
 namespace sle {
@@ -9,7 +11,16 @@ bool SceneManager::registerScene(const std::string& sceneName, SceneBuilder buil
     if (sceneName.empty() || !builder)
         return false;
 
-    sceneBuilders[sceneName] = std::move(builder);
+    sceneBuilders[sceneName] = {std::move(builder), {}};
+    return true;
+}
+
+bool SceneManager::registerSceneFromFile(const std::string& sceneName, const std::string& jsonPath)
+{
+    if (sceneName.empty() || jsonPath.empty())
+        return false;
+
+    sceneBuilders[sceneName] = {{}, jsonPath};
     return true;
 }
 
@@ -27,15 +38,57 @@ sle::core::Result<bool> SceneManager::loadScene(
     if (it == sceneBuilders.end())
         return sle::core::Result<bool>::error("Scene not registered: " + sceneName);
 
-    // Emit unload event for old scene (if any)
+    std::unique_ptr<sle::entity::Scene> staged;
+    if (!it->second.jsonPath.empty())
+    {
+        staged = scene.createStagingScene();
+        const std::string& path = it->second.jsonPath;
+        try
+        {
+            const auto result = SceneLoader::load(path, *staged);
+            if (!result.ok())
+                return sle::core::Result<bool>::error(
+                    "Failed to load scene '" + sceneName + "' from '" + path + "': " + result.error());
+        }
+        catch (const std::exception& ex)
+        {
+            // Typed JSON fields and filesystem operations can throw after some
+            // entities have been constructed. Discard staging, not the live scene.
+            return sle::core::Result<bool>::error(
+                "Failed to load scene '" + sceneName + "' from '" + path + "': " + ex.what());
+        }
+    }
+
+    if (staged)
+        scene.reserveStagedEntityIds(*staged);
+    runtime.getScriptEngine().clearSceneScripts();
+
+    // Emit unload only after a file-based replacement has loaded successfully.
     if (!currentSceneName.empty())
     {
         sle::events::SceneUnloadedEvent unloadEvent{currentSceneName};
         runtime.getGlobalBus().queue(unloadEvent);
     }
 
-    scene.destroy();
-    it->second(runtime);
+    if (staged)
+    {
+        scene.replaceWith(*staged);
+    }
+    else
+    {
+        // Existing C++ builders are imperative and keep their original contract.
+        scene.destroy();
+        currentSceneName.clear();
+        // Builders can register more scenes and invalidate the map iterator.
+        const auto builder = it->second.builder;
+        try {
+            builder(runtime);
+        } catch (const std::exception& ex) {
+            runtime.getScriptEngine().clearSceneScripts();
+            scene.destroy();
+            return sle::core::Result<bool>::error("Failed to build scene '" + sceneName + "': " + ex.what());
+        }
+    }
     currentSceneName = sceneName;
 
     // Emit load event for new scene

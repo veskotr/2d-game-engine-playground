@@ -1,5 +1,8 @@
 add_library(sle_engine STATIC
     src/ScriptApiImpl.cpp
+    src/ScriptApiImplComponents.cpp
+    src/ScriptApiImplGameplay.cpp
+    src/RuntimeLua.cpp
     src/ChunkActivationController.cpp
     src/ChunkActivityTracker.cpp
     src/ChunkManager.cpp

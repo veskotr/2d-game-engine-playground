@@ -1,7 +1,9 @@
 #include <sle/engine/PhysicsSystem.hpp>
+#include <sle/scene/ChunkActivity.hpp>
 #include <sle/engine/Context.hpp>
 #include <sle/physics/PhysicsWorld.hpp>
 #include <sle/scene/Registry.hpp>
+#include <sle/scene/Scene.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/scene/components/Transform.hpp>
 #include <sle/scene/components/WorldTransformComponent.hpp>
@@ -13,6 +15,24 @@
 #include <vector>
 
 namespace sle {
+
+void PhysicsSystem::releaseEntity(sle::entity::Scene& scene, sle::physics::PhysicsWorld* world, sle::entity::Entity entity)
+{
+    auto& registry = scene.getRegistry();
+    auto it = entityBodyIds.find(entity.getID());
+    if (it != entityBodyIds.end()) {
+        if (world) world->destroyBody(it->second);
+        entityBodyIds.erase(it);
+    } else if (const auto* body = registry.getComponent<sle::components::RigidBodyComponent>(entity); world && body) {
+        world->destroyBody(body->box2dBodyId);
+    }
+    activePhysicsEntities.erase(entity.getID());
+    if (auto* body = registry.getComponent<sle::components::RigidBodyComponent>(entity)) body->box2dBodyId = 0;
+    if (auto* shape = registry.getComponent<sle::components::BoxColliderComponent>(entity)) shape->box2dFixtureId = 0;
+    if (auto* shape = registry.getComponent<sle::components::CircleColliderComponent>(entity)) shape->box2dFixtureId = 0;
+    if (auto* shape = registry.getComponent<sle::components::BoxZoneComponent>(entity)) shape->box2dFixtureId = 0;
+    if (auto* shape = registry.getComponent<sle::components::CircleZoneComponent>(entity)) shape->box2dFixtureId = 0;
+}
 
 void PhysicsSystem::update(Context& ctx)
 {
@@ -29,6 +49,7 @@ void PhysicsSystem::update(Context& ctx)
 
     // Phase 1: Create Box2D bodies for newly added RigidBody components
     createNewPhysicsBodies(ctx);
+    syncActivationAndFixtures(ctx);
 
     // Phase 2: Sync current transforms to physics bodies
     syncTransformToPhysics(ctx);
@@ -50,7 +71,8 @@ void PhysicsSystem::createNewPhysicsBodies(const Context& ctx)
         [&ctx, this](sle::entity::Entity entity, sle::components::RigidBodyComponent& rigidBody)
         {
             // Skip if body already created
-            if (rigidBody.box2dBodyId != 0)
+            if (rigidBody.box2dBodyId != 0 || !rigidBody.enabled ||
+                !sle::entity::isChunkActive(ctx.registry, entity, sle::components::ChunkSubsystem::Physics))
                 return;
 
             // Get transform to determine initial position
@@ -63,6 +85,7 @@ void PhysicsSystem::createNewPhysicsBodies(const Context& ctx)
             // Create the physics body
             uint32_t bodyId = ctx.physicsWorld->createBody(position, rigidBody);
             rigidBody.box2dBodyId = bodyId;
+            ctx.physicsWorld->setBodyTransform(bodyId, position, transform->getRotation());
 
             // Store entity ID in the body for collision callbacks
             ctx.physicsWorld->setBodyEntityId(bodyId, entity.getID());
@@ -71,32 +94,54 @@ void PhysicsSystem::createNewPhysicsBodies(const Context& ctx)
             activePhysicsEntities.insert(entity.getID());
             entityBodyIds[entity.getID()] = bodyId;
 
-            // Create colliders/zones for this body
-            auto* boxCollider = ctx.registry.getComponent<sle::components::BoxColliderComponent>(entity);
-            if (boxCollider && boxCollider->box2dFixtureId == 0)
-            {
-                boxCollider->box2dFixtureId = ctx.physicsWorld->createBoxFixture(bodyId, *boxCollider);
-            }
-
-            auto* circleCollider = ctx.registry.getComponent<sle::components::CircleColliderComponent>(entity);
-            if (circleCollider && circleCollider->box2dFixtureId == 0)
-            {
-                circleCollider->box2dFixtureId = ctx.physicsWorld->createCircleFixture(bodyId, *circleCollider);
-            }
-
-            auto* boxZone = ctx.registry.getComponent<sle::components::BoxZoneComponent>(entity);
-            if (boxZone && boxZone->box2dFixtureId == 0)
-            {
-                boxZone->box2dFixtureId = ctx.physicsWorld->createBoxZone(bodyId, *boxZone);
-            }
-
-            auto* circleZone = ctx.registry.getComponent<sle::components::CircleZoneComponent>(entity);
-            if (circleZone && circleZone->box2dFixtureId == 0)
-            {
-                circleZone->box2dFixtureId = ctx.physicsWorld->createCircleZone(bodyId, *circleZone);
-            }
         }
     );
+}
+
+void PhysicsSystem::syncActivationAndFixtures(const Context& ctx)
+{
+    ctx.registry.view<sle::components::RigidBodyComponent>(
+        [&ctx](sle::entity::Entity entity, sle::components::RigidBodyComponent& body)
+        {
+            if (body.box2dBodyId == 0)
+                return;
+            using Subsystem = sle::components::ChunkSubsystem;
+            const bool active = body.enabled && sle::entity::isChunkActive(ctx.registry, entity, Subsystem::Physics);
+            const bool changed = ctx.physicsWorld->setBodyEnabled(body.box2dBodyId, active);
+            if (!active)
+                return; // Keep fixtures/velocity intact while the whole body is suspended.
+            if (changed)
+            {
+                // Presentation may already have consumed dirty flags while this
+                // body was suspended. The latest local pose wins on reactivation.
+                if (const auto* transform = ctx.registry.getComponent<sle::components::TransformComponent>(entity))
+                    ctx.physicsWorld->setBodyTransform(body.box2dBodyId, transform->getPosition(), transform->getRotation());
+            }
+
+            auto syncFixture = [&](auto* component, Subsystem subsystem, auto createFixture)
+            {
+                if (!component)
+                    return;
+                const bool enabled = active && component->enabled && sle::entity::isChunkActive(ctx.registry, entity, subsystem);
+                if (!enabled && component->box2dFixtureId != 0)
+                {
+                    ctx.physicsWorld->destroyFixture(body.box2dBodyId, component->box2dFixtureId);
+                    component->box2dFixtureId = 0;
+                }
+                else if (enabled && component->box2dFixtureId == 0)
+                {
+                    component->box2dFixtureId = (ctx.physicsWorld->*createFixture)(body.box2dBodyId, *component);
+                }
+            };
+            syncFixture(ctx.registry.getComponent<sle::components::BoxColliderComponent>(entity),
+                Subsystem::Collision, &sle::physics::PhysicsWorld::createBoxFixture);
+            syncFixture(ctx.registry.getComponent<sle::components::CircleColliderComponent>(entity),
+                Subsystem::Collision, &sle::physics::PhysicsWorld::createCircleFixture);
+            syncFixture(ctx.registry.getComponent<sle::components::BoxZoneComponent>(entity),
+                Subsystem::Zones, &sle::physics::PhysicsWorld::createBoxZone);
+            syncFixture(ctx.registry.getComponent<sle::components::CircleZoneComponent>(entity),
+                Subsystem::Zones, &sle::physics::PhysicsWorld::createCircleZone);
+        });
 }
 
 void PhysicsSystem::syncTransformToPhysics(const Context& ctx)
@@ -106,7 +151,8 @@ void PhysicsSystem::syncTransformToPhysics(const Context& ctx)
     ctx.registry.view<sle::components::RigidBodyComponent, sle::components::TransformComponent>(
         [&ctx](sle::entity::Entity entity, sle::components::RigidBodyComponent& rigidBody, sle::components::TransformComponent& transform)
         {
-            if (rigidBody.box2dBodyId == 0 || !rigidBody.enabled)
+            if (rigidBody.box2dBodyId == 0 || !rigidBody.enabled ||
+                !sle::entity::isChunkActive(ctx.registry, entity, sle::components::ChunkSubsystem::Physics))
                 return;
 
             // Only sync if transform is dirty (changed this frame)
@@ -133,7 +179,8 @@ void PhysicsSystem::syncPhysicsToTransform(const Context& ctx)
     ctx.registry.view<sle::components::RigidBodyComponent, sle::components::TransformComponent>(
         [&ctx](sle::entity::Entity entity, sle::components::RigidBodyComponent& rigidBody, sle::components::TransformComponent& transform)
         {
-            if (rigidBody.box2dBodyId == 0 || !rigidBody.enabled)
+            if (rigidBody.box2dBodyId == 0 || !rigidBody.enabled ||
+                !sle::entity::isChunkActive(ctx.registry, entity, sle::components::ChunkSubsystem::Physics))
                 return;
 
             // Read physics body state

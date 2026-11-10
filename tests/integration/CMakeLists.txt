@@ -361,3 +361,95 @@ sle_add_integration_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+
+sle_add_integration_test(
+    integration_runtime_transform_physics_path
+    systems/integration_runtime_transform_physics_path.cpp
+    "systems;physics;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(integration_runtime_transform_physics_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
+    integration_events_scene_load_failure_path
+    events/integration_events_scene_load_failure_path.cpp
+    "events;systems"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_chunk_gameplay_state_path
+    systems/integration_chunk_gameplay_state_path.cpp
+    "systems;physics;scripting"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_chunk_render_visibility_path
+    renderer/integration_chunk_render_visibility_path.cpp
+    "renderer;ui;systems;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(integration_chunk_render_visibility_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
+    integration_scene_invariants_path
+    systems/integration_scene_invariants_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+sle_add_integration_test(
+    integration_runtime_shutdown_path
+    renderer/integration_runtime_shutdown_path.cpp
+    "renderer;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(integration_runtime_shutdown_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
+    integration_lua_event_ownership_path
+    events/integration_lua_event_ownership_path.cpp
+    "events;scripting;systems"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_lua_components_path
+    scripting/integration_lua_components_path.cpp
+    "scripting;systems"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_lua_gameplay_controls_path
+    scripting/integration_lua_gameplay_controls_path.cpp
+    "scripting;systems"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_lua_mouse_callbacks_path
+    scripting/integration_lua_mouse_callbacks_path.cpp
+    "scripting;platform;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(integration_lua_mouse_callbacks_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
+    integration_lua_runtime_lifecycle_path
+    scripting/integration_lua_runtime_lifecycle_path.cpp
+    "scripting;systems;physics;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(integration_lua_runtime_lifecycle_path PROPERTIES SKIP_RETURN_CODE 125)

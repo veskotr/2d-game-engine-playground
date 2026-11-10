@@ -70,6 +70,13 @@ public:
     // Destroy a physics body and all its fixtures
     void destroyBody(uint32_t bodyId);
 
+    // Suspend/resume simulation and contacts while preserving the body and velocity.
+    // Returns true when the native enabled state changed.
+    bool setBodyEnabled(uint32_t bodyId, bool enabled);
+
+    // Update native settings without replacing the body or its fixtures.
+    void configureBody(uint32_t bodyId, const sle::components::RigidBodyComponent& settings);
+
     // Update body's transform (position and rotation)
     void setBodyTransform(uint32_t bodyId, const glm::vec2& position, float rotation);
 

@@ -1,3 +1,7 @@
+> Historical architecture reference. Claims and examples describe an earlier state.
+> For current dependencies and boundaries, use [Architecture](topics/Architecture.md)
+> and the relevant module/topic documents; verify behavior against source.
+
 ---
 Title: SLE 2D Engine - Comprehensive Architecture & Implementation Verification
 Version: Current (May 2026)

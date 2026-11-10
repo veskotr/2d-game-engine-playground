@@ -141,6 +141,19 @@ uint32_t PhysicsWorld::createBody(const glm::vec2& position, const sle::componen
     return bodyId;
 }
 
+void PhysicsWorld::configureBody(uint32_t bodyId, const sle::components::RigidBodyComponent& settings)
+{
+    auto* body = getBodyPtr(bodyId);
+    if (!body) return;
+    b2BodyType type = b2_dynamicBody;
+    if (settings.bodyType == sle::components::BodyType::Static) type = b2_staticBody;
+    else if (settings.bodyType == sle::components::BodyType::Kinematic) type = b2_kinematicBody;
+    body->SetType(type);
+    body->SetLinearDamping(settings.linearDamping);
+    body->SetAngularDamping(settings.angularDamping);
+    body->SetFixedRotation(settings.fixedRotation);
+}
+
 void PhysicsWorld::setBodyEntityId(uint32_t bodyId, uint32_t entityId)
 {
     b2Body* body = getBodyPtr(bodyId);
@@ -169,14 +182,25 @@ void PhysicsWorld::destroyBody(uint32_t bodyId)
     while (fixture)
     {
         b2Fixture* nextFixture = fixture->GetNext();
-        fixtureZoneIds_.erase(reinterpret_cast<uintptr_t>(fixture));
+        const uintptr_t fixtureId = reinterpret_cast<uintptr_t>(fixture);
         body->DestroyFixture(fixture);
+        fixtureZoneIds_.erase(fixtureId);
         fixture = nextFixture;
     }
 
     // Destroy the body
     world_->DestroyBody(body);
     bodyMap_.erase(bodyId);
+}
+
+bool PhysicsWorld::setBodyEnabled(uint32_t bodyId, bool enabled)
+{
+    if (auto* body = getBodyPtr(bodyId); body && body->IsEnabled() != enabled)
+    {
+        body->SetEnabled(enabled);
+        return true;
+    }
+    return false;
 }
 
 void PhysicsWorld::setBodyTransform(uint32_t bodyId, const glm::vec2& position, float rotation)
@@ -396,8 +420,9 @@ void PhysicsWorld::destroyFixture(uint32_t bodyId, uintptr_t fixtureId)
     b2Fixture* fixture = reinterpret_cast<b2Fixture*>(fixtureId);
     if (fixture && fixture->GetBody() == body)
     {
-        fixtureZoneIds_.erase(fixtureId);
+        // EndContact runs synchronously during destruction and still needs zoneId.
         body->DestroyFixture(fixture);
+        fixtureZoneIds_.erase(fixtureId);
     }
 }
 

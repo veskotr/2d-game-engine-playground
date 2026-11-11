@@ -135,7 +135,7 @@ def main():
     try:
         count = audit_components(list((ROOT / 'EngineModules').glob('*/include')),
                                  ROOT / 'EngineModules/Systems/src/lua/components',
-                                 ROOT / 'EngineModules/Systems/src/ScriptApiImplComponents.cpp')
+                                 ROOT / 'EngineModules/Systems/src/ComponentRegistry.cpp')
         print(f'Lua component classifications are current: {count} component types')
         return 0
     except (ValueError, OSError) as error:

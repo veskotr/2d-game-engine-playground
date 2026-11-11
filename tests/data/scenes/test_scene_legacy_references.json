@@ -1,0 +1,6 @@
+{
+  "entities": [
+    {"parent":2, "components":{"Animator":{"targetEntities":{"other":2}}}},
+    {"parent":null, "components":{}}
+  ]
+}

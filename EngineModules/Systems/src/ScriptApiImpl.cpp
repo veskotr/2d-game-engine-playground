@@ -2,6 +2,7 @@
 
 #include <sle/core/Log.hpp>
 #include <sle/engine/Runtime.hpp>
+#include "ScriptBehaviours.hpp"
 #include <sle/scene/ChunkActivity.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
 #include <sle/platform/Input.hpp>
@@ -654,6 +655,16 @@ uint32_t ScriptApiImpl::getExecutingEntity() const
     return runtime.getScriptEngine().getExecutingEntity();
 }
 
+std::string ScriptApiImpl::getExecutingBehaviourKey() const
+{
+    return runtime.getScriptEngine().getExecutingBehaviourKey();
+}
+
+uint64_t ScriptApiImpl::getExecutingBehaviourGeneration() const
+{
+    return runtime.getScriptEngine().getExecutingBehaviourGeneration();
+}
+
 bool ScriptApiImpl::isExecutingEntityScript() const
 {
     return runtime.getScriptEngine().isExecutingEntityScript();
@@ -674,7 +685,8 @@ bool ScriptApiImpl::canDispatchEvent(int subscriptionId) const
         return false;
     const auto* script = registry.getComponent<components::ScriptComponent>(owner);
     if (subscription.scriptOwned)
-        return script && script->enabled && runtime.getScriptEngine().hasScript(subscription.owner);
+        return script && detail::behaviourEnabled(*script,subscription.behaviourKey) &&
+            runtime.getScriptEngine().getBehaviourGeneration(subscription.owner,subscription.behaviourKey)==subscription.behaviourGeneration;
     return true; // UI/global behavior ownership is independent of ScriptComponent.
 }
 
@@ -686,13 +698,15 @@ int ScriptApiImpl::subscribeEvent(const std::string& eventName, uint32_t entityI
     auto active = std::make_shared<bool>(true);
     auto& bus = runtime.getScene().getEventBus();
     const bool scriptOwned = isExecutingEntityScript();
-    auto dispatch = [this, active, id, luaRef, entityId, scriptOwned](const std::string& name,
+    const auto behaviourKey=getExecutingBehaviourKey();
+    const auto behaviourGeneration=getExecutingBehaviourGeneration();
+    auto dispatch = [this, active, id, luaRef, entityId, scriptOwned, behaviourKey, behaviourGeneration](const std::string& name,
         uint32_t a, uint32_t b, const std::string& zone, uint32_t source, const std::string& payload)
     {
         // unsubscribe/scene teardown may happen during snapshot dispatch. A stale
         // closure must not call a released (possibly reused) Lua registry ref.
         if (*active && canDispatchEvent(id))
-            (void)runtime.getScriptEngine().callEventCallback(luaRef, name, a, b, zone, source, payload, entityId, scriptOwned);
+            (void)runtime.getScriptEngine().callEventCallback(luaRef, name, a, b, zone, source, payload, entityId, scriptOwned, behaviourKey, behaviourGeneration);
     };
     sle::events::SubscriptionHandle handle;
     if (eventName == "collision.begin")
@@ -706,7 +720,7 @@ int ScriptApiImpl::subscribeEvent(const std::string& eventName, uint32_t entityI
     else
         handle = bus.subscribe<sle::events::ScriptEvent>([dispatch](const auto& e) { dispatch(e.name, 0, 0, {}, e.sourceEntity.getID(), e.payload); },
             [eventName](const auto& e) { return e.name == eventName; });
-    subscriptions_.emplace(id, EventSubscription{entityId, luaRef, scriptOwned, active,
+    subscriptions_.emplace(id, EventSubscription{entityId, luaRef, scriptOwned, behaviourKey, behaviourGeneration, active,
         sle::events::ScopedSubscription(&bus, handle)});
     return id;
 }
@@ -742,6 +756,15 @@ void ScriptApiImpl::clearScriptEventSubscriptions(uint32_t entityId)
         unsubscribeEvent(id);
 }
 
+void ScriptApiImpl::clearBehaviourEventSubscriptions(uint32_t entityId,const std::string& key,uint64_t generation)
+{
+    std::vector<int> ids;
+    for(const auto& [id,subscription]:subscriptions_)
+        if(subscription.owner==entityId && subscription.scriptOwned && subscription.behaviourKey==key && subscription.behaviourGeneration==generation)
+            ids.push_back(id);
+    for(int id:ids) unsubscribeEvent(id);
+}
+
 void ScriptApiImpl::pruneEventSubscriptions()
 {
     std::vector<int> ids;
@@ -752,7 +775,7 @@ void ScriptApiImpl::pruneEventSubscriptions()
         const sle::entity::Entity owner(subscription.owner);
         const auto* script = registry.getComponent<components::ScriptComponent>(owner);
         if (!registry.hasEntity(owner) || (subscription.scriptOwned &&
-            (!script || !script->enabled || !runtime.getScriptEngine().hasScript(subscription.owner))))
+            (!script || !script->enabled || runtime.getScriptEngine().getBehaviourGeneration(subscription.owner,subscription.behaviourKey)!=subscription.behaviourGeneration)))
             ids.push_back(id);
     }
     for (int id : ids)

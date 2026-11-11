@@ -1,0 +1,15 @@
+{
+  "entities": [
+    {"key":"child", "name":"display only", "parent":"rig", "components":{
+      "Transform":{"position":[3,4],"rotation":0,"scale":[1,1]},
+      "Animator":{"targetEntities":{"rig":"rig","legacy":2,"leaf":"leaf"}}
+    }},
+    {"key":"rig", "name":"display only", "components":{
+      "Transform":{"position":[10,20],"rotation":0,"scale":[2,2]}
+    }},
+    {"key":"holder", "parent":"rig", "components":{}},
+    {"key":"leaf", "parent":"holder", "components":{
+      "Transform":{"position":[1,2],"rotation":0,"scale":[1,1]}
+    }}
+  ]
+}

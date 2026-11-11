@@ -17,7 +17,7 @@ that map; nested vectors replace that vector. Enum names match C++ spelling.
 | --- | --- |
 | Transform | position, scale, rotation |
 | SpriteRenderer | color, visible, layer, region (uv only) |
-| Script | scriptAsset, enabled |
+| Script | scriptAsset (legacy primary), enabled, behaviours (key/scriptAsset/enabled/order entries) |
 | RigidBody | bodyType (Static/Dynamic/Kinematic), linearDamping, angularDamping, gravityScale, velocity, angularVelocity, fixedRotation, enabled |
 | BoxCollider | offset, size, friction, restitution, density, categoryBits, maskBits, enabled |
 | CircleCollider | offset, radius, friction, restitution, density, categoryBits, maskBits, enabled |
@@ -49,7 +49,26 @@ Texture resources are selected through `Engine.setSpriteTexture`; region.uv uses
 {x,y,z,w} for u0,v0,u1,v1. Animator and StateMachine asset edits invalidate their
 loaded definitions. Ordinary patches retain loaded resources and runtime state.
 
+JSON scene loading and `Engine.Components.set` now use the same component codecs
+and C++ defaults. Unknown/read-only fields on known components, invalid enum values, invalid
+vectors and numeric ranges reject rather than silently falling back. Errors include
+the field; JSON errors also identify the file/entity/component. Existing runtime
+mutation hooks still release/reconfigure native resources before a valid Lua edit.
+
+Asset strings use the same existing-file resolution in both paths. Empty strings
+stay empty; UI layout/font/behavior paths trim surrounding whitespace. Missing
+paths stay as authored for normal resource loading/error handling. Animator clip
+maps use the same asset normalization. This applies to component patches, not a
+redesign of every specialized resource API.
+
+JSON additionally adapts legacy asset aliases and vector arrays. See
+[scene authoring](Scenes.md) for compatibility exceptions.
+
 The binding definitions live under `EngineModules/Systems/src/lua/components`.
 Each component owns its snapshot fields, accepted patch fields and validation.
+`ComponentRegistry.cpp` registers them once for the JSON and Lua frontends.
 Systems owns resource and runtime lifecycle hooks; Scene remains independent of
 Lua and Systems.
+
+See [behaviour ordering and scene scripts](Behaviours.md) for attachment lifetime,
+state isolation, and deterministic initialization/update order.

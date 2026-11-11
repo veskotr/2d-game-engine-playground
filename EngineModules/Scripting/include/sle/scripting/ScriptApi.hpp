@@ -27,6 +27,11 @@ public:
     virtual ~ScriptApi() = default;
 
     virtual uint32_t getExecutingEntity() const { return 0; }
+    virtual std::string getExecutingBehaviourKey() const { return {}; }
+    virtual uint64_t getExecutingBehaviourGeneration() const { return 0; }
+    virtual void clearBehaviourEventSubscriptions(uint32_t entity, const std::string&, uint64_t) { clearScriptEventSubscriptions(entity); }
+    virtual ScriptEntityRef getSceneEntity() { return {}; }
+    virtual ScriptEntityRef instantiatePrefab(const std::string&, const std::string&, const nlohmann::json&, ScriptEntityRef, std::string& error) { error="Unsupported prefab"; return {}; }
     virtual bool isExecutingEntityScript() const { return false; }
     virtual void clearEventSubscriptions(uint32_t) {}
     virtual void clearScriptEventSubscriptions(uint32_t entity) { clearEventSubscriptions(entity); }
@@ -60,6 +65,7 @@ public:
     // ====== ENTITY LIFETIME ======
     virtual ScriptEntityRef createEntity() = 0;
     virtual bool isEntityAlive(ScriptEntityRef entity) const = 0;
+    virtual ScriptEntityRef findEntityByKey(const std::string&) const { return {}; }
     virtual void destroyEntity(ScriptEntityRef entity) = 0;
     virtual uint32_t getChildCount(ScriptEntityRef parent) const = 0;
     virtual uint32_t destroyChildren(ScriptEntityRef parent) = 0;

@@ -1,0 +1,1 @@
+{"root":"root","entities":[{"key":"root","components":{"Transform":{},"Animator":{"targetEntities":{"nested":"left/leaf/child","numeric":2}}}},{"key":"mount","parent":1}],"prefabs":[{"file":"sub/branch.prefab.json","key":"right","parent":"left/socket"},{"file":"sub/branch.prefab.json","key":"left"}]}

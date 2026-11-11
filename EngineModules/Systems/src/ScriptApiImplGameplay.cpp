@@ -1,14 +1,35 @@
 #include <sle/engine/ScriptApiImpl.hpp>
 #include <sle/engine/Runtime.hpp>
+#include <sle/engine/PrefabLoader.hpp>
 #include <sle/platform/Input.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/scene/components/Transform.hpp>
+#include <sle/scene/TransformMath.hpp>
 
 #include <cmath>
-#include <unordered_set>
 #include <vector>
 
 namespace sle {
+
+scripting::ScriptEntityRef ScriptApiImpl::getSceneEntity()
+{
+    return {runtime.getScene().ensureSceneEntity().getID()};
+}
+
+scripting::ScriptEntityRef ScriptApiImpl::instantiatePrefab(const std::string& path,const std::string& key,
+    const nlohmann::json& overrides,scripting::ScriptEntityRef parent,std::string& error)
+{
+    error.clear();
+    const auto result=PrefabLoader::instantiate(path,runtime.getScene(),key,overrides,entity::Entity(parent.id));
+    if(!result.ok()) {error=result.error();return {};}
+    return {result.value().getID()};
+}
+
+
+scripting::ScriptEntityRef ScriptApiImpl::findEntityByKey(const std::string& key) const
+{
+    return {runtime.getScene().findEntityByKey(key).getID()};
+}
 
 bool ScriptApiImpl::setTransformScale(scripting::ScriptEntityRef entity, const glm::vec2& scale)
 {
@@ -55,34 +76,11 @@ nlohmann::json ScriptApiImpl::getWorldTransform(scripting::ScriptEntityRef entit
     if (!registry.getComponent<components::TransformComponent>(sle::entity::Entity(entity.id)))
         return nullptr;
 
-    // Scripts run before the transform pass. Compose current local values so a
-    // mutation earlier in this callback is visible immediately, including ancestors.
-    std::vector<sle::entity::Entity> ancestors;
-    std::unordered_set<uint32_t> visited;
-    for (sle::entity::Entity current(entity.id); current.valid(); current = scene.getParent(current))
-    {
-        if (!registry.hasEntity(current) || !visited.insert(current.getID()).second)
-            return nullptr;
-        ancestors.push_back(current);
-    }
-    glm::vec2 position{0};
-    glm::vec2 scale{1};
-    float rotation = 0;
-    for (auto it = ancestors.rbegin(); it != ancestors.rend(); ++it)
-    {
-        const auto* local = registry.getComponent<components::TransformComponent>(*it);
-        if (!local)
-            continue;
-        const auto offset = scale * local->getPosition();
-        const float c = std::cos(rotation);
-        const float s = std::sin(rotation);
-        position += glm::vec2(offset.x * c - offset.y * s, offset.x * s + offset.y * c);
-        scale *= local->getScale();
-        rotation += local->getRotation();
-    }
-    return {{"position", {{"x", position.x}, {"y", position.y}}},
-            {"rotation", rotation},
-            {"scale", {{"x", scale.x}, {"y", scale.y}}}};
+    // Share the live hierarchy contract with physics and TransformSystem.
+    const auto world=sle::entity::transformMath::currentWorld(scene,sle::entity::Entity(entity.id));
+    return {{"position", {{"x", world.position.x}, {"y", world.position.y}}},
+            {"rotation", world.rotation},
+            {"scale", {{"x", world.scale.x}, {"y", world.scale.y}}}};
 }
 
 std::vector<uint32_t> ScriptApiImpl::getChildren(scripting::ScriptEntityRef entity) const

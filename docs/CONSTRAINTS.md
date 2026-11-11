@@ -18,6 +18,11 @@ This file is the compact rulebook for code and documentation work.
 - Behavior belongs in systems.
 - Systems should query through `Registry::view` and component access helpers.
 - Transform mutation must preserve dirty propagation.
+- Authored transforms remain local; native physics poses/velocities/forces use
+  world space. Share live hierarchy composition, and inverse-convert physics
+  output parent-first rather than treating local data as native world coordinates.
+- Invalid native geometry suspends simulation without changing authored flags;
+  geometry checks respect collision/zone activity gates.
 - Chunk suspension is derived runtime state; never overwrite gameplay enabled/visible
   flags to implement chunk activation. Consumers must respect both states.
 

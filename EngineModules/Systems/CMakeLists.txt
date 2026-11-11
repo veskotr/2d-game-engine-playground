@@ -1,5 +1,7 @@
 add_library(sle_engine STATIC
     src/ScriptApiImpl.cpp
+    src/ComponentAssets.cpp
+    src/ComponentRegistry.cpp
     src/ScriptApiImplComponents.cpp
     src/ScriptApiImplGameplay.cpp
     src/RuntimeLua.cpp
@@ -9,6 +11,7 @@ add_library(sle_engine STATIC
     src/ChunkOwnershipIndex.cpp
     src/ChunkSceneRuntimeState.cpp
     src/SceneManager.cpp
+    src/PrefabLoader.cpp
     src/SceneLoader.cpp
     src/TiledMapLoader.cpp
     src/Runtime.cpp

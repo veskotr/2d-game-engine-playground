@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <cstdint>
+#include <sle/scene/components/WorldTransformComponent.hpp>
 
 namespace sle {
 
@@ -36,6 +37,8 @@ private:
     std::unordered_set<uint32_t> activePhysicsEntities;
     // Keep body IDs even if components are removed so cleanup can still destroy Box2D bodies.
     std::unordered_map<uint32_t, uint32_t> entityBodyIds;
+    std::unordered_map<uint32_t, sle::components::WorldTransformComponent> authoredPoses_;
+    std::unordered_map<uint32_t, glm::vec2> fixtureScales_;
     // Track the last physics world we injected the event bus into (for re-injection on scene switches)
     sle::physics::PhysicsWorld* lastInjectedWorld_ = nullptr;
     sle::events::EventBus* lastInjectedEventBus_ = nullptr;

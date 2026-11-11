@@ -36,6 +36,7 @@ public:
 
     sle::scripting::ScriptEntityRef createEntity() override;
     bool isEntityAlive(sle::scripting::ScriptEntityRef entity) const override;
+    sle::scripting::ScriptEntityRef findEntityByKey(const std::string& key) const override;
     void destroyEntity(sle::scripting::ScriptEntityRef entity) override;
     uint32_t getChildCount(sle::scripting::ScriptEntityRef parent) const override;
     uint32_t destroyChildren(sle::scripting::ScriptEntityRef parent) override;
@@ -92,6 +93,11 @@ public:
     bool isPhysicsDebugEnabled() const override;
 
     uint32_t getExecutingEntity() const override;
+    std::string getExecutingBehaviourKey() const override;
+    uint64_t getExecutingBehaviourGeneration() const override;
+    void clearBehaviourEventSubscriptions(uint32_t entity, const std::string& key, uint64_t generation) override;
+    sle::scripting::ScriptEntityRef getSceneEntity() override;
+    sle::scripting::ScriptEntityRef instantiatePrefab(const std::string&, const std::string&, const nlohmann::json&, sle::scripting::ScriptEntityRef, std::string&) override;
     bool isExecutingEntityScript() const override;
     void clearEventSubscriptions(uint32_t entityId) override;
     void clearScriptEventSubscriptions(uint32_t entityId) override;
@@ -128,6 +134,8 @@ private:
         uint32_t owner = 0;
         int luaRef = -2;
         bool scriptOwned = false;
+        std::string behaviourKey;
+        uint64_t behaviourGeneration = 0;
         std::shared_ptr<bool> active;
         sle::events::ScopedSubscription handle;
     };

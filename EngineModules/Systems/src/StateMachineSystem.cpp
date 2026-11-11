@@ -40,7 +40,7 @@ bool isTransitionSatisfied(
             if (!scriptRuntime || transition.luaGuardFunction.empty())
                 return false;
             // Guard functions must return a boolean; false or invalid return blocks transition.
-            return scriptRuntime->callGlobalBoolFunction(transition.luaGuardFunction, entity.getID());
+            return scriptRuntime->callEntityBoolFunction(entity.getID(), transition.luaGuardFunction);
         }
     }
 

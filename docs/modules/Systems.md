@@ -35,6 +35,15 @@ Runtime orchestration and per-frame systems.
 
 Chunk activation uses independent runtime subsystem gates; see [Chunks](../topics/Chunks.md).
 
+SceneLoader and ScriptApiImpl share per-component validation/defaults through
+`ComponentRegistry`. SceneComponentAdapter only translates legacy JSON syntax;
+Runtime retains native mutation hooks. ComponentAssets normalizes canonical asset
+paths for both frontends. See [component rules](../topics/LuaComponents.md).
+
+SceneLoader allocates JSON entities before resolving keyed parent and animator
+references. Legacy numeric references are 1-based JSON file positions, remapped on
+every load. Invalid links fail staging; see [scene authoring](../topics/Scenes.md).
+
 ## Rules
 
 - Systems coordinate modules through `Context`, public APIs, and registry views.
@@ -53,3 +62,9 @@ Chunk activation uses independent runtime subsystem gates; see [Chunks](../topic
 ## Update This File When
 
 - Runtime ownership, frame order, scene loading, or system integration changes.
+
+PrefabLoader expands namespaced entity subtrees and component overrides through
+SceneLoader::loadData, which also loads top-level scene-root components. Dynamic
+instantiation validates before appending and rolls back only new entities on error.
+ScriptSystem snapshots and sorts named attachments, initializes due work before
+updates, and rechecks lifetime/generation before callbacks.

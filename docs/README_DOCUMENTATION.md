@@ -36,6 +36,9 @@ not proof of completion.
 | Architecture | `topics/Architecture.md` |
 | Runtime frame loop | `topics/Runtime.md` |
 | ECS and components | `topics/ECS.md` |
+| Scene files and stable references | [Scenes](topics/Scenes.md) |
+| Multiple scripts and scene behaviours | [Behaviours](topics/Behaviours.md) |
+| Prefab subtrees and overrides | [Prefabs](topics/Prefabs.md) |
 | Scripting and Lua | `topics/Scripting.md` |
 | Rendering | `topics/Rendering.md` |
 | Events | `topics/Events.md` |

@@ -453,3 +453,43 @@ sle_add_integration_test(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 set_tests_properties(integration_lua_runtime_lifecycle_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
+    integration_scene_references_path
+    systems/integration_scene_references_path.cpp
+    "systems;scripting"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_component_schema_parity_path
+    systems/integration_component_schema_parity_path.cpp
+    "systems;scripting"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_prefabs_path
+    systems/integration_prefabs_path.cpp
+    "systems;scripting"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_multiple_behaviours_path
+    scripting/integration_multiple_behaviours_path.cpp
+    "scripting;systems;events"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_hierarchy_physics_path
+    systems/integration_hierarchy_physics_path.cpp
+    "systems;physics"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)

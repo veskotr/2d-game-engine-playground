@@ -55,7 +55,10 @@ or a `// Lua-internal-type: TypeName: reason` annotation in its declaration head
 New top-level fields must appear in their snapshot, or have an adjacent codec
 `// Lua-internal: field: reason` annotation. Accessor-backed/renamed storage uses
 `// Lua-field: cppField -> luaField`; the named output key must exist. Keep each
-component's codec in its own header and register it through the descriptor map.
+component's codec in its own header and register it through the shared descriptor
+map in `Systems/src/ComponentRegistry.cpp`. JSON and Lua both use that registry;
+do not add a separate JSON field/range validator. `SceneComponentAdapter.hpp` is
+for legacy JSON aliases/vectors and resource compatibility only.
 
 This is a focused declaration/codec audit, not a C++ AST or serialization proof.
 It covers direct top-level member snapshots and the existing descriptor idioms;

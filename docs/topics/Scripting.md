@@ -30,3 +30,9 @@ Chunk suspension pauses entity updates while preserving Lua instances. Subscript
 
 - `docs/SCRIPTING_CURRENT.md`
 - `docs/LUA_IMPLEMENTATION_QUICKSTART.md`
+
+Scene-defined keys can be resolved with `Engine.findEntityByKey(key)` (ID or nil).
+Resolve them again after scene replacement; see [scene authoring](Scenes.md).
+
+Multiple keyed attachments and scene scripts share one scheduler; see
+[behaviour ordering](Behaviours.md). Lua can instantiate [prefabs](Prefabs.md).

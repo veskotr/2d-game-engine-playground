@@ -8,6 +8,7 @@ add_library(sle_scripting STATIC
     src/LuaBindingsCamera.cpp
     src/LuaBindingsEvents.cpp
     src/LuaBindingsConstants.cpp
+    src/ScriptEngineBehaviour.cpp
     src/ScriptEngine.cpp
 )
 

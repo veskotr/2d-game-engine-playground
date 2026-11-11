@@ -197,6 +197,10 @@ function Engine.destroyEntity(entity) end
 ---@param message string
 function Engine.error(message) end
 
+---@param key string
+---@return integer|nil
+function Engine.findEntityByKey(key) end
+
 ---@param entity integer
 ---@param name string
 ---@return number|nil
@@ -205,6 +209,9 @@ function Engine.getAnimatorFloat(entity, name) end
 ---@param entity integer
 ---@return number
 function Engine.getAnimatorTime(entity) end
+
+---@return string|nil
+function Engine.getBehaviourKey() end
 
 ---@param entity integer
 ---@return integer
@@ -223,6 +230,9 @@ function Engine.getDeltaTime() end
 ---@param entity integer
 ---@return integer|nil
 function Engine.getParent(entity) end
+
+---@return integer|nil
+function Engine.getSceneEntity() end
 
 ---@param entity integer
 ---@return string|nil
@@ -254,6 +264,14 @@ function Engine.getWorldTransform(entity) end
 ---@param sceneName string
 ---@return boolean
 function Engine.hasScene(sceneName) end
+
+---@param path string
+---@param key string
+---@param overrides table
+---@param parent integer
+---@return integer|nil
+---@return string|nil
+function Engine.instantiatePrefab(path, key, overrides, parent) end
 
 ---@param entity integer
 ---@return boolean

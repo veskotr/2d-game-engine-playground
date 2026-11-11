@@ -4,6 +4,7 @@
 #include <sle/physics/PhysicsWorld.hpp>
 #include <sle/scene/Registry.hpp>
 #include <sle/scene/Scene.hpp>
+#include <sle/scene/TransformMath.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/scene/components/Transform.hpp>
 #include <sle/scene/components/WorldTransformComponent.hpp>
@@ -16,6 +17,30 @@
 
 namespace sle {
 
+namespace {
+bool usablePose(const Context& ctx, sle::entity::Entity entity)
+{
+    using namespace sle::entity::transformMath;
+    const auto parent = currentParentWorld(ctx.scene, entity);
+    if (!ctx.registry.getComponent<sle::components::TransformComponent>(entity) ||
+        !invertible(parent) || !finite(currentWorld(ctx.scene, entity))) return false;
+    using Subsystem = sle::components::ChunkSubsystem;
+    auto boxSafe = [&](const auto* shape, Subsystem subsystem) {
+        return !shape || !shape->enabled || !sle::entity::isChunkActive(ctx.registry, entity, subsystem) ||
+            ctx.physicsWorld->isBoxGeometryValid(shape->size * glm::abs(parent.scale), shape->offset * parent.scale);
+    };
+    auto circleSafe = [&](const auto* shape, Subsystem subsystem) {
+        return !shape || !shape->enabled || !sle::entity::isChunkActive(ctx.registry, entity, subsystem) ||
+            ctx.physicsWorld->isCircleGeometryValid(shape->radius, shape->offset, parent.scale);
+    };
+    return boxSafe(ctx.registry.getComponent<sle::components::BoxColliderComponent>(entity), Subsystem::Collision) &&
+        boxSafe(ctx.registry.getComponent<sle::components::BoxZoneComponent>(entity), Subsystem::Zones) &&
+        circleSafe(ctx.registry.getComponent<sle::components::CircleColliderComponent>(entity), Subsystem::Collision) &&
+        circleSafe(ctx.registry.getComponent<sle::components::CircleZoneComponent>(entity), Subsystem::Zones);
+}
+}
+
+
 void PhysicsSystem::releaseEntity(sle::entity::Scene& scene, sle::physics::PhysicsWorld* world, sle::entity::Entity entity)
 {
     auto& registry = scene.getRegistry();
@@ -26,6 +51,8 @@ void PhysicsSystem::releaseEntity(sle::entity::Scene& scene, sle::physics::Physi
     } else if (const auto* body = registry.getComponent<sle::components::RigidBodyComponent>(entity); world && body) {
         world->destroyBody(body->box2dBodyId);
     }
+    authoredPoses_.erase(entity.getID());
+    fixtureScales_.erase(entity.getID());
     activePhysicsEntities.erase(entity.getID());
     if (auto* body = registry.getComponent<sle::components::RigidBodyComponent>(entity)) body->box2dBodyId = 0;
     if (auto* shape = registry.getComponent<sle::components::BoxColliderComponent>(entity)) shape->box2dFixtureId = 0;
@@ -46,6 +73,8 @@ void PhysicsSystem::update(Context& ctx)
         lastInjectedWorld_ = ctx.physicsWorld;
         lastInjectedEventBus_ = &ctx.eventBus;
     }
+
+    destroyStalePhysics(ctx);
 
     // Phase 1: Create Box2D bodies for newly added RigidBody components
     createNewPhysicsBodies(ctx);
@@ -80,12 +109,15 @@ void PhysicsSystem::createNewPhysicsBodies(const Context& ctx)
             if (!transform)
                 return;
 
-            glm::vec2 position = transform->getPosition();
+            if (!usablePose(ctx, entity)) return;
+            const auto pose = sle::entity::transformMath::currentWorld(ctx.scene, entity);
+            glm::vec2 position = pose.position;
 
             // Create the physics body
             uint32_t bodyId = ctx.physicsWorld->createBody(position, rigidBody);
             rigidBody.box2dBodyId = bodyId;
-            ctx.physicsWorld->setBodyTransform(bodyId, position, transform->getRotation());
+            ctx.physicsWorld->setBodyTransform(bodyId, position, pose.rotation);
+            authoredPoses_[entity.getID()] = pose;
 
             // Store entity ID in the body for collision callbacks
             ctx.physicsWorld->setBodyEntityId(bodyId, entity.getID());
@@ -101,69 +133,74 @@ void PhysicsSystem::createNewPhysicsBodies(const Context& ctx)
 void PhysicsSystem::syncActivationAndFixtures(const Context& ctx)
 {
     ctx.registry.view<sle::components::RigidBodyComponent>(
-        [&ctx](sle::entity::Entity entity, sle::components::RigidBodyComponent& body)
+        [&ctx, this](sle::entity::Entity entity, sle::components::RigidBodyComponent& body)
         {
             if (body.box2dBodyId == 0)
                 return;
             using Subsystem = sle::components::ChunkSubsystem;
-            const bool active = body.enabled && sle::entity::isChunkActive(ctx.registry, entity, Subsystem::Physics);
+            const bool active = body.enabled && usablePose(ctx, entity) && sle::entity::isChunkActive(ctx.registry, entity, Subsystem::Physics);
             const bool changed = ctx.physicsWorld->setBodyEnabled(body.box2dBodyId, active);
             if (!active)
                 return; // Keep fixtures/velocity intact while the whole body is suspended.
             if (changed)
             {
-                // Presentation may already have consumed dirty flags while this
-                // body was suspended. The latest local pose wins on reactivation.
-                if (const auto* transform = ctx.registry.getComponent<sle::components::TransformComponent>(entity))
-                    ctx.physicsWorld->setBodyTransform(body.box2dBodyId, transform->getPosition(), transform->getRotation());
+                const auto pose = sle::entity::transformMath::currentWorld(ctx.scene, entity);
+                ctx.physicsWorld->setBodyTransform(body.box2dBodyId, pose.position, pose.rotation);
+                authoredPoses_[entity.getID()] = pose;
             }
+            const auto scale = sle::entity::transformMath::currentParentWorld(ctx.scene, entity).scale;
+            const auto oldScale = fixtureScales_.find(entity.getID());
+            const bool rebuild = oldScale != fixtureScales_.end() && oldScale->second != scale;
+            fixtureScales_[entity.getID()] = scale;
+            const auto velocity = ctx.physicsWorld->getBodyVelocity(body.box2dBodyId);
+            const auto angularVelocity = ctx.physicsWorld->getBodyAngularVelocity(body.box2dBodyId);
 
             auto syncFixture = [&](auto* component, Subsystem subsystem, auto createFixture)
             {
                 if (!component)
                     return;
                 const bool enabled = active && component->enabled && sle::entity::isChunkActive(ctx.registry, entity, subsystem);
-                if (!enabled && component->box2dFixtureId != 0)
+                if ((!enabled || rebuild) && component->box2dFixtureId != 0)
                 {
                     ctx.physicsWorld->destroyFixture(body.box2dBodyId, component->box2dFixtureId);
                     component->box2dFixtureId = 0;
                 }
-                else if (enabled && component->box2dFixtureId == 0)
+                if (enabled && component->box2dFixtureId == 0)
                 {
-                    component->box2dFixtureId = (ctx.physicsWorld->*createFixture)(body.box2dBodyId, *component);
+                    component->box2dFixtureId = createFixture(*component);
                 }
             };
             syncFixture(ctx.registry.getComponent<sle::components::BoxColliderComponent>(entity),
-                Subsystem::Collision, &sle::physics::PhysicsWorld::createBoxFixture);
+                Subsystem::Collision, [&](auto shape) { shape.size *= glm::abs(scale); shape.offset *= scale; return ctx.physicsWorld->createBoxFixture(body.box2dBodyId, shape); });
             syncFixture(ctx.registry.getComponent<sle::components::CircleColliderComponent>(entity),
-                Subsystem::Collision, &sle::physics::PhysicsWorld::createCircleFixture);
+                Subsystem::Collision, [&](auto shape) { return ctx.physicsWorld->createCircleFixture(body.box2dBodyId, shape, scale); });
             syncFixture(ctx.registry.getComponent<sle::components::BoxZoneComponent>(entity),
-                Subsystem::Zones, &sle::physics::PhysicsWorld::createBoxZone);
+                Subsystem::Zones, [&](auto shape) { shape.size *= glm::abs(scale); shape.offset *= scale; return ctx.physicsWorld->createBoxZone(body.box2dBodyId, shape); });
             syncFixture(ctx.registry.getComponent<sle::components::CircleZoneComponent>(entity),
-                Subsystem::Zones, &sle::physics::PhysicsWorld::createCircleZone);
+                Subsystem::Zones, [&](auto shape) { return ctx.physicsWorld->createCircleZone(body.box2dBodyId, shape, scale); });
+            if (rebuild)
+            {
+                // ResetMassData during fixture replacement moves the center of
+                // mass; preserve the API's world velocity across that operation.
+                ctx.physicsWorld->setBodyVelocity(body.box2dBodyId, velocity);
+                ctx.physicsWorld->setBodyAngularVelocity(body.box2dBodyId, angularVelocity);
+            }
         });
 }
 
 void PhysicsSystem::syncTransformToPhysics(const Context& ctx)
 {
-    // For each entity with RigidBodyComponent and TransformComponent,
-    // update the physics body transform if the transform changed
     ctx.registry.view<sle::components::RigidBodyComponent, sle::components::TransformComponent>(
-        [&ctx](sle::entity::Entity entity, sle::components::RigidBodyComponent& rigidBody, sle::components::TransformComponent& transform)
+        [&ctx, this](sle::entity::Entity entity, sle::components::RigidBodyComponent& body, sle::components::TransformComponent&)
         {
-            if (rigidBody.box2dBodyId == 0 || !rigidBody.enabled ||
-                !sle::entity::isChunkActive(ctx.registry, entity, sle::components::ChunkSubsystem::Physics))
-                return;
-
-            // Only sync if transform is dirty (changed this frame)
-            if (transform.isDirty())
-            {
-                glm::vec2 pos = transform.getPosition();
-                float rot = transform.getRotation();
-                ctx.physicsWorld->setBodyTransform(rigidBody.box2dBodyId, pos, rot);
-            }
-        }
-    );
+            if (!body.box2dBodyId || !body.enabled || !usablePose(ctx, entity) ||
+                !sle::entity::isChunkActive(ctx.registry, entity, sle::components::ChunkSubsystem::Physics)) return;
+            const auto pose = sle::entity::transformMath::currentWorld(ctx.scene, entity);
+            const auto previous = authoredPoses_.find(entity.getID());
+            if (previous == authoredPoses_.end() || previous->second.position != pose.position || previous->second.rotation != pose.rotation)
+                ctx.physicsWorld->setBodyTransform(body.box2dBodyId, pose.position, pose.rotation);
+            authoredPoses_[entity.getID()] = pose;
+        });
 }
 
 void PhysicsSystem::stepPhysics(const Context& ctx)
@@ -174,29 +211,43 @@ void PhysicsSystem::stepPhysics(const Context& ctx)
 
 void PhysicsSystem::syncPhysicsToTransform(const Context& ctx)
 {
-    // For each entity with RigidBodyComponent and TransformComponent,
-    // read the physics body transform and update the Transform
-    ctx.registry.view<sle::components::RigidBodyComponent, sle::components::TransformComponent>(
-        [&ctx](sle::entity::Entity entity, sle::components::RigidBodyComponent& rigidBody, sle::components::TransformComponent& transform)
+    using namespace sle::entity::transformMath;
+    using sle::components::WorldTransformComponent;
+    // Snapshot every native pose before modifying authored locals. A simulated
+    // ancestor and child are independent world bodies, regardless of view order.
+    std::unordered_map<uint32_t, WorldTransformComponent> simulated;
+    ctx.registry.view<sle::components::RigidBodyComponent>([&](sle::entity::Entity entity, auto& body) {
+        if (!body.box2dBodyId || !body.enabled || !usablePose(ctx, entity) ||
+            !sle::entity::isChunkActive(ctx.registry, entity, sle::components::ChunkSubsystem::Physics)) return;
+        auto& pose = simulated[entity.getID()];
+        ctx.physicsWorld->getBodyTransform(body.box2dBodyId, pose.position, pose.rotation);
+        body.velocity = ctx.physicsWorld->getBodyVelocity(body.box2dBodyId);
+        body.angularVelocity = ctx.physicsWorld->getBodyAngularVelocity(body.box2dBodyId);
+    });
+    struct Entry { sle::entity::Entity entity; WorldTransformComponent parent; };
+    std::vector<Entry> stack;
+    for (auto root : ctx.scene.getRoots()) stack.push_back({root, {}});
+    while (!stack.empty())
+    {
+        auto entry = stack.back(); stack.pop_back();
+        auto resolved = entry.parent;
+        if (auto* local = ctx.registry.getComponent<sle::components::TransformComponent>(entry.entity))
         {
-            if (rigidBody.box2dBodyId == 0 || !rigidBody.enabled ||
-                !sle::entity::isChunkActive(ctx.registry, entity, sle::components::ChunkSubsystem::Physics))
-                return;
-
-            // Read physics body state
-            glm::vec2 pos;
-            float rot;
-            ctx.physicsWorld->getBodyTransform(rigidBody.box2dBodyId, pos, rot);
-
-            // Update transform (will set dirty flag internally)
-            transform.setPosition(pos);
-            transform.setRotation(rot);
-
-            // Update velocity state in component
-            rigidBody.velocity = ctx.physicsWorld->getBodyVelocity(rigidBody.box2dBodyId);
-            rigidBody.angularVelocity = ctx.physicsWorld->getBodyAngularVelocity(rigidBody.box2dBodyId);
+            if (const auto it = simulated.find(entry.entity.getID()); it != simulated.end() && invertible(entry.parent))
+            {
+                const auto position = toLocalPosition(entry.parent, it->second.position);
+                const float rotation = it->second.rotation - entry.parent.rotation;
+                if (std::isfinite(position.x) && std::isfinite(position.y) && std::isfinite(rotation))
+                {
+                    local->setPosition(position);
+                    local->setRotation(rotation);
+                }
+            }
+            resolved = compose(entry.parent, *local);
+            if (simulated.contains(entry.entity.getID())) authoredPoses_[entry.entity.getID()] = resolved;
         }
-    );
+        for (auto child : ctx.scene.getChildren(entry.entity)) stack.push_back({child, resolved});
+    }
 }
 
 void PhysicsSystem::destroyStalePhysics(const Context& ctx)
@@ -217,7 +268,7 @@ void PhysicsSystem::destroyStalePhysics(const Context& ctx)
 
         // Check if entity still has RigidBodyComponent
         auto* rigidBody = ctx.registry.getComponent<sle::components::RigidBodyComponent>(entity);
-        if (!rigidBody)
+        if (!rigidBody || !ctx.registry.getComponent<sle::components::TransformComponent>(entity))
         {
             toRemove.push_back(entityId);
             continue;
@@ -252,6 +303,14 @@ void PhysicsSystem::destroyStalePhysics(const Context& ctx)
             }
         }
 
+        if (ctx.registry.hasEntity(entity)) {
+            if (auto* shape = ctx.registry.getComponent<sle::components::BoxColliderComponent>(entity)) shape->box2dFixtureId = 0;
+            if (auto* shape = ctx.registry.getComponent<sle::components::CircleColliderComponent>(entity)) shape->box2dFixtureId = 0;
+            if (auto* shape = ctx.registry.getComponent<sle::components::BoxZoneComponent>(entity)) shape->box2dFixtureId = 0;
+            if (auto* shape = ctx.registry.getComponent<sle::components::CircleZoneComponent>(entity)) shape->box2dFixtureId = 0;
+        }
+        authoredPoses_.erase(entityId);
+        fixtureScales_.erase(entityId);
         activePhysicsEntities.erase(entityId);
     }
 }

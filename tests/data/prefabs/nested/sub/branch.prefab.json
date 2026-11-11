@@ -1,0 +1,1 @@
+{"root":"root","entities":[{"key":"root","components":{"Transform":{}}},{"key":"socket","parent":"root","components":{"Transform":{}}}],"prefabs":[{"file":"../leaf.prefab.json","key":"leaf","parent":"socket","overrides":{"child":{"Transform":{"position":{"y":11}}}}}]}

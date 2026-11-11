@@ -15,7 +15,39 @@ namespace sle::entity
     {
         Entity entity = registry.createEntity();
         roots.push_back(entity);
+        if (sceneEntity.valid()) setParent(entity, sceneEntity);
         return entity;
+    }
+
+    Entity Scene::ensureSceneEntity()
+    {
+        if (registry.hasEntity(sceneEntity)) return sceneEntity;
+        const auto oldRoots = roots;
+        sceneEntity = registry.createEntity();
+        roots.push_back(sceneEntity);
+        setEntityKey(sceneEntity, "@scene");
+        for (const auto root : oldRoots) setParent(root, sceneEntity);
+        return sceneEntity;
+    }
+
+    bool Scene::setEntityKey(Entity entity, const std::string& key)
+    {
+        if (!registry.hasEntity(entity) || key.empty() || (key == "@scene" && entity != sceneEntity))
+            return false;
+        const auto existing = keyedEntities.find(key);
+        if (existing != keyedEntities.end() && existing->second != entity)
+            return false;
+        if (const auto old = entityKeys.find(entity.getID()); old != entityKeys.end())
+            keyedEntities.erase(old->second);
+        entityKeys[entity.getID()] = key;
+        keyedEntities[key] = entity;
+        return true;
+    }
+
+    Entity Scene::findEntityByKey(const std::string& key) const
+    {
+        const auto it = keyedEntities.find(key);
+        return it != keyedEntities.end() && registry.hasEntity(it->second) ? it->second : Entity{};
     }
 
     void Scene::destroyEntity(Entity entity)
@@ -40,7 +72,13 @@ namespace sle::entity
         }
 
         detachFromParent(entity);
+        if (const auto key = entityKeys.find(entity.getID()); key != entityKeys.end())
+        {
+            keyedEntities.erase(key->second);
+            entityKeys.erase(key);
+        }
         registry.destroyEntity(entity);
+        if (entity == sceneEntity) sceneEntity = {};
     }
 
     void Scene::detachFromParent(Entity entity)
@@ -122,6 +160,9 @@ namespace sle::entity
         for (Entity root : rootsCopy)
             destroyEntityInternal(root);
 
+        sceneEntity = {};
+        keyedEntities.clear();
+        entityKeys.clear();
         roots.clear();
         registry.parentMap.clear();
         childrenMap.clear();
@@ -157,6 +198,9 @@ namespace sle::entity
         swap(registry, staged.registry);
         swap(roots, staged.roots);
         swap(childrenMap, staged.childrenMap);
+        swap(keyedEntities, staged.keyedEntities);
+        swap(entityKeys, staged.entityKeys);
+        swap(sceneEntity, staged.sceneEntity);
     }
 
     void Scene::markTransformBranchDirty(Entity entity)

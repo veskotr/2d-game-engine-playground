@@ -39,3 +39,8 @@ initialization rolls back new registrations. See [Events](../topics/Events.md).
 ## Update This File When
 
 - Lua API, script lifecycle, binding registration, or script resource behavior changes.
+
+ScriptEngine owns entity+attachment-key instances with independent named Lua
+environments and generation-scoped event references. Legacy primary scripts retain
+their shared-global compatibility. See [behaviours](../topics/Behaviours.md) for
+update order and [prefabs](../topics/Prefabs.md) for Lua instantiation.

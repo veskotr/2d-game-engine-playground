@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <string>
 
 namespace sle::entity {
 
@@ -16,9 +17,18 @@ public:
     Scene() = default;
     ~Scene();
 
+    // Optional entity-like scene root. Created lazily; ordinary components/scripts.
+    Entity ensureSceneEntity();
+    Entity getSceneEntity() const { return sceneEntity; }
+
     // Entity lifetime
     Entity createEntity();
     void destroyEntity(Entity entity);  // destroys entity and all its descendants
+
+    // Optional authored identity, independent of registry-local runtime IDs.
+    // A nonempty key belongs to one live entity in this scene. Renaming is atomic.
+    bool setEntityKey(Entity entity, const std::string& key);
+    Entity findEntityByKey(const std::string& key) const;
 
     // Hierarchy
     // Pass an invalid Entity as parent to make the child a root.
@@ -63,6 +73,9 @@ private:
     void detachFromParent(Entity entity);
     void markTransformBranchDirty(Entity entity);
 
+    std::unordered_map<std::string, Entity> keyedEntities;
+    std::unordered_map<uint32_t, std::string> entityKeys;
+    Entity sceneEntity;
     Registry registry;
     sle::events::EventBus eventBus;
     std::unordered_map<uint32_t, std::vector<Entity>> childrenMap;     // entityID -> children

@@ -1,0 +1,1 @@
+{"root":"root","entities":[{"key":"root","components":{"Transform":{"position":[1,2]},"Animator":{"targetEntities":{"child":"child","numeric":2}}}},{"key":"child","parent":1,"components":{"Transform":{"position":[3,4]},"Audio":{}}}]}

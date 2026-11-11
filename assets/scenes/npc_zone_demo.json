@@ -2,6 +2,7 @@
   "scene": "npc_zone_demo",
   "entities": [
     {
+      "key": "player",
       "name": "Player",
       "components": {
         "Transform": {
@@ -41,7 +42,7 @@
           "playing": true,
           "speed": 1.0,
           "targetEntities": {
-            "npc": 2
+            "npc": "npc"
           }
         },
         "Script": {
@@ -68,6 +69,7 @@
       }
     },
     {
+      "key": "npc",
       "name": "NPC",
       "components": {
         "Transform": {

@@ -111,17 +111,23 @@ public:
 
     // ============ Fixture Management ============
 
+    // Validate converted native geometry before constructing Box2D shapes.
+    // Shared with orchestration so unsafe geometry can suspend the owning body.
+    bool isBoxGeometryValid(const glm::vec2& size, const glm::vec2& offset) const;
+    bool isCircleGeometryValid(float radius, const glm::vec2& offset,
+        const glm::vec2& ancestorScale = {1.0f, 1.0f}) const;
+
     // Create a box collider fixture on a body
     uintptr_t createBoxFixture(uint32_t bodyId, const sle::components::BoxColliderComponent& collider);
 
     // Create a circle collider fixture on a body
-    uintptr_t createCircleFixture(uint32_t bodyId, const sle::components::CircleColliderComponent& collider);
+    uintptr_t createCircleFixture(uint32_t bodyId, const sle::components::CircleColliderComponent& collider, const glm::vec2& ancestorScale = {1.0f, 1.0f});
 
     // Create a box trigger (sensor) on a body
     uintptr_t createBoxZone(uint32_t bodyId, const sle::components::BoxZoneComponent& zone);
 
     // Create a circle trigger (sensor) on a body
-    uintptr_t createCircleZone(uint32_t bodyId, const sle::components::CircleZoneComponent& zone);
+    uintptr_t createCircleZone(uint32_t bodyId, const sle::components::CircleZoneComponent& zone, const glm::vec2& ancestorScale = {1.0f, 1.0f});
 
     // Destroy a fixture
     void destroyFixture(uint32_t bodyId, uintptr_t fixtureId);

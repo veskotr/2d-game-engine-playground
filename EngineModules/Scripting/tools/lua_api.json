@@ -75,7 +75,9 @@
     "pruneEventSubscriptions": "Runtime execution context and subscription lifecycle; not a gameplay operation.",
     "eventSubscriptionCheckpoint": "Runtime execution context and subscription lifecycle; not a gameplay operation.",
     "rollbackEventSubscriptions": "Runtime execution context and subscription lifecycle; not a gameplay operation.",
-    "clearAllEventSubscriptions": "Runtime execution context and subscription lifecycle; not a gameplay operation."
+    "clearAllEventSubscriptions": "Runtime execution context and subscription lifecycle; not a gameplay operation.",
+    "getExecutingBehaviourGeneration": "Runtime generation identity for callback ownership",
+    "clearBehaviourEventSubscriptions": "Runtime exact-instance callback cleanup"
   },
   "functions": {
     "Engine.Camera.getPosition": {
@@ -1244,6 +1246,59 @@
         }
       ],
       "returns": []
+    },
+    "Engine.findEntityByKey": {
+      "method": "findEntityByKey",
+      "params": [
+        {
+          "name": "key",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "integer|nil"
+      ]
+    },
+    "Engine.getSceneEntity": {
+      "method": "getSceneEntity",
+      "params": [],
+      "returns": [
+        "integer|nil"
+      ]
+    },
+    "Engine.getBehaviourKey": {
+      "method": "getExecutingBehaviourKey",
+      "params": [],
+      "returns": [
+        "string|nil"
+      ]
+    },
+    "Engine.instantiatePrefab": {
+      "method": "instantiatePrefab",
+      "params": [
+        {
+          "name": "path",
+          "type": "string"
+        },
+        {
+          "name": "key",
+          "type": "string"
+        },
+        {
+          "name": "overrides",
+          "type": "table",
+          "optional": true
+        },
+        {
+          "name": "parent",
+          "type": "integer",
+          "optional": true
+        }
+      ],
+      "returns": [
+        "integer|nil",
+        "string|nil"
+      ]
     }
   },
   "constants": {
@@ -1288,6 +1343,6 @@
       "../../*/include"
     ],
     "codecs_dir": "../../Systems/src/lua/components",
-    "registry": "../../Systems/src/ScriptApiImplComponents.cpp"
+    "registry": "../../Systems/src/ComponentRegistry.cpp"
   }
 }

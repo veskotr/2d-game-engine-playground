@@ -33,8 +33,11 @@ dirty flags. Rendering, culling, debug geometry, and world-space UI consume the
 final world transforms from the same frame, including affected descendants.
 
 World transforms are a derived presentation snapshot; during simulation they can
-still contain the previous frame's pose. Current scripting transform APIs use local
-transforms. New simulation consumers of world transforms must account for this
+still contain the previous frame's pose. Local transform APIs remain local;
+`Engine.getWorldTransform` and physics use the shared live hierarchy composition
+helper instead of this cache. Physics snapshots native body poses and writes
+locals back parent-first, so independently simulated parent/child bodies are not
+transformed twice. New simulation consumers must account for this
 phase boundary rather than inserting an early pass that consumes physics edits.
 
 The windowed `integration_runtime_transform_physics_path` regression exercises the

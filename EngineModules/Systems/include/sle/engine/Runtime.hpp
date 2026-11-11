@@ -47,6 +47,7 @@ public:
     sle::core::Result<bool> requestSceneSwitch(const std::string& sceneName);
     const std::string& getCurrentSceneName() const { return sceneManager.getCurrentSceneName(); }
 
+    void synchronizeScriptBehaviours(uint32_t entityId);
     void prepareComponentMutation(uint32_t entityId, const std::string& name,
         const nlohmann::json& patch, bool removing);
 

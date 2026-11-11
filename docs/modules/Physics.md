@@ -31,6 +31,12 @@ Box2D integration and physics event production.
 - Keep physics stepping deterministic where practical.
 - Sync physics results back through transform/component paths owned by systems.
 
+PhysicsWorld bodies and queries use world units. Systems resolves hierarchy poses
+and writes simulation results back into local Transform data. Fixture creation
+shares `isBoxGeometryValid` / `isCircleGeometryValid` checks with Systems, including
+converted native vertices, so degenerate geometry returns no fixture instead of
+reaching Box2D hull assertions. See [physics contract](../topics/Physics.md).
+
 ## Update This File When
 
 - Physics component behavior, collision/zone event behavior, stepping, or debug rendering changes.

@@ -4,6 +4,8 @@
 
 #include <cstdint>
 #include <unordered_set>
+#include <unordered_map>
+#include <string>
 
 namespace sle::entity { class Registry; }
 
@@ -28,6 +30,7 @@ private:
 
     sle::scripting::ScriptRuntime* scriptRuntime = nullptr;
     std::unordered_set<uint32_t> activeScriptEntities;
+    std::unordered_map<uint32_t,std::unordered_map<std::string,std::string>> failedAssets;
     sle::events::EventBus* subscribedEventBus_ = nullptr;
     sle::events::ScopedSubscription stateMachineTransitionSubscription_;
 };

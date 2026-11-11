@@ -8,8 +8,76 @@
 #include <box2d/b2_circle_shape.h>
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <cmath>
 
 namespace sle::physics {
+
+namespace {
+bool finiteVector(const glm::vec2& value)
+{
+    return std::isfinite(value.x) && std::isfinite(value.y);
+}
+
+void ellipseVertices(const glm::vec2& radii, const glm::vec2& offset, b2Vec2 (&vertices)[8])
+{
+    for (int i = 0; i < 8; ++i)
+    {
+        const float angle = i * 0.7853981633974483f;
+        vertices[i].Set(offset.x + radii.x * std::cos(angle), offset.y + radii.y * std::sin(angle));
+    }
+}
+
+// Inspect the actual float vertices, including offset rounding. Checking just
+// mathematical dimensions misses collapsed hulls at large native coordinates.
+bool validPolygon(const b2Vec2* vertices, int count)
+{
+    float twiceArea = 0;
+    const float weldDistance = 0.5f * b2_linearSlop;
+    for (int i = 0; i < count; ++i)
+    {
+        if (!vertices[i].IsValid()) return false;
+        for (int j = 0; j < i; ++j)
+        {
+            const float distanceSquared = (vertices[i] - vertices[j]).LengthSquared();
+            if (!std::isfinite(distanceSquared) || distanceSquared <= weldDistance * weldDistance) return false;
+        }
+        const auto edge = vertices[(i + 1) % count] - vertices[i];
+        const auto next = vertices[(i + 2) % count] - vertices[(i + 1) % count];
+        const float turn = b2Cross(edge, next);
+        if (!std::isfinite(turn) || turn <= b2_epsilon) return false;
+        twiceArea += b2Cross(vertices[i] - vertices[0], vertices[(i + 1) % count] - vertices[0]);
+    }
+    return std::isfinite(twiceArea) && twiceArea > 2.0f * b2_epsilon;
+}
+}
+
+bool PhysicsWorld::isBoxGeometryValid(const glm::vec2& size, const glm::vec2& offset) const
+{
+    if (!finiteVector(size) || !finiteVector(offset) || size.x <= 0.1f || size.y <= 0.1f) return false;
+    const auto half = worldToPhysicsVec2(size * 0.5f);
+    const auto center = worldToPhysicsVec2(offset);
+    const b2Vec2 vertices[] = {{center.x-half.x,center.y-half.y}, {center.x+half.x,center.y-half.y},
+                              {center.x+half.x,center.y+half.y}, {center.x-half.x,center.y+half.y}};
+    return validPolygon(vertices, 4);
+}
+
+bool PhysicsWorld::isCircleGeometryValid(float radius, const glm::vec2& offset, const glm::vec2& ancestorScale) const
+{
+    const auto radii = glm::abs(ancestorScale) * worldToPhysicsLength(radius);
+    const auto center = worldToPhysicsVec2(offset * ancestorScale);
+    if (!finiteVector(radii) || !finiteVector(center) || radii.x <= 0 || radii.y <= 0) return false;
+    if (radii.x == radii.y)
+    {
+        // Native circles need no hull, but their area and inertia must remain finite.
+        return std::isfinite(radii.x * radii.x) &&
+            std::isfinite(glm::dot(center, center) + radii.x * radii.x);
+    }
+    if (radii.x < worldToPhysicsLength(0.5f) || radii.y < worldToPhysicsLength(0.5f)) return false;
+    b2Vec2 vertices[8];
+    ellipseVertices(radii, center, vertices);
+    return validPolygon(vertices, 8);
+}
+
 
 PhysicsWorld::PhysicsWorld(const glm::vec2& gravity)
 {
@@ -309,6 +377,8 @@ uintptr_t PhysicsWorld::createBoxFixture(uint32_t bodyId, const sle::components:
     if (!body)
         return 0;
 
+    if (!isBoxGeometryValid(collider.size, collider.offset)) return 0;
+
     // Create box shape
     b2PolygonShape shape;
     const glm::vec2 halfSize = worldToPhysicsVec2(collider.size * 0.5f);
@@ -330,21 +400,38 @@ uintptr_t PhysicsWorld::createBoxFixture(uint32_t bodyId, const sle::components:
     return reinterpret_cast<uintptr_t>(fixture);
 }
 
-uintptr_t PhysicsWorld::createCircleFixture(uint32_t bodyId, const sle::components::CircleColliderComponent& collider)
+uintptr_t PhysicsWorld::createCircleFixture(uint32_t bodyId, const sle::components::CircleColliderComponent& collider, const glm::vec2& ancestorScale)
 {
     b2Body* body = getBodyPtr(bodyId);
     if (!body)
         return 0;
 
-    // Create circle shape
-    b2CircleShape shape;
-    shape.m_radius = worldToPhysicsLength(collider.radius);
-    const glm::vec2 offset = worldToPhysicsVec2(collider.offset);
-    shape.m_p.Set(offset.x, offset.y);
+    if (!isCircleGeometryValid(collider.radius, collider.offset, ancestorScale)) return 0;
+
+    // Box2D supports circles and convex polygons, but no native ellipse.
+    // Uniform magnitudes retain a native circle; otherwise use an inscribed octagon.
+    b2CircleShape circle;
+    b2PolygonShape ellipse;
+    const glm::vec2 radii = glm::abs(ancestorScale) * worldToPhysicsLength(collider.radius);
+    const glm::vec2 offset = worldToPhysicsVec2(collider.offset * ancestorScale);
+    const b2Shape* shape;
+    if (radii.x == radii.y)
+    {
+        circle.m_radius = radii.x;
+        circle.m_p.Set(offset.x, offset.y);
+        shape = &circle;
+    }
+    else
+    {
+        b2Vec2 vertices[8];
+        ellipseVertices(radii, offset, vertices);
+        ellipse.Set(vertices, 8);
+        shape = &ellipse;
+    }
 
     // Create fixture definition
     b2FixtureDef fixtureDef;
-    fixtureDef.shape = &shape;
+    fixtureDef.shape = shape;
     fixtureDef.friction = collider.friction;
     fixtureDef.restitution = collider.restitution;
     fixtureDef.density = collider.density;
@@ -362,6 +449,8 @@ uintptr_t PhysicsWorld::createBoxZone(uint32_t bodyId, const sle::components::Bo
     b2Body* body = getBodyPtr(bodyId);
     if (!body)
         return 0;
+
+    if (!isBoxGeometryValid(zone.size, zone.offset)) return 0;
 
     // Create box shape
     b2PolygonShape shape;
@@ -384,21 +473,38 @@ uintptr_t PhysicsWorld::createBoxZone(uint32_t bodyId, const sle::components::Bo
         return id;
 }
 
-uintptr_t PhysicsWorld::createCircleZone(uint32_t bodyId, const sle::components::CircleZoneComponent& zone)
+uintptr_t PhysicsWorld::createCircleZone(uint32_t bodyId, const sle::components::CircleZoneComponent& zone, const glm::vec2& ancestorScale)
 {
     b2Body* body = getBodyPtr(bodyId);
     if (!body)
         return 0;
 
-    // Create circle shape
-    b2CircleShape shape;
-    shape.m_radius = worldToPhysicsLength(zone.radius);
-    const glm::vec2 offset = worldToPhysicsVec2(zone.offset);
-    shape.m_p.Set(offset.x, offset.y);
+    if (!isCircleGeometryValid(zone.radius, zone.offset, ancestorScale)) return 0;
+
+    // Box2D supports circles and convex polygons, but no native ellipse.
+    // Uniform magnitudes retain a native circle; otherwise use an inscribed octagon.
+    b2CircleShape circle;
+    b2PolygonShape ellipse;
+    const glm::vec2 radii = glm::abs(ancestorScale) * worldToPhysicsLength(zone.radius);
+    const glm::vec2 offset = worldToPhysicsVec2(zone.offset * ancestorScale);
+    const b2Shape* shape;
+    if (radii.x == radii.y)
+    {
+        circle.m_radius = radii.x;
+        circle.m_p.Set(offset.x, offset.y);
+        shape = &circle;
+    }
+    else
+    {
+        b2Vec2 vertices[8];
+        ellipseVertices(radii, offset, vertices);
+        ellipse.Set(vertices, 8);
+        shape = &ellipse;
+    }
 
     // Create fixture definition for sensor
     b2FixtureDef fixtureDef;
-    fixtureDef.shape = &shape;
+    fixtureDef.shape = shape;
     fixtureDef.filter.categoryBits = zone.categoryBits;
     fixtureDef.filter.maskBits = zone.maskBits;
     fixtureDef.isSensor = true;  // Important: this is a sensor

@@ -1,5 +1,8 @@
 #include <sle/engine/Runtime.hpp>
 #include <stdexcept>
+#include <algorithm>
+#include "lua/components/ScriptBindings.hpp"
+#include "ScriptBehaviours.hpp"
 #include <sle/scene/components/AudioComponent.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
@@ -25,6 +28,15 @@ bool ScriptApiImpl::registerSceneFromFile(const std::string& name, const std::st
     return runtime.registerSceneFromFile(name, path);
 }
 
+void Runtime::synchronizeScriptBehaviours(uint32_t entityId)
+{
+    const auto* script=scene.getRegistry().getComponent<components::ScriptComponent>(entity::Entity(entityId));
+    if(!script) {scriptEngine.removeScript(entityId);return;}
+    auto specs=detail::scriptSpecs(*script);
+    if(!script->enabled) for(auto& spec:specs) spec.enabled=false;
+    scriptEngine.configureBehaviours(entityId,specs);
+}
+
 void Runtime::prepareComponentMutation(uint32_t entityId, const std::string& name,
     const nlohmann::json& patch, bool removing)
 {
@@ -32,8 +44,16 @@ void Runtime::prepareComponentMutation(uint32_t entityId, const std::string& nam
     auto& registry = scene.getRegistry();
     if (name == "Script") {
         const auto* script = registry.getComponent<components::ScriptComponent>(entity);
-        if (removing || (script && patch.contains("scriptAsset") && patch["scriptAsset"] != script->scriptAsset))
-            scriptEngine.removeScript(entityId);
+        if (removing) scriptEngine.removeScript(entityId);
+        else if (script) {
+            auto next=*script;
+            lua::components::apply(next,patch,registry);
+            auto specs=detail::scriptSpecs(next);
+            if(!next.enabled) for(auto& spec:specs) spec.enabled=false;
+            // Publish callback gating now, before state-machine callbacks later
+            // in this frame. configure also tears down only replaced attachments.
+            scriptEngine.configureBehaviours(entityId,specs);
+        }
     } else if (name == "Audio") {
         const auto* audio = registry.getComponent<components::AudioComponent>(entity);
         if (removing || (audio && patch.contains("assetPath") && patch["assetPath"] != audio->assetPath))

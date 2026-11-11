@@ -7,6 +7,8 @@
 #include <sle/scene/Registry.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
 #include <sle/scripting/ScriptRuntime.hpp>
+#include <string>
+#include <vector>
 
 namespace sle {
 
@@ -41,30 +43,50 @@ void ScriptSystem::update(Context& ctx)
     ensureStateMachineSubscription(ctx.eventBus, ctx.registry);
 
     activeScriptEntities.clear();
-
+    // Lua callbacks can add/remove components or destroy entities. Never retain a
+    // pool iterator or a component reference while invoking user code.
+    std::vector<sle::entity::Entity> entities;
     ctx.registry.view<components::ScriptComponent>(
-        [this, &registry = ctx.registry, dt = ctx.dt](sle::entity::Entity ent, components::ScriptComponent& script)
+        [&](sle::entity::Entity ent, const components::ScriptComponent&) { entities.push_back(ent); });
+
+    for (const auto ent : entities)
+    {
+        auto* script = ctx.registry.getComponent<components::ScriptComponent>(ent);
+        if (!script || !script->enabled || script->scriptAsset.empty())
+            continue;
+
+        activeScriptEntities.insert(ent.getID());
+        // Preserve Lua state without loading/updating scripts in suspended chunks.
+        if (!sle::entity::isChunkActive(ctx.registry, ent, components::ChunkSubsystem::Scripts))
+            continue;
+
+        const std::string asset = script->scriptAsset;
+        if (!scriptRuntime->hasScript(ent.getID()))
         {
-            if (!script.enabled || script.scriptAsset.empty())
-                return;
-
-            activeScriptEntities.insert(ent.getID());
-            // Keep existing Lua state during chunk suspension, without loading or updating it.
-            if (!sle::entity::isChunkActive(registry, ent, components::ChunkSubsystem::Scripts))
-                return;
-
-            if (!scriptRuntime->hasScript(ent.getID()))
+            const bool initialized = scriptRuntime->ensureScript(ent.getID(), asset);
+            script = ctx.registry.getComponent<components::ScriptComponent>(ent);
+            if (!initialized)
             {
-                if (!scriptRuntime->ensureScript(ent.getID(), script.scriptAsset))
-                {
-                    sle::core::Log::error("Failed to initialize script {} for entity {}", script.scriptAsset, ent.getID());
-                    script.enabled = false;
-                    return;
-                }
+                sle::core::Log::error("Failed to initialize script {} for entity {}", asset, ent.getID());
+                if (script && script->scriptAsset == asset) script->enabled = false;
+                continue;
             }
+        }
+        script = ctx.registry.getComponent<components::ScriptComponent>(ent);
+        if (script && script->enabled && script->scriptAsset == asset &&
+            sle::entity::isChunkActive(ctx.registry, ent, components::ChunkSubsystem::Scripts))
+            scriptRuntime->runUpdate(ent.getID(), ctx.dt);
+    }
 
-            scriptRuntime->runUpdate(ent.getID(), dt);
-        });
+    // An update can remove another entity processed earlier in this frame.
+    for (auto it = activeScriptEntities.begin(); it != activeScriptEntities.end();)
+    {
+        const auto* script = ctx.registry.getComponent<components::ScriptComponent>(sle::entity::Entity(*it));
+        if (!script || !script->enabled || script->scriptAsset.empty())
+            it = activeScriptEntities.erase(it);
+        else
+            ++it;
+    }
 
     scriptRuntime->syncEntities(activeScriptEntities);
 }

@@ -1,6 +1,9 @@
 local cases = {
  transform = {'Transform', {position={x=3,y=4},rotation=0.5,scale={x=2,y=3}}},
  sprite = {'SpriteRenderer', {color={x=0.2,y=0.4,z=0.6,w=1},visible=false,layer=-2,region={uv={x=0,y=0,z=0.5,w=0.5}}}},
+ sprite_geometry = {'SpriteRenderer', {size={x=3,y=4},offset={x=1,y=-2}}},
+ sprite_size_negative = {'SpriteRenderer', {size={x=-1,y=2}}},
+ sprite_size_zero = {'SpriteRenderer', {size={x=0,y=2}}},
  body = {'RigidBody', {bodyType='Kinematic',velocity={x=3,y=4},linearDamping=0.2}},
  box = {'BoxCollider', {size={x=3,y=4},maskBits=4}},
  circle = {'CircleCollider', {radius=2,density=0.4}},

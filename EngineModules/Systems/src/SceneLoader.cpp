@@ -1,4 +1,7 @@
 #include <sle/engine/SceneLoader.hpp>
+#include <sle/engine/PrefabPackage.hpp>
+#include <algorithm>
+#include <cctype>
 #include <sle/engine/TiledMapLoader.hpp>
 #include <sle/core/Log.hpp>
 #include <sle/renderer/Texture.hpp>
@@ -20,6 +23,13 @@ sle::core::Result<bool> SceneLoader::load(const std::string& jsonPath, sle::enti
 {
     using Json = nlohmann::json;
     using Result = sle::core::Result<bool>;
+    auto extension = std::filesystem::path(jsonPath).extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (extension == ".slescene") {
+        const auto package = PrefabPackage::readScene(jsonPath);
+        if (!package.ok()) return Result::error(package.error());
+        return loadData(package.value(), scene, jsonPath);
+    }
     std::ifstream file(jsonPath);
     if (!file.is_open()) return Result::error("Failed to open scene JSON file: " + jsonPath);
 

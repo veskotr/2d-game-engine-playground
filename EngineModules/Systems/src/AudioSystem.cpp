@@ -49,6 +49,14 @@ bool AudioSystem::init()
     return true;
 }
 
+void AudioSystem::setPaused(bool paused)
+{
+    if (!initialized_) return;
+    const auto result = paused ? ma_engine_stop(engine_) : ma_engine_start(engine_);
+    if (result != MA_SUCCESS)
+        Log::warn("AudioSystem: failed to change pause state ({})", static_cast<int>(result));
+}
+
 void AudioSystem::shutdown()
 {
     if (!initialized_)

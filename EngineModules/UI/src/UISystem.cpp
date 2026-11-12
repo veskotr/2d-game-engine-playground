@@ -362,10 +362,10 @@ glm::vec2 mouseToWorldUiPoint(const sle::core::Camera2D& camera)
     const glm::vec2 viewport = camera.getViewportSize();
     const float zoom = std::max(camera.getZoom(), 0.0001f);
 
-    return {
-        camera.getPosition().x + static_cast<float>(mouse.position.x) / zoom,
-        camera.getPosition().y + (viewport.y - static_cast<float>(mouse.position.y)) / zoom
-    };
+    const glm::vec2 local{static_cast<float>(mouse.position.x)/zoom,
+        (viewport.y-static_cast<float>(mouse.position.y))/zoom};
+    const float c=std::cos(camera.getRotation()),s=std::sin(camera.getRotation());
+    return camera.getPosition()+glm::vec2(c*local.x-s*local.y,s*local.x+c*local.y);
 }
 
 bool contains(const ResolvedRect& rect, const glm::vec2& point)
@@ -564,7 +564,7 @@ void dispatchClick(
     const std::vector<HitTarget>& hitTargets,
     const glm::vec2& mousePoint)
 {
-    if (!scriptRuntime || !sle::input::Input::getMouse().leftPressed)
+    if (!scriptRuntime || !sle::input::Input::getMouse().inViewport || !sle::input::Input::getMouse().leftPressed)
         return;
 
     for (auto it = hitTargets.rbegin(); it != hitTargets.rend(); ++it)
@@ -613,6 +613,7 @@ void UISystem::shutdown()
 {
     documents.clear();
     entityDocuments.clear();
+    deferredBehaviorEntities.clear();
     scriptRuntime = nullptr;
     initialized = false;
 }
@@ -645,11 +646,24 @@ void UISystem::update(UIFrameContext& ctx)
     }
 }
 
-void UISystem::syncEntityDocuments(UIFrameContext& ctx)
+void UISystem::renderSnapshot(UIFrameContext& ctx)
+{
+    if (!initialized) return;
+    syncEntityDocuments(ctx, false);
+    for (auto& document : documents) submitDocument(ctx, document, false);
+    for (auto& [_, document] : entityDocuments)
+    {
+        applyAutoEntityBindings(ctx, document);
+        if (!document.getBindings().consumeDirtyKeys().empty()) document.refreshBindings();
+        submitDocument(ctx, document, false);
+    }
+}
+
+void UISystem::syncEntityDocuments(UIFrameContext& ctx, bool executeBehaviors)
 {
     std::unordered_set<uint32_t> seenEntities;
 
-    ctx.registry.view<sle::components::UIComponent>([this, &ctx, &seenEntities](sle::entity::Entity entity, sle::components::UIComponent& component)
+    ctx.registry.view<sle::components::UIComponent>([this, &ctx, &seenEntities, executeBehaviors](sle::entity::Entity entity, sle::components::UIComponent& component)
     {
         seenEntities.insert(entity.getID());
         // Keep existing documents cached, and defer initial behavior/resource
@@ -669,8 +683,15 @@ void UISystem::syncEntityDocuments(UIFrameContext& ctx)
 
         auto it = entityDocuments.find(entity.getID());
         if (it != entityDocuments.end() && descriptorsMatch(it->second.getDescriptor(), descriptor))
+        {
+            auto& document = it->second;
+            if (executeBehaviors && deferredBehaviorEntities.erase(entity.getID()) > 0 &&
+                !document.isBehaviorLoaded() && !descriptor.behaviorAsset.empty() && scriptRuntime)
+                document.setBehaviorLoaded(scriptRuntime->executeScriptAssetForEntity(descriptor.behaviorAsset, descriptor.ownerEntityId));
             return;
+        }
 
+        deferredBehaviorEntities.erase(entity.getID());
         UIDocument document(std::move(descriptor));
         if (!loadDocumentResources(document))
         {
@@ -681,7 +702,9 @@ void UISystem::syncEntityDocuments(UIFrameContext& ctx)
         parseDocumentLayout(document);
         document.refreshBindings();
 
-        if (!document.isBehaviorLoaded() && !document.getDescriptor().behaviorAsset.empty() && scriptRuntime)
+        if (!executeBehaviors && !document.getDescriptor().behaviorAsset.empty())
+            deferredBehaviorEntities.insert(entity.getID());
+        if (executeBehaviors && !document.isBehaviorLoaded() && !document.getDescriptor().behaviorAsset.empty() && scriptRuntime)
             document.setBehaviorLoaded(scriptRuntime->executeScriptAssetForEntity(document.getDescriptor().behaviorAsset, document.getDescriptor().ownerEntityId));
 
         entityDocuments[entity.getID()] = std::move(document);
@@ -692,7 +715,10 @@ void UISystem::syncEntityDocuments(UIFrameContext& ctx)
         if (seenEntities.contains(it->first))
             ++it;
         else
+        {
+            deferredBehaviorEntities.erase(it->first);
             it = entityDocuments.erase(it);
+        }
     }
 }
 
@@ -772,7 +798,7 @@ bool UISystem::parseDocumentLayout(UIDocument& document)
     return true;
 }
 
-void UISystem::submitDocument(UIFrameContext& ctx, UIDocument& document)
+void UISystem::submitDocument(UIFrameContext& ctx, UIDocument& document, bool interactive)
 {
     if (document.getDescriptor().ownerEntityId != 0 &&
         !sle::entity::isChunkActive(ctx.registry, sle::entity::Entity(document.getDescriptor().ownerEntityId),
@@ -791,7 +817,8 @@ void UISystem::submitDocument(UIFrameContext& ctx, UIDocument& document)
     {
         const float zoom = std::max(ctx.camera.getZoom(), 0.0001f);
         const glm::vec2 viewport = ctx.camera.getViewportSize();
-        basePosition = screenAnchorToWorld(ctx.camera) + glm::vec2{0.0f, viewport.y / zoom};
+        rotation=ctx.camera.getRotation();
+        basePosition = screenAnchorToWorld(ctx.camera) + glm::vec2{-std::sin(rotation),std::cos(rotation)}*(viewport.y/zoom);
         scaleFactor = 1.0f / zoom;
         yAxisDown = true;
     }
@@ -811,7 +838,12 @@ void UISystem::submitDocument(UIFrameContext& ctx, UIDocument& document)
     hitTargets.reserve(16);
     renderElement(ctx, document, *document.getLayoutRoot(), basePosition, basePosition, scaleFactor, rotation, defaultShaderID, yAxisDown, hitTargets);
 
-    dispatchClick(ctx, scriptRuntime, hitTargets, mouseToWorldUiPoint(ctx.camera));
+    if (interactive) {
+        const auto world=mouseToWorldUiPoint(ctx.camera)-basePosition;
+        const float c=std::cos(rotation),s=std::sin(rotation);
+        const auto layoutPoint=basePosition+glm::vec2(c*world.x+s*world.y,-s*world.x+c*world.y);
+        dispatchClick(ctx,scriptRuntime,hitTargets,layoutPoint);
+    }
 }
 
 } // namespace sle::ui

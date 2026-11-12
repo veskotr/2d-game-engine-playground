@@ -1,5 +1,13 @@
 # Systems Module
 
+`PrefabPackage` reads versioned `.sleprefab` archives, validates their entries and
+materializes asset references into a derived disk cache before `PrefabLoader`
+expands the ordinary prefab JSON. See [package format](../topics/PrefabPackages.md).
+`readScene` and `SceneLoader` likewise support `.slescene`. `SceneAuthoring`
+validates flat editable scenes through shared component codecs, while
+`Runtime::loadScenePreview` stages a paused full-scene preview. See the
+[scene editor](../topics/SceneEditor.md).
+
 ## Responsibility
 
 Runtime orchestration and per-frame systems.
@@ -68,3 +76,44 @@ SceneLoader::loadData, which also loads top-level scene-root components. Dynamic
 instantiation validates before appending and rolls back only new entities on error.
 ScriptSystem snapshots and sorts named attachments, initializes due work before
 updates, and rechecks lifetime/generation before callbacks.
+
+## Embedded editor preview
+
+`Runtime::initEmbedded()` borrows a host-owned current OpenGL 4.3+ context with
+GLAD already loaded. `renderEmbeddedFrame(width, height)` takes physical pixels,
+resolves transforms, and renders sprites/debug geometry without advancing
+simulation, executing UI behaviors, polling window events, or presenting buffers.
+Cached/prepared XML UI can still be drawn. The sandbox camera retains configured
+logical dimensions; entity preview frames its authored geometry. All graphics calls and Runtime
+destruction require the host context to remain current on its owner thread.
+Standalone `init()`/`run()` retain GLFW ownership. The optional Windows editor JNI
+target and setup are documented in [the editor README](../../tools/entity-editor/README.md).
+
+
+The editor's default hosted sandbox now uses `tickEmbeddedFrame()` to execute the
+same system pipeline as the standalone application. Input is supplied through
+Platform's host event methods, and `setEmbeddedPaused()` freezes gameplay and the
+audio engine. The render-only API remains for paused/stopped presentation. Stop
+recreates the Runtime rather than saving transient simulation state to authored
+assets. Hosted gameplay, UI and pause regressions are covered by
+`integration_runtime_embedded_play_path`.
+
+
+## Entity authoring
+
+`EntityAuthoring` exposes writable component defaults/enum choices, validates
+single-entity prefab JSON, and normalizes accepted legacy syntax plus omitted
+defaults for editing. It reuses ComponentRegistry and SceneComponentAdapter;
+WorldTransform/ChunkMap and derived/native fields are not offered as authorable
+components. Authoring metadata/validation do not require a Lua VM or GL context.
+The Kotlin editor owns document state and atomic file saves; no runtime snapshot
+is serialized. See [entity editor](../../tools/entity-editor/README.md).
+
+
+`EntityPreviewSystem` owns preview camera framing and grid/origin/sprite-bound
+render commands. `Runtime::loadEntityPreview` uses validated staged in-memory JSON
+rather than a file round trip; `renderEntityPreview` never advances gameplay.
+The desktop inspector generates UUID keys for new documents and exposes only the
+name; legacy keys remain valid and are preserved on open. Preview edits suppress
+scene gameplay lifecycle notifications so paused editing cannot queue an event
+backlog. `integration_entity_preview_path` exercises pixels, edits and isolation.

@@ -1,5 +1,12 @@
 # Data-driven scenes
 
+The [desktop Scene Editor](SceneEditor.md) now saves flat authored scenes as
+self-contained `.slescene` packages. `SceneLoader` and runtime scene registration
+accept those packages as well as JSON. Packaged asset IDs are resolved before
+ordinary scene loading. The first editor version explicitly rejects hierarchy,
+Tiled and scene-root metadata; those remain supported by existing engine JSON
+loading paths.
+
 `engine.json` registers scene files and chooses `startScene`. A scene file can
 contain `entities`, a `tiledMap` path relative to the scene file, top-level
 `components`, and/or `prefabs`. Each
@@ -77,7 +84,8 @@ Authored transforms stay local; physics resolves ancestor transforms into world
 body poses and inverse-converts simulated results back to local data. Scene roots
 and prefab hierarchies can contain rigid bodies. See [physics](Physics.md) for
 inherited fixture scaling and geometry limits.
-Scene saving and transactional imperative Lua/C++ builders are not implemented.
+The editor saves authored scene documents; arbitrary runtime snapshot saving and
+transactional imperative Lua/C++ builders are not implemented.
 See [prefabs](Prefabs.md) for reusable entity subtrees and [behaviours](Behaviours.md)
 for scene-root components and multiple scripts.
 
@@ -119,3 +127,8 @@ resource (Lua uses `Engine.setSpriteTexture`); a missing texture still warns.
 Legacy positive finite `RigidBody.mass` is retained as JSON metadata so existing
 files keep loading, but physics derives mass from fixture density. Lua rejects
 this inert field. Tiled loading remains a separate importer.
+
+
+The [desktop entity editor](../../tools/entity-editor/README.md) can now author
+single-entity prefab JSON for a scene's `prefabs` list. This is authored document
+saving in the tool, distinct from serializing a running Runtime scene snapshot.

@@ -493,3 +493,72 @@ sle_add_integration_test(
     LINK_LIBS sle::engine
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+sle_add_integration_test(
+    integration_runtime_embedded_preview_path
+    systems/integration_runtime_embedded_preview_path.cpp
+    "systems;renderer;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+set_tests_properties(integration_runtime_embedded_preview_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
+    integration_runtime_embedded_play_path
+    systems/integration_runtime_embedded_play_path.cpp
+    "systems;scripting;physics;renderer;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+set_tests_properties(integration_runtime_embedded_play_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
+    integration_entity_authoring_path
+    systems/integration_entity_authoring_path.cpp
+    "systems;scene"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
+sle_add_integration_test(
+    integration_prefab_package_path
+    systems/integration_prefab_package_path.cpp
+    "systems;scene"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
+sle_add_integration_test(
+    integration_entity_preview_path
+    systems/integration_entity_preview_path.cpp
+    "systems;renderer;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+set_tests_properties(integration_entity_preview_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
+    integration_camera_scene_path
+    systems/integration_camera_scene_path.cpp
+    "systems;scene;renderer"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
+sle_add_integration_test(
+    integration_runtime_scene_play_path
+    systems/integration_runtime_scene_play_path.cpp
+    "systems;scene;scripting;physics;renderer;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+set_tests_properties(integration_runtime_scene_play_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
+    integration_standalone_camera_input_path
+    systems/integration_standalone_camera_input_path.cpp
+    "systems;platform;ui;renderer;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+set_tests_properties(integration_standalone_camera_input_path PROPERTIES SKIP_RETURN_CODE 125)

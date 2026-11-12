@@ -2,6 +2,9 @@ add_library(sle_engine STATIC
     src/ScriptApiImpl.cpp
     src/ComponentAssets.cpp
     src/ComponentRegistry.cpp
+    src/SceneAuthoring.cpp
+    src/EntityAuthoring.cpp
+    src/EntityPreviewSystem.cpp
     src/ScriptApiImplComponents.cpp
     src/ScriptApiImplGameplay.cpp
     src/RuntimeLua.cpp
@@ -12,8 +15,10 @@ add_library(sle_engine STATIC
     src/ChunkSceneRuntimeState.cpp
     src/SceneManager.cpp
     src/PrefabLoader.cpp
+    src/PrefabPackage.cpp
     src/SceneLoader.cpp
     src/TiledMapLoader.cpp
+    src/CameraSystem.cpp
     src/Runtime.cpp
     src/AnimationSystem.cpp
     src/TransformSystem.cpp

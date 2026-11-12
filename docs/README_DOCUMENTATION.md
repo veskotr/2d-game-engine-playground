@@ -39,6 +39,8 @@ not proof of completion.
 | Scene files and stable references | [Scenes](topics/Scenes.md) |
 | Multiple scripts and scene behaviours | [Behaviours](topics/Behaviours.md) |
 | Prefab subtrees and overrides | [Prefabs](topics/Prefabs.md) |
+| Portable prefab packages and bundled assets | [Prefab packages](topics/PrefabPackages.md) |
+| Scene editor and self-contained scene packages | [Scene editor](topics/SceneEditor.md) |
 | Scripting and Lua | `topics/Scripting.md` |
 | Rendering | `topics/Rendering.md` |
 | Events | `topics/Events.md` |

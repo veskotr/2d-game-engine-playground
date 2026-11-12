@@ -16,6 +16,8 @@ public:
     void move(const glm::vec2& delta);
     glm::vec2 getPosition() const;
 
+    void setRotation(float radians);
+    float getRotation() const { return rotation; }
     void setZoom(float zoom);
     float getZoom() const;
 
@@ -26,6 +28,7 @@ public:
 private:
     glm::vec2 position{0.0f, 0.0f};
     float zoom = 1.0f;
+    float rotation = 0.0f;
     float viewportWidth = 0.0f;
     float viewportHeight = 0.0f;
 

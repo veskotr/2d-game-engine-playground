@@ -19,6 +19,9 @@ int main()
     std::vector<Case> cases={
         {"transform","Transform",{{"position",{3,4}},{"rotation",0.5},{"scale",{2,3}}}},
         {"sprite","SpriteRenderer",{{"color",{0.2,0.4,0.6,1}},{"visible",false},{"layer",-2},{"region",{{"uv",{0,0,0.5,0.5}}}}}},
+        {"sprite_geometry","SpriteRenderer",{{"size",{3,4}},{"offset",{1,-2}}}},
+        {"sprite_size_negative","SpriteRenderer",{{"size",{-1,2}}},false},
+        {"sprite_size_zero","SpriteRenderer",{{"size",{0,2}}},false},
         {"body","RigidBody",{{"bodyType","Kinematic"},{"velocity",{3,4}},{"linearDamping",0.2}}},
         {"box","BoxCollider",{{"size",{3,4}},{"maskBits",4}}},
         {"circle","CircleCollider",{{"radius",2},{"density",0.4}}},

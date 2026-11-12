@@ -20,6 +20,7 @@ public:
     // Call once at engine startup. Returns false on backend init failure (headless CI safe).
     bool init();
     void shutdown();
+    void setPaused(bool paused);
     void releaseEntity(sle::entity::Scene& scene, uint32_t entityId);
 
     // Per-frame update: processes play/stop requests on AudioComponent entities.

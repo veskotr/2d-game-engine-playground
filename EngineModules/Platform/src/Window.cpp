@@ -80,6 +80,7 @@ Result<bool> Window::create(const EngineConfig &config)
     }
 
     // Ensure initial viewport matches the active framebuffer size.
+    glfwGetFramebufferSize(window, &width, &height);
     onFramebufferResize(width, height);
 
     if (config.vsync)

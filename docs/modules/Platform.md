@@ -29,3 +29,13 @@ Window and input integration.
 ## Update This File When
 
 - Window lifecycle, input semantics, or platform dependencies change.
+
+
+## Embedded host input
+
+`Input::init(nullptr)` resets input without installing GLFW callbacks. Hosts can
+clear transient state with `update()`, then feed `setKeyState`,
+`setMouseButtonState` and `setCursorPosition` before the frame update. These use
+the same transitions and GLFW-compatible identifiers as native window callbacks.
+Call `releaseAll()` on focus loss. Hosts own focus filtering and conversion into
+the logical viewport coordinates expected by UI input.

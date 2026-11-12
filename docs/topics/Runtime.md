@@ -77,3 +77,54 @@ without old entity-ID reuse. This test needs no graphics initialization.
 - Runtime ownership changes.
 - A system is added to or removed from the loop.
 - The `engine_app` bootstrap path or `engine.json` contract changes.
+
+## Externally hosted edit preview
+
+The optional desktop editor uses `initEmbedded()` and `renderEmbeddedFrame()`.
+The host owns the current OpenGL context, target, framebuffer size and buffer
+presentation. Preview frames resolve world transforms and submit render commands;
+they do not advance gameplay or run UI behaviours. This is distinct from the
+standalone loop above, which remains responsible for simulation and GLFW events.
+Destroy the Runtime before releasing the host context. See
+[editor setup](../../tools/entity-editor/README.md) for build and smoke commands.
+
+
+## Embedded gameplay and playback control
+
+The editor sandbox uses `tickEmbeddedFrame(width, height, dt)`, which calls the
+same `advanceAndRender()` system sequence as the standalone loop, including Lua,
+physics, animation, state machines, audio and XML UI. Host dt must be finite and
+nonnegative; the editor bounds its wall-clock dt to 0.1 seconds after stalls.
+The host clears transient Input state, transfers focused canvas events, makes its
+context current and presents the result. Pending scene switches follow the same
+staging path as standalone execution.
+
+`setEmbeddedPaused(true)` suspends audio and makes hosted ticks draw the current
+scene/UI without running gameplay, events or UI click/behavior callbacks. Stop is
+implemented by destroying the old Runtime in context, loading a new one and
+pausing it before its first gameplay tick. Stopped UI documents prepare layout
+and bindings without executing behaviors; deferred behaviors load when running
+resumes. The original render-only API remains available for that presentation.
+
+
+## Live entity preview
+
+`registerSceneFromData()` snapshots in-memory JSON and uses the same staged load
+and commit path as file scenes. `loadEntityPreview()` validates a single-entity
+prefab before loading that data, suppresses gameplay lifecycle events for preview
+loads, and pauses simulation. Rejected updates preserve the previous scene.
+`renderEntityPreview()` resolves transforms, fits the logical camera when needed,
+and submits engine sprites/debug geometry plus EntityPreviewSystem's grid,
+origin and sprite bounds. Zoom changes the preview camera, not authored values.
+`loadEntityPreview(document, true)` preserves the existing preview camera for
+interactive edits; initial loads still fit. `getCameraViewportSize()` exposes
+logical bounds alongside position for editor picking. Handles and hit testing
+belong to the editor; scene rendering remains in the engine. Same-entity editor
+updates preserve the view, while explicit Fit requests and viewport aspect changes
+can reframe it.
+
+The editor holds one native canvas across preview/sandbox tab changes. Normal
+sandbox loads restore its configured camera/clear color. `initEmbedded(false)`
+skips device initialization; `enableEmbeddedAudio()` initializes audio once after
+the host has presented a sandbox frame. Standalone `init()` and the default
+`initEmbedded()` keep their existing audio initialization behavior.

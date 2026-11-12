@@ -9,6 +9,9 @@ namespace sle::components {
 // RenderSystem each frame.
 struct SpriteRenderer
 {
+    // Visual geometry in local entity units; independent of physics shapes.
+    glm::vec2 size{1.0f, 1.0f};
+    glm::vec2 offset{0.0f, 0.0f};
     // RGBA tint applied to the sprite. White (1,1,1,1) = no tint.
     glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
 

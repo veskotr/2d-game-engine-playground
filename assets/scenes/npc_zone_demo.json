@@ -13,7 +13,7 @@
         "SpriteRenderer": {
           "texture": "assets/textures/tile2.png",
           "color": [1.0, 0.0, 0.0, 1.0],
-          "layer": 0
+          "layer": 20
         },
         "RigidBody": {
           "bodyType": "Dynamic",
@@ -80,7 +80,7 @@
         "SpriteRenderer": {
           "texture": "assets/textures/tile2.png",
           "color": [0.2, 0.95, 0.3, 1.0],
-          "layer": 0
+          "layer": 10
         },
         "RigidBody": {
           "bodyType": "Static",
@@ -129,7 +129,7 @@
         "SpriteRenderer": {
           "texture": "assets/textures/tile2.png",
           "color": [0.25, 0.7, 1.0, 0.18],
-          "layer": 0
+          "layer": 1
         },
         "RigidBody": {
           "bodyType": "Static",

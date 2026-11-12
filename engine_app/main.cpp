@@ -157,12 +157,17 @@ sle::core::Result<AppConfig> loadAppConfig(const fs::path& configPath)
 
 } // namespace
 
-int main()
+int main(int argc, char** argv)
 {
-    const fs::path configPath = resolveConfigPath();
+    if (argc != 1 && !(argc == 3 && std::string(argv[1]) == "--config"))
+    {
+        sle::core::Log::error("Usage: engine_app [--config path/to/engine.json]");
+        return 1;
+    }
+    const fs::path configPath = argc == 3 ? resolveByWalkingParents(argv[2]) : resolveConfigPath();
     if (configPath.empty())
     {
-        sle::core::Log::error("Failed to locate engine.json from current working directory or its parents");
+        sle::core::Log::error("Failed to locate engine configuration from current working directory or its parents");
         return 1;
     }
 

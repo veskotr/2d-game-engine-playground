@@ -5,6 +5,8 @@
 namespace sle::lua::components {
 using namespace sle::components;
 inline Json snapshot(const SpriteRenderer& c) { Json j=Json::object();
+ j["size"]=vec(c.size);
+ j["offset"]=vec(c.offset);
  j["region"]={{"uv",vec(c.region.uv)}};
  j["color"]=vec(c.color);
  j["visible"]=c.visible;
@@ -12,7 +14,9 @@ inline Json snapshot(const SpriteRenderer& c) { Json j=Json::object();
  return j; }
 inline void apply(SpriteRenderer& c, const Json& p, entity::Registry& registry) {
  for(auto it=p.begin();it!=p.end();++it) { const auto& key=it.key(); const auto& v=it.value();
- if(key=="color") { validate(v,"v4");
+ if(key=="size") { validate(v,"positivev2"); c.size={number(v.at("x")),number(v.at("y"))}; }
+ else if(key=="offset") { validate(v,"v2"); c.offset={number(v.at("x")),number(v.at("y"))}; }
+ else if(key=="color") { validate(v,"v4");
  c.color=glm::vec4(number(v.at("x")),number(v.at("y")),number(v.at("z")),number(v.at("w")));
  }
  else if(key=="visible") { validate(v,"bool");

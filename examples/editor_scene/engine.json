@@ -1,0 +1,13 @@
+{
+  "window": {
+    "title": "SLE Starter Scene",
+    "width": 480,
+    "height": 270,
+    "vsync": true,
+    "mode": "Windowed"
+  },
+  "startScene": "starter",
+  "scenes": [
+    {"name": "starter", "file": "../../assets/scenes/editor_starter.slescene"}
+  ]
+}

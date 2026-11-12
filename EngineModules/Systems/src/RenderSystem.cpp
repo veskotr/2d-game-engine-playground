@@ -43,13 +43,13 @@ bool isSpriteVisible(
     if (viewport.x <= 0.0f || viewport.y <= 0.0f)
         return true;
 
-    const float zoom = std::max(camera.getZoom(), 0.0001f);
     const glm::vec2 cameraPos = camera.getPosition();
-
-    const float viewLeft = cameraPos.x;
-    const float viewRight = cameraPos.x + viewport.x / zoom;
-    const float viewBottom = cameraPos.y;
-    const float viewTop = cameraPos.y + viewport.y / zoom;
+    const glm::vec2 extent = viewport * std::max(camera.getZoom(), 0.0001f);
+    const float rc=std::cos(camera.getRotation()), rs=std::sin(camera.getRotation());
+    const glm::vec2 ex{rc*extent.x,rs*extent.x}, ey{-rs*extent.y,rc*extent.y};
+    const auto minimum=glm::min(glm::min(cameraPos,cameraPos+ex),glm::min(cameraPos+ey,cameraPos+ex+ey));
+    const auto maximum=glm::max(glm::max(cameraPos,cameraPos+ex),glm::max(cameraPos+ey,cameraPos+ex+ey));
+    const float viewLeft=minimum.x, viewRight=maximum.x, viewBottom=minimum.y, viewTop=maximum.y;
 
     const float sx = std::abs(world.scale.x);
     const float sy = std::abs(world.scale.y);
@@ -145,11 +145,14 @@ void RenderSystem::update(Context& ctx)
             if (!sprite.visible || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Rendering))
                 return;
 
-            if (!isSpriteVisible(world, camera))
+            auto visualWorld = world;
+            visualWorld.position = transformLocalPoint(world, sprite.offset);
+            visualWorld.scale *= sprite.size;
+            if (!isSpriteVisible(visualWorld, camera))
                 return;
 
             renderer::QuadCommand cmd;
-            cmd.modelMatrix  = buildModelMatrix(world);
+            cmd.modelMatrix  = buildModelMatrix(visualWorld);
             cmd.color        = sprite.color;
             cmd.uvRect       = sprite.region.uv;
             cmd.texture_id   = sprite.region.texture ? sprite.region.texture->getID() : defaultTextureID;

@@ -108,6 +108,7 @@ int main()
     auto& sprite = registry.addComponent<components::SpriteRenderer>(entity);
     sprite.region.texture = texture;
     sprite.region.uv = {0.0f, 0.0f, 1.0f, 1.0f};
+    sprite.layer = 20;
 
     auto& scriptComponent = registry.addComponent<components::ScriptComponent>(entity);
     scriptComponent.scriptAsset = "player_move_script";
@@ -160,6 +161,7 @@ int main()
     playerSprite.region.texture = texture;
     playerSprite.region.uv = {0.0f, 0.0f, 1.0f, 1.0f};
     playerSprite.color = {0.95f, 0.95f, 1.0f, 1.0f};
+    playerSprite.layer = 20;
 
     auto& playerBody = registry.addComponent<components::RigidBodyComponent>(player);
     playerBody.bodyType = components::BodyType::Dynamic;
@@ -183,7 +185,7 @@ int main()
     playerUi.layoutAsset = worldLabelLayoutAsset;
     playerUi.fontAsset = fontAsset;
     playerUi.spaceMode = components::UISpaceMode::World;
-    playerUi.layer = 20;
+    playerUi.layer = 50;
 
     // Ground: static wide collider.
     auto ground = scene.createEntity();
@@ -195,6 +197,7 @@ int main()
     groundSprite.region.texture = texture;
     groundSprite.region.uv = {0.0f, 0.0f, 1.0f, 1.0f};
     groundSprite.color = {0.40f, 0.45f, 0.55f, 1.0f};
+    groundSprite.layer = 0;
 
     auto& groundBody = registry.addComponent<components::RigidBodyComponent>(ground);
     groundBody.bodyType = components::BodyType::Static;
@@ -213,6 +216,7 @@ int main()
     ballSprite.region.texture = texture;
     ballSprite.region.uv = {0.0f, 0.0f, 1.0f, 1.0f};
     ballSprite.color = {1.0f, 0.75f, 0.50f, 1.0f};
+    ballSprite.layer = 10;
 
     auto& ballBody = registry.addComponent<components::RigidBodyComponent>(ball);
     ballBody.bodyType = components::BodyType::Dynamic;

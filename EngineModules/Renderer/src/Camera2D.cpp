@@ -43,6 +43,12 @@ glm::vec2 Camera2D::getPosition() const
     return position;
 }
 
+void Camera2D::setRotation(float radians)
+{
+    rotation = radians;
+    updateView();
+}
+
 void Camera2D::setZoom(float z)
 {
     zoom = z;
@@ -57,6 +63,7 @@ float Camera2D::getZoom() const
 void Camera2D::updateView()
 {
     glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(position, 0.0f));
+    transform = glm::rotate(transform, rotation, glm::vec3(0,0,1));
     transform = glm::scale(transform, glm::vec3(zoom, zoom, 1.0f));
 
     view = glm::inverse(transform);

@@ -1,0 +1,1 @@
+<Panel id="pauseProbe" x="10" y="10" width="20" height="20" color="#FF00FFFF" onClick="EmbeddedUiClick"/>

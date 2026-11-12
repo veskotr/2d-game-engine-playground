@@ -1,0 +1,13 @@
+{
+  "window": {
+    "title": "SLE Camera Scene",
+    "width": 960,
+    "height": 540,
+    "vsync": true,
+    "mode": "Windowed"
+  },
+  "startScene": "camera-demo",
+  "scenes": [
+    {"name": "camera-demo", "file": "../../assets/scenes/editor_camera_demo.slescene"}
+  ]
+}

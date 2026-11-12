@@ -10,6 +10,7 @@ struct MouseState
     glm::dvec2 position = {0.0, 0.0};
     glm::dvec2 delta = {0.0, 0.0};
 
+    bool inViewport = true;
     bool left = false;
     bool right = false;
     bool middle = false;
@@ -76,6 +77,15 @@ public:
 
     static void init(GLFWwindow* window);
     static void update();
+    // Host event injection uses the same state transitions as GLFW callbacks.
+    static void setKeyState(int key, bool down);
+    static void setMouseButtonState(int button, bool down);
+    static void setCursorPosition(double x, double y);
+    static void releaseAll();
+    // Only GLFW cursor events are converted. Injected cursor positions are logical.
+    // Rectangle is in framebuffer pixels with a bottom-left origin.
+    static void setHostCursorViewport(glm::vec4 framebufferRect, glm::vec2 logicalSize);
+    static void clearHostCursorViewport();
 
     static bool isKeyDown(int key);
     static bool isKeyPressed(int key);
@@ -93,6 +103,12 @@ private:
     static MouseState mouse;
 
     static glm::dvec2 lastMousePos;
+    static GLFWwindow* hostWindow;
+    static glm::dvec2 hostMousePos;
+    static glm::vec4 hostViewport;
+    static glm::vec2 hostLogicalSize;
+    static bool mapHostCursor;
+    static bool lastCursorWasHost;
 };
 
 } // namespace sle::input

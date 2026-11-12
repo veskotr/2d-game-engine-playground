@@ -42,6 +42,12 @@ add_subdirectory(EngineModules)
 add_subdirectory(engine_app)
 add_subdirectory(examples)
 
+# Editor embedding is opt-in. Standalone builds do not require a JDK.
+option(SLE_BUILD_EDITOR "Build the editor JNI library (Windows x64)" OFF)
+if(SLE_BUILD_EDITOR)
+    add_subdirectory(tools/editor-native)
+endif()
+
 # -------------------------
 # Tests
 # -------------------------

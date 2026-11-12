@@ -1,0 +1,225 @@
+{
+    "key": "5cb86175-736e-4cd3-acbf-03cd1d045b2d",
+    "name": "Starter Scene",
+    "entities": [
+        {
+            "key": "e91548ac-5e4d-4ab8-917e-7ee908f04a8f",
+            "name": "Ground",
+            "components": {
+                "BoxCollider": {
+                    "categoryBits": 1,
+                    "density": 1.0,
+                    "enabled": true,
+                    "friction": 0.4000000059604645,
+                    "maskBits": 65535,
+                    "offset": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "restitution": 0.0,
+                    "size": {
+                        "x": 420.0,
+                        "y": 20.0
+                    }
+                },
+                "RigidBody": {
+                    "angularDamping": 0.0,
+                    "angularVelocity": 0.0,
+                    "bodyType": "Static",
+                    "enabled": true,
+                    "fixedRotation": false,
+                    "gravityScale": 1.0,
+                    "linearDamping": 0.0,
+                    "velocity": {
+                        "x": 0.0,
+                        "y": 0.0
+                    }
+                },
+                "SpriteRenderer": {
+                    "color": {
+                        "w": 1,
+                        "x": 0.35,
+                        "y": 0.7,
+                        "z": 0.4
+                    },
+                    "layer": 0,
+                    "offset": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "region": {
+                        "uv": {
+                            "w": 1.0,
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 1.0
+                        }
+                    },
+                    "size": {
+                        "x": 420.0,
+                        "y": 20.0
+                    },
+                    "texture": "assets/textures/tile2.png",
+                    "visible": true
+                },
+                "Transform": {
+                    "position": {
+                        "x": 240.0,
+                        "y": 20.0
+                    },
+                    "rotation": 0.0,
+                    "scale": {
+                        "x": 1.0,
+                        "y": 1.0
+                    }
+                }
+            }
+        },
+        {
+            "key": "ee46516a-abf7-4393-b283-0c4dd31ea2ab",
+            "name": "Crate A",
+            "components": {
+                "BoxCollider": {
+                    "categoryBits": 1,
+                    "density": 1.0,
+                    "enabled": true,
+                    "friction": 0.4000000059604645,
+                    "maskBits": 65535,
+                    "offset": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "restitution": 0.0,
+                    "size": {
+                        "x": 32.0,
+                        "y": 32.0
+                    }
+                },
+                "RigidBody": {
+                    "angularDamping": 0.0,
+                    "angularVelocity": 0.0,
+                    "bodyType": "Dynamic",
+                    "enabled": true,
+                    "fixedRotation": false,
+                    "gravityScale": 1.0,
+                    "linearDamping": 0.0,
+                    "velocity": {
+                        "x": 0.0,
+                        "y": 0.0
+                    }
+                },
+                "SpriteRenderer": {
+                    "color": {
+                        "w": 1.0,
+                        "x": 1.0,
+                        "y": 1.0,
+                        "z": 1.0
+                    },
+                    "layer": 0,
+                    "offset": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "region": {
+                        "uv": {
+                            "w": 1.0,
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 1.0
+                        }
+                    },
+                    "size": {
+                        "x": 32.0,
+                        "y": 32.0
+                    },
+                    "texture": "assets/textures/tile2.png",
+                    "visible": true
+                },
+                "Transform": {
+                    "position": {
+                        "x": 165.8640702237788,
+                        "y": 155.518442700324
+                    },
+                    "rotation": 0.0,
+                    "scale": {
+                        "x": 1.0,
+                        "y": 1.0
+                    }
+                }
+            }
+        },
+        {
+            "key": "14500d0f-7ca8-4847-bbc8-8206e716dd39",
+            "name": "Crate B",
+            "components": {
+                "BoxCollider": {
+                    "categoryBits": 1,
+                    "density": 1.0,
+                    "enabled": true,
+                    "friction": 0.4000000059604645,
+                    "maskBits": 65535,
+                    "offset": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "restitution": 0.0,
+                    "size": {
+                        "x": 32.0,
+                        "y": 32.0
+                    }
+                },
+                "RigidBody": {
+                    "angularDamping": 0.0,
+                    "angularVelocity": 0.0,
+                    "bodyType": "Dynamic",
+                    "enabled": true,
+                    "fixedRotation": false,
+                    "gravityScale": 1.0,
+                    "linearDamping": 0.0,
+                    "velocity": {
+                        "x": 0.0,
+                        "y": 0.0
+                    }
+                },
+                "SpriteRenderer": {
+                    "color": {
+                        "w": 1.0,
+                        "x": 1.0,
+                        "y": 1.0,
+                        "z": 1.0
+                    },
+                    "layer": 0,
+                    "offset": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "region": {
+                        "uv": {
+                            "w": 1.0,
+                            "x": 0.0,
+                            "y": 0.0,
+                            "z": 1.0
+                        }
+                    },
+                    "size": {
+                        "x": 32.0,
+                        "y": 32.0
+                    },
+                    "texture": "assets/textures/tile2.png",
+                    "visible": true
+                },
+                "Transform": {
+                    "position": {
+                        "x": 300.0,
+                        "y": 170.0
+                    },
+                    "rotation": 0.0,
+                    "scale": {
+                        "x": 1.0,
+                        "y": 1.0
+                    }
+                }
+            }
+        }
+    ]
+}

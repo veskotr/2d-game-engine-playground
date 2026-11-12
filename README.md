@@ -18,6 +18,7 @@ SLE is a modular C++ 2D game engine with ECS scene data, Lua scripting, command-
 - `tests/` - smoke, integration, and harness tests
 - `docs/` - constraints, module docs, topic docs, and historical references
 - `cmake/` - dependency setup and CMake helpers
+- `tools/entity-editor/` - [Kotlin Compose Desktop editor with an embedded SLE viewport](tools/entity-editor/README.md)
 
 ## Build
 
@@ -53,7 +54,10 @@ build/debug/examples/phase2_lua_events/Debug/example_phase2_lua_events.exe
 
 ## Run Standalone App
 
-The repo now includes a thin `engine_app` entry point that boots from `engine.json` and registers JSON scenes through `Runtime::registerSceneFromFile()`.
+The repo includes a thin `engine_app` entry point that boots from `engine.json` and registers JSON or packaged `.slescene` scenes through `Runtime::registerSceneFromFile()`.
+Use `--config path/to/engine.json` to choose another configuration. The
+[scene editor and starter scene](docs/topics/SceneEditor.md) demonstrate portable
+scene authoring and engine loading without changing the default startup config.
 
 From the repository root:
 

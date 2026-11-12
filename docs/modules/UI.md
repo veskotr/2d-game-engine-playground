@@ -36,3 +36,11 @@ XML-driven UI documents, layout parsing, bindings, and UI rendering support.
 ## Update This File When
 
 - UI layout attributes, binding behavior, click behavior, rendering, or document lifecycle changes.
+
+
+## Paused and stopped presentation
+
+`UISystem::renderSnapshot()` prepares entity document layouts and submits cached
+UI without dispatching clicks or executing behavior chunks. Newly prepared
+behaviors are deferred until the next running `update()`. This lets the editor
+show a stopped/reset scene and resize a paused viewport without advancing scripts.

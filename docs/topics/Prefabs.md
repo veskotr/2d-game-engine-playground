@@ -4,6 +4,10 @@ A prefab is a JSON entity subtree, loaded through the same component codecs as a
 scene. Each entity needs a unique, nonempty key. `root` names its single root;
 every other entity must reach that root through its `parent` reference.
 
+Self-contained [`.sleprefab` packages](PrefabPackages.md) bundle this JSON with
+textures and other assets. Use a package anywhere a prefab file is accepted;
+package assets resolve internally without relying on their original paths.
+
 ```json
 {
   "root": "root",
@@ -89,3 +93,19 @@ scene's normal root/scene-entity parenting. The call returns the root ID or
 `nil, error`; newly attached behaviours initialize on the next scheduler snapshot.
 A prefab can carry multiple [script behaviours](Behaviours.md), and an override of
 `Script.behaviours` replaces that attachment array.
+
+
+## Desktop entity authoring
+
+The [entity editor](../../tools/entity-editor/README.md) creates and edits the
+single-entity subset of this format, adds components from engine defaults and
+saves `.prefab.json` files after native validation. These exports load through
+`PrefabLoader::instantiate`, Lua `Engine.instantiatePrefab`, and scene prefab
+inclusions. The editor currently rejects multi-entity/nested prefab documents
+rather than dropping content; those formats remain supported by the engine.
+
+
+New desktop-authored prefabs receive UUID keys automatically; the user edits the
+name. Renaming preserves identity, and opening older named-key files preserves
+those keys. The editor visualizes the single entity through the engine renderer
+without running its scripts/physics. The full document JSON is kept out of the UI.

@@ -48,7 +48,7 @@ inline SceneComponentPatch adaptSceneComponent(const std::string& name, const co
         for (int i=0;i<dimensions;++i) canonical[keys[i]]=value[i];
         value=std::move(canonical);
     };
-    for (const auto* field : {"position","scale","velocity","size","offset"})
+    for (const auto* field : {"position","scale","velocity","size","offset","viewSize"})
         if (patch.contains(field)) vector(patch[field],2,field);
     if (patch.contains("color")) vector(patch["color"],4,"color");
     if (patch.contains("region") && patch["region"].is_object() && patch["region"].contains("uv"))

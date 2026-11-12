@@ -1,7 +1,9 @@
 #include <sle/engine/PrefabLoader.hpp>
+#include <sle/engine/PrefabPackage.hpp>
 #include <sle/engine/SceneLoader.hpp>
 #include "PrefabExpansion.hpp"
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -81,9 +83,18 @@ Json expand(const std::string& path, const std::string& instanceKey, const Json&
         require(!instanceKey.empty() && instanceKey!="@scene","instance key must be nonempty and must not be reserved @scene");
         const StackEntry stackEntry(context,std::filesystem::canonical(std::filesystem::path(path)));
         require(overrides.is_object(),"overrides must be an object");
-        std::ifstream file(path);
-        require(file.is_open(),"cannot open file");
-        Json source; file >> source;
+        Json source;
+        auto extension=std::filesystem::path(path).extension().string();
+        std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (extension==".sleprefab") {
+            auto package=PrefabPackage::read(path);
+            require(package.ok(),package.error());
+            source=std::move(package.value());
+        } else {
+            std::ifstream file(path);
+            require(file.is_open(),"cannot open file");
+            file >> source;
+        }
         require(source.is_object(),"root must be an object");
         require(!source.contains("tiledMap"),"Tiled map imports are unsupported in prefabs");
         require(source.contains("root") && source["root"].is_string() && !source["root"].get_ref<const std::string&>().empty(),

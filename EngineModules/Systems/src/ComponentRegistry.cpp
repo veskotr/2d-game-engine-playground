@@ -1,4 +1,5 @@
 #include "ComponentRegistry.hpp"
+#include "lua/components/Camera2DBindings.hpp"
 #include "ComponentAssets.hpp"
 #include "lua/components/TransformBindings.hpp"
 #include "lua/components/SpriteRendererBindings.hpp"
@@ -44,6 +45,7 @@ template<class T, bool Writable=true> Descriptor descriptor() {
 const std::map<std::string,Descriptor>& descriptors() {
  static const std::map<std::string,Descriptor> table={
   {"Transform",descriptor<TransformComponent>()},
+  {"Camera2D",descriptor<Camera2DComponent>()},
   {"SpriteRenderer",descriptor<SpriteRenderer>()},
   {"Script",descriptor<ScriptComponent>()},
   {"RigidBody",descriptor<RigidBodyComponent>()},

@@ -5,6 +5,12 @@
 Rendering is split into scene-to-command conversion and backend rendering.
 
 1. `RenderSystem` reads world transform and sprite components.
+   SpriteRenderer's local `size` (default 1,1) and `offset` (default 0,0) modify
+   only visual geometry. Offset is scaled/rotated by the entity's world transform;
+   size multiplies its world scale for the quad and culling bounds. Collider
+   geometry continues to use the unmodified entity transform. Preview fit and
+   sprite outlines use the same local dimensions. Shared component codecs expose
+   positive size and finite offset to JSON and generic Lua component access.
 2. It creates render commands.
 3. `Renderer` batches, sorts, uploads, and draws.
 

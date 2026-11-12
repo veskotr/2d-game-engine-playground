@@ -24,6 +24,14 @@ bool SceneManager::registerSceneFromFile(const std::string& sceneName, const std
     return true;
 }
 
+bool SceneManager::registerSceneFromData(const std::string& sceneName,
+    const nlohmann::json& data, const std::string& sourcePath)
+{
+    if (sceneName.empty() || !data.is_object()) return false;
+    sceneBuilders[sceneName] = {{}, sourcePath, data};
+    return true;
+}
+
 bool SceneManager::hasScene(const std::string& sceneName) const
 {
     return sceneBuilders.find(sceneName) != sceneBuilders.end();
@@ -32,20 +40,22 @@ bool SceneManager::hasScene(const std::string& sceneName) const
 sle::core::Result<bool> SceneManager::loadScene(
     const std::string& sceneName,
     Runtime& runtime,
-    sle::entity::Scene& scene)
+    sle::entity::Scene& scene, bool emitLifecycleEvents)
 {
     auto it = sceneBuilders.find(sceneName);
     if (it == sceneBuilders.end())
         return sle::core::Result<bool>::error("Scene not registered: " + sceneName);
 
     std::unique_ptr<sle::entity::Scene> staged;
-    if (!it->second.jsonPath.empty())
+    if (it->second.jsonData || !it->second.jsonPath.empty())
     {
         staged = scene.createStagingScene();
         const std::string& path = it->second.jsonPath;
         try
         {
-            const auto result = SceneLoader::load(path, *staged);
+            const auto result = it->second.jsonData
+                ? SceneLoader::loadData(*it->second.jsonData, *staged, path)
+                : SceneLoader::load(path, *staged);
             if (!result.ok())
                 return sle::core::Result<bool>::error(
                     "Failed to load scene '" + sceneName + "' from '" + path + "': " + result.error());
@@ -64,7 +74,7 @@ sle::core::Result<bool> SceneManager::loadScene(
     runtime.getScriptEngine().clearSceneScripts();
 
     // Emit unload only after a file-based replacement has loaded successfully.
-    if (!currentSceneName.empty())
+    if (!currentSceneName.empty() && currentSceneEmitsLifecycle)
     {
         sle::events::SceneUnloadedEvent unloadEvent{currentSceneName};
         runtime.getGlobalBus().queue(unloadEvent);
@@ -90,10 +100,11 @@ sle::core::Result<bool> SceneManager::loadScene(
         }
     }
     currentSceneName = sceneName;
+    currentSceneEmitsLifecycle = emitLifecycleEvents;
 
     // Emit load event for new scene
     sle::events::SceneLoadedEvent loadEvent{sceneName};
-    runtime.getGlobalBus().queue(loadEvent);
+    if (emitLifecycleEvents) runtime.getGlobalBus().queue(loadEvent);
 
     return sle::core::Result<bool>::success(true);
 }

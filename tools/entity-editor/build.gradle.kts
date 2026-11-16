@@ -7,6 +7,15 @@ plugins {
 group = "sle.editor"
 version = "0.1.0"
 
+val hostOs = System.getProperty("os.name")
+val isWindowsHost = hostOs.startsWith("Windows")
+val isLinuxHost = hostOs.startsWith("Linux")
+require(isWindowsHost || isLinuxHost) { "The SLE editor supports Windows x64 and Linux x64 hosts, not $hostOs" }
+val lwjglNatives = if (isWindowsHost) "natives-windows" else "natives-linux"
+
+// Keeps a second host's outputs (e.g. WSL beside Windows) out of the shared checkout's build/.
+providers.gradleProperty("sleBuildDir").orNull?.let { layout.buildDirectory.set(file(it)) }
+
 kotlin {
     jvmToolchain(21)
 }
@@ -25,8 +34,8 @@ dependencies {
     implementation("org.lwjgl:lwjgl-jawt")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     testImplementation(kotlin("test-junit"))
-    runtimeOnly("org.lwjgl:lwjgl::natives-windows")
-    runtimeOnly("org.lwjgl:lwjgl-opengl::natives-windows")
+    runtimeOnly("org.lwjgl:lwjgl::$lwjglNatives")
+    runtimeOnly("org.lwjgl:lwjgl-opengl::$lwjglNatives")
 }
 
 tasks.test {
@@ -44,10 +53,13 @@ tasks.withType<JavaExec>().configureEach {
     systemProperty(
         "sle.nativeLibrary",
         providers.gradleProperty("sleNativeLibrary").orElse(
-            rootDir.resolve("../../build/debug/tools/editor-native/Debug/sle_editor_native.dll")
-                .canonicalPath,
+            rootDir.resolve(
+                if (isWindowsHost) "../../build/debug/tools/editor-native/Debug/sle_editor_native.dll"
+                else "../../build/debug/tools/editor-native/libsle_editor_native.so",
+            ).canonicalPath,
         ).get(),
     )
-    systemProperty("sle.smokeReport", rootDir.resolve("build/reports/embedded-smoke.png").absolutePath)
-    systemProperty("sle.authoringReport", rootDir.resolve("build/reports/authored-entity.prefab.json").absolutePath)
+    val reports = layout.buildDirectory.dir("reports").get().asFile
+    systemProperty("sle.smokeReport", reports.resolve("embedded-smoke.png").absolutePath)
+    systemProperty("sle.authoringReport", reports.resolve("authored-entity.prefab.json").absolutePath)
 }

@@ -334,8 +334,28 @@ project in IntelliJ IDEA and use JDK 21 as its Gradle JVM.
 
 `SLE_BUILD_EDITOR` defaults to OFF. Ordinary CMake builds still produce
 `engine_app` and the sandbox executable with GLFW, without requiring JNI/JDK.
-The embedded DLL currently supports Windows x64 only, independently of Debug or
+The embedded library supports Windows x64 and Linux x64, independently of Debug or
 Release optimization; it is a hosting choice, not an `NDEBUG` switch.
+
+## Build and run (Linux x64 / WSL2)
+
+Install CMake, Ninja, a C++20 compiler, JDK 21, `python3-jinja2`, and the GL/X11/
+Wayland development headers that GLFW needs. On Ubuntu:
+
+```bash
+sudo apt install build-essential cmake ninja-build git pkg-config python3-jinja2 \
+  libgl-dev libegl-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+  libxi-dev libwayland-dev libxkbcommon-dev wayland-protocols openjdk-21-jdk
+```
+
+Then run `tools/entity-editor/run-editor.sh [editor args]`. It configures CMake with
+`-DSLE_BUILD_EDITOR=ON` in `~/sle-build/debug` (override with `SLE_BUILD_DIR`), builds
+`libsle_editor_native.so`, and runs Gradle with its own caches and `-PsleBuildDir`, so a
+WSL checkout shared with Windows keeps separate outputs. Under WSLg the script selects
+Mesa's llvmpipe renderer, because the editor's shared AWT contexts crash in Mesa's
+d3d12 driver. `engine_app` runs GPU-accelerated with `GALLIUM_DRIVER=d3d12`. Smokes
+that read pixels through `java.awt.Robot` screen capture, such as `--camera-smoke`,
+are unreliable under WSLg.
 
 ## Validation
 

@@ -37,7 +37,7 @@ internal class NativeViewportOwner(
     majorVersion = 4
     minorVersion = 3
     profile = GLData.Profile.CORE
-    swapInterval = 0
+    swapInterval = canvasSwapInterval
 }) {
     private var session = 0L
     var schedulerDelay = 16; private set

@@ -7,7 +7,7 @@ namespace sle::core {
 using sle::core::Log;
 
 static void glfwErrorCallback(int error, const char* description);
-static void glfwFramebufferSizeCallback(GLFWwindow* window, int width, int height);
+void glfwFramebufferSizeCallback(GLFWwindow* window, int width, int height);
 
 Window::~Window()
 {
@@ -156,7 +156,7 @@ static void glfwErrorCallback(int error, const char* description)
     Log::error("GLFW Error {}: {}", error, description);
 }
 
-static void glfwFramebufferSizeCallback(GLFWwindow* window, int width, int height)
+void glfwFramebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
     auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
     if (!self)

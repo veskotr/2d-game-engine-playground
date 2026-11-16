@@ -11,12 +11,19 @@ import sle.editor.project.PreparedProject
 import java.awt.EventQueue
 import java.awt.event.*
 
+/**
+ * GLData swap interval for editor canvases. lwjgl3-awt fails context creation when an interval is
+ * requested but GLX does not report swap control (e.g. WSLg's Mesa). Windows keeps 0; elsewhere
+ * the driver default applies.
+ */
+internal val canvasSwapInterval: Int? = if (System.getProperty("os.name").startsWith("Windows")) 0 else null
+
 /** Replaceable presenter. Owns its read FBO/context only; commands go to the workspace owner. */
 internal class EngineCanvas(
     internal val engine: EditorEngineSession,
     initialView: ViewId = ViewId.Scene,
 ) : AWTGLCanvas(GLData().apply {
-    majorVersion=4;minorVersion=3;profile=GLData.Profile.CORE;swapInterval=0
+    majorVersion=4;minorVersion=3;profile=GLData.Profile.CORE;swapInterval=canvasSwapInterval
     shareContext=engine.owner
 }) {
     internal var viewId = initialView; private set

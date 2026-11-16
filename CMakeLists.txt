@@ -26,6 +26,13 @@ endif()
 # Export compile commands (useful for VSCode IntelliSense)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Editor embedding is opt-in. Standalone builds do not require a JDK.
+option(SLE_BUILD_EDITOR "Build the editor JNI library (Windows x64, Linux x64)" OFF)
+if(SLE_BUILD_EDITOR)
+	# The JNI shared library links the engine's static libraries and dependencies.
+	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 # -------------------------
 # Dependencies
 # -------------------------
@@ -42,8 +49,6 @@ add_subdirectory(EngineModules)
 add_subdirectory(engine_app)
 add_subdirectory(examples)
 
-# Editor embedding is opt-in. Standalone builds do not require a JDK.
-option(SLE_BUILD_EDITOR "Build the editor JNI library (Windows x64)" OFF)
 if(SLE_BUILD_EDITOR)
     add_subdirectory(tools/editor-native)
 endif()

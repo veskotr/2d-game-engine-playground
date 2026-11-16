@@ -19,7 +19,7 @@ internal class FeasibilityGpuPresenter(
     private val onContext: (String) -> Unit,
 ) : AWTGLCanvas(GLData().apply {
     majorVersion = 4; minorVersion = 3; profile = GLData.Profile.CORE
-    swapInterval = 0
+    swapInterval = sle.editor.viewport.canvasSwapInterval
     shareContext = owner
 }) {
     private lateinit var capabilities: org.lwjgl.opengl.GLCapabilities

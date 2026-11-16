@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 /** Opt-in experiment only. Every method, including disposal, runs on the AWT EDT. */
 internal class FeasibilityOwner(val gpu: Boolean = false) : AWTGLCanvas(GLData().apply {
-    majorVersion = 4; minorVersion = 3; profile = GLData.Profile.CORE; swapInterval = 0
+    majorVersion = 4; minorVersion = 3; profile = GLData.Profile.CORE; swapInterval = sle.editor.viewport.canvasSwapInterval
 }) {
     var creates = 0; private set
     var destroys = 0; private set

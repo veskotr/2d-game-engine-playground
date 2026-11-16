@@ -1,5 +1,5 @@
-if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
-    message(FATAL_ERROR "The initial embedded editor host supports Windows x64 only")
+if(NOT (WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux") OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+    message(FATAL_ERROR "The embedded editor host supports Windows x64 and Linux x64 only")
 endif()
 
 find_package(JNI REQUIRED)

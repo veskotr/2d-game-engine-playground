@@ -1,5 +1,7 @@
 package sle.editor.project.assets
 
+import sle.editor.ui.EditorDialogs
+import sle.editor.ui.EditorFileChooser
 import androidx.compose.runtime.*
 import kotlinx.coroutines.*
 import sle.editor.project.ProjectWorkspaceState
@@ -43,7 +45,7 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
         try { return withContext(Dispatchers.IO) { store.importAsset(path,folder) } }
         catch(failure: IllegalArgumentException) {
             if(failure.message?.startsWith("Name conflict:")!=true) throw failure
-            val choice=JOptionPane.showOptionDialog(null,
+            val choice=EditorDialogs.showOptionDialog(null,
                 "${path.fileName} already exists in $folder. Replace merges folders and retains existing asset IDs.",
                 "Import name conflict",JOptionPane.DEFAULT_OPTION,JOptionPane.QUESTION_MESSAGE,null,
                 arrayOf("Rename","Skip","Replace"),"Rename")
@@ -77,23 +79,23 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
         val selected=browser?.selected ?: return
         if(busy || project.busy) return
         val initial=if(rename) selected.substringAfterLast('/') else selected
-        val input=JOptionPane.showInputDialog(null,if(rename) "New name" else "Destination path beneath Assets (including the name)",initial) ?: return
+        val input=EditorDialogs.showInputDialog(null,if(rename) "New name" else "Destination path beneath Assets (including the name)",initial) ?: return
         val destination=if(rename) selected.substringBeforeLast('/',"").let { if(it.isEmpty()) input else "$it/$input" } else input
-        if(JOptionPane.showConfirmDialog(null,
+        if(EditorDialogs.showConfirmDialog(null,
             "Move $selected to $destination? UUID references stay valid. Lua require, dynamic paths and nested XML/animation links are not rewritten; update those yourself.",
             "Move project asset",JOptionPane.OK_CANCEL_OPTION)!=JOptionPane.OK_OPTION) return
         managed { store -> withContext(Dispatchers.IO) { store.move(selected,destination) };"Moved to $destination" }
     }
     return ProjectAssetCommands(
         importFiles={
-            val chooser=JFileChooser(assetRoot.toFile()).apply {
+            val chooser=EditorFileChooser(assetRoot.toFile()).apply {
                 dialogTitle="Import files or folders into ${browser?.folder?.ifEmpty { "Assets" } ?: "Assets"}"
                 fileSelectionMode=JFileChooser.FILES_AND_DIRECTORIES;isMultiSelectionEnabled=true
             }
             if(chooser.showOpenDialog(null)==JFileChooser.APPROVE_OPTION) importPaths(chooser.selectedFiles.map { it.toPath() })
         },importPaths=importPaths,
         browse={display,imageOnly,accept ->
-            val chooser=JFileChooser(assetRoot.toFile()).apply {
+            val chooser=EditorFileChooser(assetRoot.toFile()).apply {
                 dialogTitle=if(imageOnly) "Choose project texture or import image" else "Choose project asset or import file"
                 fileSelectionMode=JFileChooser.FILES_ONLY
                 if(imageOnly) fileFilter=javax.swing.filechooser.FileNameExtensionFilter("Images","png","jpg","jpeg","bmp","tga","gif","psd","hdr","pic","pnm","ppm","pgm")
@@ -136,14 +138,14 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
         },
         repair={
             val selected=browser?.selected
-            if(selected!=null && JOptionPane.showConfirmDialog(null,
+            if(selected!=null && EditorDialogs.showConfirmDialog(null,
                     "Assign a NEW UUID to $selected? References to its old identity will need repair.","Repair asset identity",JOptionPane.YES_NO_OPTION)==JOptionPane.YES_OPTION)
                 run { withContext(Dispatchers.IO) { AssetIdentity.repair(opened.root,assetRoot,selected) };"Assigned new asset UUID" }
         },busy=busy || project.busy,message=message,
         createFolder={
             if(!busy && !project.busy) {
                 val folder=browser?.folder.orEmpty()
-                val name=JOptionPane.showInputDialog(null,"New folder name")
+                val name=EditorDialogs.showInputDialog(null,"New folder name")
                 if(name!=null) run {
                     withContext(Dispatchers.IO) {
                         sle.editor.project.validateProjectFolderName(name)
@@ -158,7 +160,7 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
                 val references=withContext(Dispatchers.IO) { store.references(selected) }
                 val sources=references.map { it.source }.distinct()
                 val warning=if(sources.isEmpty()) "No saved UUID references found." else "Referenced by:\n"+sources.take(20).joinToString("\n")+if(sources.size>20) "\n…" else ""
-                val confirmed=JOptionPane.showConfirmDialog(null,
+                val confirmed=EditorDialogs.showConfirmDialog(null,
                     "Move $selected to project trash?\n$warning\nReferenced documents may stop loading. Dynamic Lua/XML/module paths are not checked.\nRecover Deleted… can restore it; retain .sle/trash until recovery is no longer needed.",
                     "Delete project asset",JOptionPane.YES_NO_OPTION,JOptionPane.WARNING_MESSAGE)==JOptionPane.YES_OPTION
                 if(confirmed) {
@@ -170,7 +172,7 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
             val receipts=withContext(Dispatchers.IO) { store.deletions() }
             if(receipts.isEmpty()) "No recoverable deletions" else {
                 val choices=receipts.map { "${it.original} (${it.token})" }.toTypedArray()
-                val choice=JOptionPane.showInputDialog(null,"Select deleted asset to restore", "Recover deleted asset",JOptionPane.QUESTION_MESSAGE,null,choices,choices.first())
+                val choice=EditorDialogs.showInputDialog(null,"Select deleted asset to restore", "Recover deleted asset",JOptionPane.QUESTION_MESSAGE,null,choices,choices.first())
                 val index=choices.indexOf(choice)
                 if(index>=0) {
                     require(current?.file==opened.file && mutable()) { "Project or workspace changed" }

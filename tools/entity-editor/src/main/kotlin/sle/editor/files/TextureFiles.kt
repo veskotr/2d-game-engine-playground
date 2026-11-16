@@ -1,5 +1,6 @@
 package sle.editor.files
 
+import sle.editor.ui.EditorFileChooser
 import java.nio.file.Path
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
@@ -12,7 +13,7 @@ internal fun textureAssetPath(selected: Path, projectRoot: Path = Path.of("")): 
 
 internal fun chooseTexture(current: String, imageOnly: Boolean = true): Path? {
     val existing = current.takeIf { it.isNotBlank() }?.let { Path.of(it).toFile() }
-    val chooser = JFileChooser(existing?.parentFile ?: Path.of("assets/textures").toFile()).apply {
+    val chooser = EditorFileChooser(existing?.parentFile ?: Path.of("assets/textures").toFile()).apply {
         dialogTitle = if (imageOnly) "Choose entity texture" else "Choose component asset"
         fileSelectionMode = JFileChooser.FILES_ONLY
         if (imageOnly) fileFilter = FileNameExtensionFilter("Images (PNG, JPEG, BMP, TGA, GIF, PSD, HDR, PIC, PNM)",

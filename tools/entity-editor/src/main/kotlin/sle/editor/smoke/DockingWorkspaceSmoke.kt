@@ -51,6 +51,25 @@ internal suspend fun runDockingWorkspaceSmoke(
         check(session.owner.contextIdentity()==identity && session.owner.creates==creates)
         manager.resetLayout();delay(100)
     }
+    // Activating the last tab through a command must reveal it in an overflowing strip.
+    val group=manager.layout.tabs().first().group
+    for(panel in manager.registry.panels) {
+        val index=manager.layout.tabs().single { it.group==group }.panels.count { it!=panel.id }
+        manager.movePanel(panel.id,DockTarget.Tab(group,index))
+    }
+    val originalAppearance=workspace.appearance.value
+    workspace.appearance.update(originalAppearance.copy(density=sle.editor.ui.theme.EditorDensity.Comfortable))
+    delay(400) // Let native minimum size catch up after merging the split groups.
+    home.setSize(360,700);delay(400)
+    check(home.width<=400) { "Overflow fixture did not shrink: ${home.width}" }
+    manager.focusPanel(PanelId("hierarchy"));delay(200)
+    manager.focusPanel(PanelId("entity"))
+    await("Active overflow tab did not scroll into view") {
+        manager.dropAreas().flatMap { it.tabs }.any { (id,bounds) -> id==PanelId("entity") && bounds.width>=40f }
+    }
+    println("ACTIVE_DOCK_TAB_VISIBLE_PASS")
+    workspace.appearance.update(originalAppearance)
+    manager.resetLayout();delay(200)
     runInteractiveDockingSmoke(home,workspace)
     manager.showPanel(PanelId("scene"))
     scene.addEntity()
@@ -153,6 +172,20 @@ internal suspend fun runDockingWorkspaceSmoke(
     check(prefab.drafts==draft && prefab.fieldErrors.isNotEmpty())
     val reports=Path.of(System.getProperty("sle.smokeReport")).parent
     ImageIO.write(Robot().createScreenCapture(Rectangle(home.locationOnScreen,home.size)),"png",reports.resolve("docking-workspace.png").toFile())
+    val appearance=workspace.appearance.value
+    val currentIdentity=session.owner.contextIdentity()
+    val currentCreates=session.owner.creates
+    val sourceBeforeAppearance=scene.serialize()
+    val prefabBeforeAppearance=prefab.document
+    for(density in sle.editor.ui.theme.EditorDensity.entries) for(theme in sle.editor.ui.theme.EditorThemeMode.entries) {
+        workspace.appearance.update(appearance.copy(mode=theme,density=density))
+        delay(600)
+        ImageIO.write(Robot().createScreenCapture(Rectangle(home.locationOnScreen,home.size)),"png",
+            reports.resolve("workspace-${theme.name.lowercase()}-${density.name.lowercase()}.png").toFile())
+        check(scene.serialize()==sourceBeforeAppearance && prefab.document==prefabBeforeAppearance && prefab.drafts==draft)
+        check(session.owner.contextIdentity()==currentIdentity && session.owner.creates==currentCreates)
+    }
+    workspace.appearance.update(appearance)
     check(manager.requestExit { true })
     workspace.close()
     check(session.owner.contextIdentity()==0L && session.owner.creates==session.owner.destroys)

@@ -1,21 +1,42 @@
 package sle.editor.ui
 
 import java.awt.*
+import androidx.compose.ui.graphics.toArgb
+import sle.editor.ui.theme.*
+
 import java.awt.geom.Path2D
 import javax.swing.Icon
 import javax.swing.plaf.basic.BasicMenuItemUI
 import javax.swing.plaf.basic.BasicMenuUI
 import kotlin.math.roundToInt
 
+private fun menuColor(select: (EditorColors)->androidx.compose.ui.graphics.Color) = Color(select(editorColors(EditorThemeMode.Dark)).toArgb(),true)
+
 internal data class MenuAppearance(
-    val surface: Color = Color(0x202329),
-    val foreground: Color = Color(0xE0E3EA),
-    val selection: Color = Color(0x383E4D),
-    val accent: Color = Color(0xA6B8EE),
-    val scale: Float = 0.85f,
+    val surface: Color = menuColor { it.surface },
+    val foreground: Color = menuColor { it.textPrimary },
+    val selection: Color = menuColor { it.selectedBackground },
+    val accent: Color = menuColor { it.accent },
+    val scale: Float = 1f,
+    val disabled: Color = menuColor { it.disabledText },
+    val density: EditorDensity = EditorDensity.Compact,
+    val mode: EditorThemeMode = EditorThemeMode.Dark,
+    val separator: Color = menuColor { it.separator },
+    val outline: Color = menuColor { it.borderSubtle },
+    val secondary: Color = menuColor { it.textSecondary },
 ) {
-    val disabled = Color(foreground.red, foreground.green, foreground.blue, 95)
-    val font = Font(Font.DIALOG, Font.PLAIN, (13*scale).roundToInt().coerceAtLeast(10))
+    /** Same body role and size as Compose text. [scale] is the UI scale only: Java2D already applies OS DPI to Swing. */
+    val font: Font = editorAwtFont(density,scale)
+    val secondaryFont: Font = editorAwtFont(density,scale,EditorAwtRole.Secondary)
+    companion object {
+        /** The only mapping from editor tokens to Swing menu colors. */
+        fun of(mode: EditorThemeMode, density: EditorDensity, scale: Float): MenuAppearance {
+            val c=editorColors(mode)
+            fun awt(value: androidx.compose.ui.graphics.Color)=Color(value.toArgb(),true)
+            return MenuAppearance(awt(c.surface),awt(c.textPrimary),awt(c.selectedBackground),awt(c.accent),scale,
+                awt(c.disabledText),density,mode,awt(c.separator),awt(c.borderSubtle),awt(c.textSecondary))
+        }
+    }
 }
 
 internal class EditorMenuItemUI(private val theme: MenuAppearance) : BasicMenuItemUI() {

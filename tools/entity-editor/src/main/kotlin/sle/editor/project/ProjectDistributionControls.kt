@@ -1,5 +1,6 @@
 package sle.editor.project
 
+import sle.editor.ui.EditorFileChooser
 import androidx.compose.runtime.*
 import kotlinx.coroutines.*
 import sle.editor.bridge.NativeEngine
@@ -16,13 +17,13 @@ internal fun projectDistributionControls(project: ProjectWorkspaceState): Projec
     return ProjectDistributionCommands(exportGame={
         val opened=project.opened
         if(opened!=null && !project.busy) {
-            val runtimeChooser=JFileChooser(Path.of("build/debug/runtime/Release").toAbsolutePath().toFile()).apply {
+            val runtimeChooser=EditorFileChooser(Path.of("build/debug/runtime/Release").toAbsolutePath().toFile()).apply {
                 dialogTitle="Select prepared Windows x64 Release runtime bundle"
                 fileSelectionMode=JFileChooser.DIRECTORIES_ONLY
             }
             if(runtimeChooser.showOpenDialog(null)==JFileChooser.APPROVE_OPTION) {
                 val runtime=runtimeChooser.selectedFile.toPath()
-                val outputChooser=JFileChooser(opened.root.parent.toFile()).apply {
+                val outputChooser=EditorFileChooser(opened.root.parent.toFile()).apply {
                     dialogTitle="Export saved game to a NEW folder (unsaved edits excluded)"
                     fileSelectionMode=JFileChooser.DIRECTORIES_ONLY
                     selectedFile=opened.root.parent.resolve("Game Export").toFile()

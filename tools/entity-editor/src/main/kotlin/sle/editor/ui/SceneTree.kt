@@ -1,5 +1,7 @@
 package sle.editor.ui
 
+import sle.editor.ui.controls.*
+import sle.editor.ui.theme.*
 import sle.editor.model.EntityDocument
 import sle.editor.model.SceneDocument
 import sle.editor.model.SceneWorkspaceState
@@ -53,32 +55,24 @@ internal fun SceneTree(state: SceneWorkspaceState,modifier: Modifier=Modifier,
     }
     val rows=flattenSceneTree(root,expandedNodes)
     Column(modifier.editorContextMenu { sceneCreationMenu(state,editable,onEditEntity) }) {
-        Text("Scene Tree",style=MaterialTheme.typography.subtitle1)
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             item(key=root.id) {
-                Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically,modifier=Modifier.fillMaxWidth().editorContextMenu(beforeOpen={state.select(null)},node=true) { sceneCreationMenu(state,editable,onEditEntity) }.background(if(state.selectedKey==null) MaterialTheme.colors.primary.copy(alpha=0.16f) else MaterialTheme.colors.surface)
-                    .selectable(selected=state.selectedKey==null,onClick={state.select(null)})) {
-                    TreeExpander(expanded,true) { expanded=!expanded }
-                    TreeIcon("Scene")
-                    Spacer(Modifier.width(6.dp))
-                    Text(root.label,Modifier.weight(1f).padding(vertical=7.dp),style=MaterialTheme.typography.subtitle2)
-                }
+                EditorTreeRow(root.label,state.selectedKey==null,{state.select(null)},
+                    Modifier.editorContextMenu(beforeOpen={state.select(null)},node=true) { sceneCreationMenu(state,editable,onEditEntity) },
+                    help=root.label,leading={ TreeExpander(expanded,true) { expanded=!expanded };TreeIcon("Scene") })
             }
             if(expanded) items(rows,key={it.first.id}) { (node,depth) ->
                 val selected=node.entityKey==state.selectedKey
-                Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically,modifier=Modifier.fillMaxWidth().editorContextMenu(beforeOpen={state.select(node.entityKey)},node=true) { sceneCreationMenu(state,editable,onEditEntity) }.onGloballyPositioned { onEntityBounds(node.entityKey!!,it.boundsInWindow()) }
-                    .background(if(selected) MaterialTheme.colors.primary.copy(alpha=0.2f) else MaterialTheme.colors.surface)
-                    .selectable(selected=selected,onClick={state.select(node.entityKey)})
-                    .padding(start=(depth*16).coerceAtMost(160).dp,top=4.dp,bottom=4.dp,end=8.dp)) {
-                    TreeExpander(node.id in expandedNodes,node.children.isNotEmpty()) {
-                        expandedNodes=if(node.id in expandedNodes) expandedNodes-node.id else expandedNodes+node.id
-                    }
-                    TreeIcon(if(state.entities.first { it.document.key==node.entityKey }.document.components.containsKey("Camera2D")) "Camera" else "Entity")
-                    Spacer(Modifier.width(6.dp))
-                    Text(node.label,Modifier.weight(1f),color=if(selected) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface)
-                    if(state.entities.firstOrNull{it.document.key==node.entityKey}?.fieldErrors?.isNotEmpty()==true)
-                        Text(" !",color=MaterialTheme.colors.error)
-                }
+                EditorTreeRow(node.label+(if(state.entities.firstOrNull { it.document.key==node.entityKey }?.fieldErrors?.isNotEmpty()==true) " !" else ""),
+                    selected,{state.select(node.entityKey)},
+                    Modifier.editorContextMenu(beforeOpen={state.select(node.entityKey)},node=true) { sceneCreationMenu(state,editable,onEditEntity) }
+                        .onGloballyPositioned { onEntityBounds(node.entityKey!!,it.boundsInWindow()) },
+                    depth=depth.coerceAtMost(10),help=node.label,leading={
+                        TreeExpander(node.id in expandedNodes,node.children.isNotEmpty()) {
+                            expandedNodes=if(node.id in expandedNodes) expandedNodes-node.id else expandedNodes+node.id
+                        }
+                        TreeIcon(if(state.entities.first { it.document.key==node.entityKey }.document.components.containsKey("Camera2D")) "Camera" else "Entity")
+                    })
             }
         }
     }

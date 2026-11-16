@@ -9,6 +9,7 @@ import java.awt.Rectangle
 import java.awt.Robot
 import java.awt.Window
 import java.awt.event.InputEvent
+import java.awt.event.KeyEvent
 import java.nio.file.Path
 import javax.imageio.ImageIO
 import javax.swing.*
@@ -21,6 +22,7 @@ internal suspend fun runContextMenuSmoke(
     inspectorBounds: () -> Rect?,
     shellBounds: Map<String,Rect>,
 ) {
+    runAuxiliaryAppearanceSmoke(window)
     val robot = Robot()
     suspend fun await(message: String, condition: () -> Boolean) {
         repeat(80) { if (condition()) return; delay(40) }
@@ -61,6 +63,23 @@ internal suspend fun runContextMenuSmoke(
         val pixel=menuImage.getRGB(x,menuImage.height/2)
         check((pixel shr 16 and 255)<90 && (pixel shr 8 and 255)<90 && (pixel and 255)<90) { "Menu bar filler does not match the dark surface" }
     }
+    // Activate the frame as a user click would, then give a Swing component focus:
+    // a bare frame focus owner has no key-binding path for menu mnemonics.
+    window.toFront()
+    robot.mouseMove(window.locationOnScreen.x+window.width/2,window.locationOnScreen.y+12)
+    robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);delay(200)
+    (window as JFrame).contentPane.requestFocusInWindow()
+    delay(200)
+    val focusManager=java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
+    robot.keyPress(KeyEvent.VK_ALT);delay(120);robot.keyPress(KeyEvent.VK_F);delay(120)
+    robot.keyRelease(KeyEvent.VK_F);robot.keyRelease(KeyEvent.VK_ALT)
+    await("Alt+F did not open the File menu: owner=${focusManager.focusOwner}") { popup()!=null }
+    robot.keyPress(KeyEvent.VK_DOWN);robot.keyRelease(KeyEvent.VK_DOWN)
+    await("Down did not select a File menu item") { MenuSelectionManager.defaultManager().selectedPath.any { it is JMenuItem && it !is JMenu } }
+    robot.keyPress(KeyEvent.VK_ESCAPE);robot.keyRelease(KeyEvent.VK_ESCAPE)
+    robot.keyPress(KeyEvent.VK_ESCAPE);robot.keyRelease(KeyEvent.VK_ESCAPE)
+    await("Escape did not close the File menu") { MenuSelectionManager.defaultManager().selectedPath.isEmpty() }
+    println("MENU_KEYBOARD_SMOKE_PASS Alt+F/Down/Escape")
     println("MENU_SMOKE_STAGE viewport")
     val canvasOrigin=canvas().locationOnScreen
     val originalCount=scene.entities.size

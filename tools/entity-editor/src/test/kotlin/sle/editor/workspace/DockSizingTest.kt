@@ -57,4 +57,14 @@ class DockSizingTest {
         assertEquals(layout,resizeDockSplit(layout,main,listOf(true),.9f,406f,registry))
         assertEquals(layout,resizeDockSplit(layout,HostId("stale"),emptyList(),.9f,406f,registry))
     }
+    @Test fun customChromeIsUsedWhenResizingNestedSplits() {
+        val main=HostId("main")
+        val nested=DockNode.Split(DockAxis.Vertical,.5f,first,second)
+        val layout=DockLayout(main,listOf(DockHost(main,DockNode.Split(DockAxis.Vertical,.5f,nested,first),LogicalBounds(0f,0f,600f,600f))))
+        val large=DockChrome(tabHeight=60f,splitter=10f,restoreStrip=40f)
+        val resized=resizeDockSplit(layout,main,emptyList(),0f,500f,registry,chrome=large)
+        assertEquals(250f/490f,(resized.hosts.single().root as DockNode.Split).ratio)
+        val scaled=resizeDockSplit(layout,main,emptyList(),0f,1000f,registry,scale=2f,chrome=large)
+        assertEquals((resized.hosts.single().root as DockNode.Split).ratio,(scaled.hosts.single().root as DockNode.Split).ratio)
+    }
 }

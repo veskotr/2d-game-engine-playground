@@ -12,14 +12,23 @@ internal class EditorWorkspace(
     smoke: Boolean = false,
     previewSmoke: Boolean = false,
     val scenePlayback: ScenePlaybackState = ScenePlaybackState(),
+    val appearance: sle.editor.ui.theme.EditorAppearanceState = sle.editor.ui.theme.EditorAppearanceState(),
 ) : AutoCloseable {
     val project = ProjectWorkspaceState { root -> windows.switchStorage(root?.let(WorkspaceLayoutKey::project) ?: WorkspaceLayoutKey.standalone()) }
     fun startLayoutPersistence() = windows.startPersistence(project.opened?.root?.let(WorkspaceLayoutKey::project) ?: WorkspaceLayoutKey.standalone())
     private val engine = lazy { EditorEngineSession(smoke, previewSmoke = previewSmoke) }
     val engineSession get() = engine.value
-    var selectedTab by mutableStateOf(2)
+    private var tab by mutableStateOf(2)
+    var selectedTab: Int
+        get() = tab
+        set(value) {
+            if(tab!=value) { activeEntity?.endGesture();scene.getOrNull()?.selected?.endGesture() }
+            tab=value
+        }
     var editingSceneKey by mutableStateOf<String?>(null)
-    var uiScale by mutableStateOf(.85f)
+    var uiScale: Float
+        get() = appearance.value.scale
+        set(value) { appearance.update(appearance.value.copy(scale=value)) }
     val linkedEntity get() = scene.getOrNull()?.entities?.firstOrNull { it.document.key == editingSceneKey }
     val activeEntity get() = linkedEntity ?: authoring.getOrNull()
     val windows = WorkspaceWindowManager(beforeLayout = {

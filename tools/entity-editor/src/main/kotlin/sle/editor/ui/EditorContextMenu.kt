@@ -29,14 +29,31 @@ internal data class EditorMenuEntry(
     val action: () -> Unit = {},
 )
 
+private val editorPopups=java.util.WeakHashMap<JPopupMenu,MenuAppearance>()
+
+/** Refresh open popups without rebuilding their action listeners or current selection path. */
+internal fun refreshEditorPopups(value: sle.editor.ui.theme.EditorAppearance) {
+    for((popup,previous) in editorPopups.toMap()) {
+        val theme=MenuAppearance.of(value.mode,value.density,previous.scale)
+        styleEditorPopup(popup,theme)
+        popup.components.filterIsInstance<JMenuItem>().forEach { item ->
+            if(item is JMenu) item.setUI(EditorSubmenuUI(theme)) else item.setUI(EditorMenuItemUI(theme))
+            item.background=theme.surface;item.foreground=theme.foreground;item.font=theme.font
+            item.icon=EditorIcons.commandFallback(item.text,theme);item.disabledIcon=item.icon
+        }
+        popup.revalidate();popup.repaint()
+    }
+}
+
 internal fun styleEditorPopup(popup: JPopupMenu, appearance: MenuAppearance) {
+    editorPopups[popup]=appearance
     popup.setUI(BasicPopupMenuUI())
     popup.isOpaque = true
     popup.isLightWeightPopupEnabled = false
     popup.background = appearance.surface
     popup.foreground = appearance.foreground
     popup.border = BorderFactory.createCompoundBorder(
-        BorderFactory.createLineBorder(appearance.selection),
+        BorderFactory.createLineBorder(appearance.outline),
         BorderFactory.createEmptyBorder(4, 0, 4, 0),
     )
 }
@@ -55,7 +72,7 @@ internal fun buildEditorPopup(entries: List<EditorMenuEntry>, appearance: MenuAp
             isOpaque=true
             isEnabled=entry.enabled
             background=appearance.surface;foreground=appearance.foreground;font=appearance.font
-            icon=MenuGlyph(entry.label,appearance)
+            icon=EditorIcons.commandFallback(entry.label,appearance)
             disabledIcon=icon
             iconTextGap=(8*appearance.scale).roundToInt()
             border=BorderFactory.createEmptyBorder((7*appearance.scale).roundToInt(),10,(7*appearance.scale).roundToInt(),12)
@@ -69,12 +86,8 @@ internal fun buildEditorPopup(entries: List<EditorMenuEntry>, appearance: MenuAp
 
 @Composable
 internal fun editorMenuLauncher(entries: () -> List<EditorMenuEntry>): (Int, Int) -> Unit {
-    val colors=MaterialTheme.colors
-    val appearance=MenuAppearance(
-        Color(colors.surface.toArgb(),true),Color(colors.onSurface.toArgb(),true),
-        Color(colors.primary.copy(alpha=0.18f).compositeOver(colors.surface).toArgb(),true),
-        Color(colors.primary.toArgb(),true),LocalDensity.current.density,
-    )
+    val editorAppearance=sle.editor.ui.theme.LocalEditorAppearance.current
+    val appearance=MenuAppearance.of(editorAppearance.mode,editorAppearance.density,editorAppearance.scale)
     val currentAppearance by rememberUpdatedState(appearance)
     val currentEntries by rememberUpdatedState(entries)
     return remember {
@@ -136,7 +149,7 @@ internal fun entityCreationMenu(state: EntityWorkspaceState, embedded: Boolean =
         add(EditorMenuEntry("Add Component", enabled = components.isNotEmpty(), children = components))
         add(EditorMenuEntry("Import", children = listOf(EditorMenuEntry("Assets…") {
             if(projectAssets!=null) projectAssets.importFiles() else {
-            val chooser = JFileChooser().apply { dialogTitle = "Import assets"; isMultiSelectionEnabled = true }
+            val chooser = EditorFileChooser().apply { dialogTitle = "Import assets"; isMultiSelectionEnabled = true }
             if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION)
                 attempt { chooser.selectedFiles.forEach { state.importAsset(it.toPath()) } }
             }
@@ -164,7 +177,7 @@ internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, on
             )),
         )),
         EditorMenuEntry("Import", editable, listOf(EditorMenuEntry("Prefab…") {
-            val chooser = JFileChooser("assets/prefabs").apply {
+            val chooser = EditorFileChooser("assets/prefabs").apply {
                 fileFilter = FileNameExtensionFilter("Prefabs (*.sleprefab, *.json)", "sleprefab", "json")
             }
             if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION)

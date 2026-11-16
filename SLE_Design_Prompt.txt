@@ -1,0 +1,24 @@
+Implement the SLE Editor UI design described in the attached `SLE_EDITOR_UI_DESIGN.md`.
+
+The goal is to establish a reusable, consistent design system for the entire editor, including future features.
+
+First, inspect the existing project and understand the UI framework, architecture, components, and styling. Preserve existing functionality and integrations.
+
+Follow the design guide, especially:
+
+- The Little Forest light and dark themes.
+- Compact controls and professional desktop-tool density.
+- Shared theme tokens for colors, dimensions, typography, and interaction states.
+- Reusable UI components for buttons, inputs, numeric fields, vector fields, trees, and property inspectors.
+- A compact layout that maximizes available viewport and editing space.
+- Clear separation between UI presentation and editor/engine logic.
+
+Avoid hardcoded colors, dimensions, or duplicated widget implementations.
+
+**Important:** This should establish the foundation for future editor development. Any new component, inspector, dialog, or tool should automatically inherit the same styling and behavioral conventions.
+
+Create a permanent UI design guide in the repository, together with concise instructions for adding new UI features.
+
+Start by examining the current implementation and proposing a phased plan. Then implement the changes incrementally, preserving existing behavior.
+
+Verify both themes, UI scaling, widget interactions, and existing functionality. Provide screenshots of the updated editor in light and dark modes.

@@ -65,15 +65,15 @@ fun fitHostToWorkArea(layout: DockLayout, host: HostId, workArea: LogicalBounds,
 
 /** A path uses false for first, true for second. Missing/stale paths leave the tree unchanged. */
 fun resizeDockSplit(layout: DockLayout, host: HostId, path: List<Boolean>, ratio: Float,
-    span: Float, registry: PanelRegistry, scale: Float = 1f): DockLayout {
+    span: Float, registry: PanelRegistry, scale: Float = 1f, chrome: DockChrome = DockChrome()): DockLayout {
     fun resize(node: DockNode, depth: Int): DockNode {
         if(node !is DockNode.Split) return node
         if(depth<path.size) return if(path[depth]) node.copy(second=resize(node.second,depth+1))
             else node.copy(first=resize(node.first,depth+1))
-        val a=nodeMinimum(node.first,registry,scale=scale);val b=nodeMinimum(node.second,registry,scale=scale)
+        val a=nodeMinimum(node.first,registry,chrome,scale);val b=nodeMinimum(node.second,registry,chrome,scale)
         return node.copy(ratio=clampSplitRatio(ratio,span,
             if(node.axis==DockAxis.Horizontal) a.width else a.height,
-            if(node.axis==DockAxis.Horizontal) b.width else b.height,6f*scale))
+            if(node.axis==DockAxis.Horizontal) b.width else b.height,chrome.splitter*scale))
     }
     return layout.copy(hosts=layout.hosts.map { if(it.id==host) it.copy(root=it.root?.let { root -> resize(root,0) }) else it })
 }

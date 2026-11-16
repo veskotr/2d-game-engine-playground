@@ -1,5 +1,7 @@
 package sle.editor.ui
 
+import sle.editor.ui.controls.*
+import sle.editor.ui.theme.*
 import sle.editor.model.EntityWorkspaceState
 import sle.editor.viewport.GizmoShape
 
@@ -12,25 +14,18 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun GizmoControls(state: EntityWorkspaceState, entityOnly: Boolean = false) {
-    var expanded by remember { mutableStateOf(false) }
     val targets = GizmoShape.available(state.document)
     LaunchedEffect(targets,entityOnly) { if (!entityOnly && state.selectedTarget !in targets) state.selectedTarget = "Entity" }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if(entityOnly) Text("Move entity",Modifier.padding(top=12.dp)) else Box {
-                OutlinedButton(onClick = { expanded = true }, enabled = targets.isNotEmpty()) { Text("Tool: ${if(state.selectedTarget=="Entity") "Transform" else state.selectedTarget}") }
-                DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-                    targets.forEach { target -> DropdownMenuItem(onClick = {
-                        state.endGesture(); state.selectedTarget = target
-                        state.selectedComponent=if(target=="Entity") "Transform" else target
-                        expanded = false
-                    }) { Text(if(target=="Entity") "Transform" else target) } }
-                }
+    fun display(target: String)=if(target=="Entity") "Transform" else target
+    Row(horizontalArrangement=Arrangement.spacedBy(LocalEditorMetrics.current.gap/2),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+        if(!entityOnly) EditorSelect("Tool",display(state.selectedTarget),targets.map(::display),{ choice ->
+            targets.firstOrNull { display(it)==choice }?.let { target ->
+                state.endGesture();state.selectedTarget=target
+                state.selectedComponent=if(target=="Entity") "Transform" else target
             }
-            OutlinedButton(onClick = { state.undo() }, enabled = state.canUndo) { Text("Undo") }
-            OutlinedButton(onClick = { state.redo() }, enabled = state.canRedo) { Text("Redo") }
-            Checkbox(state.snap, onCheckedChange = { state.snap = it })
-            Text("Snap 0.1", Modifier.padding(top = 12.dp))
-        }
+        },enabled=targets.isNotEmpty())
+        EditorButton("Undo",{state.undo()},enabled=state.canUndo,style=EditorButtonStyle.Ghost)
+        EditorButton("Redo",{state.redo()},enabled=state.canRedo,style=EditorButtonStyle.Ghost)
+        EditorCheckBox("Snap 0.1",state.snap,{state.snap=it})
     }
 }

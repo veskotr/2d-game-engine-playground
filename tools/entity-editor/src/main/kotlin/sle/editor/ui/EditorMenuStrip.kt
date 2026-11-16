@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalDensity
 import java.awt.Color
 import javax.swing.*
+import kotlin.math.roundToInt
 import javax.swing.event.MenuEvent
 import javax.swing.event.MenuListener
 import javax.swing.plaf.basic.BasicMenuBarUI
@@ -20,17 +21,13 @@ internal fun EditorMenuStrip(
     groups: List<Pair<String,List<EditorMenuEntry>>>,window: JFrame,title: String,
     onMenuBounds: (String,Rect)->Unit={_,_->},
 ) {
-    val colors=MaterialTheme.colors
-    val appearance=MenuAppearance(
-        Color(colors.surface.toArgb(),true),Color(colors.onSurface.toArgb(),true),
-        Color(colors.primary.copy(alpha=0.18f).compositeOver(colors.surface).toArgb(),true),
-        Color(colors.primary.toArgb(),true),LocalDensity.current.density,
-    )
+    val editorAppearance=sle.editor.ui.theme.LocalEditorAppearance.current
+    val appearance=MenuAppearance.of(editorAppearance.mode,editorAppearance.density,editorAppearance.scale)
     val currentGroups by rememberUpdatedState(groups)
     val currentBounds by rememberUpdatedState(onMenuBounds)
     val titleLabel=remember(appearance) { JLabel().apply {
         isOpaque=true;background=appearance.surface
-        foreground=appearance.foreground;font=appearance.font
+        foreground=appearance.secondary;font=appearance.secondaryFont
         border=BorderFactory.createEmptyBorder(0,12,0,8)
     } }
     val bar=remember(window,appearance) {
@@ -42,14 +39,15 @@ internal fun EditorMenuStrip(
         }.apply {
             setUI(BasicMenuBarUI())
             isOpaque=true;background=appearance.surface;foreground=appearance.foreground
-            border=BorderFactory.createMatteBorder(0,0,1,0,appearance.selection)
+            border=BorderFactory.createMatteBorder(0,0,1,0,appearance.separator)
             groups.forEach { (label,_) ->
                 add(JMenu(label).apply {
                     setUI(EditorSubmenuUI(appearance))
                     font=appearance.font;foreground=appearance.foreground;background=appearance.surface
                     isOpaque=true
                     mnemonic=label.first().uppercaseChar().code
-                    border=BorderFactory.createEmptyBorder(4,8,4,8)
+                    val v=(4*appearance.scale).roundToInt();val h=(8*appearance.scale).roundToInt()
+                    border=BorderFactory.createEmptyBorder(v,h,v,h)
                     styleEditorPopup(popupMenu,appearance)
                     addMenuListener(object: MenuListener {
                         override fun menuSelected(event: MenuEvent) {
@@ -98,6 +96,8 @@ internal fun editorApplicationMenus(
     entityMode: Boolean,linked: Boolean,editable: Boolean,
     onScene: (Boolean)->Unit,onEntity: (String?)->Unit,onFit: ()->Unit,
     onScale: (Float)->Unit,onExit: ()->Unit,projectEntries: List<EditorMenuEntry> = emptyList(),assetEntries: List<EditorMenuEntry> = emptyList(),projectAssets: sle.editor.project.assets.ProjectAssetCommands?=null,projectDocuments: sle.editor.project.ProjectDocumentCommands?=null,
+    onTheme: (sle.editor.ui.theme.EditorThemeMode)->Unit = {},
+    onDensity: (sle.editor.ui.theme.EditorDensity)->Unit = {},
 ): List<Pair<String,List<EditorMenuEntry>>> {
     fun attempt(action: ()->Unit) { try { action() } catch(failure: Exception) { if(entityMode && !linked) entity?.error=failure.message else scene?.error=failure.message } }
     val sceneDocument=!entityMode || linked
@@ -132,11 +132,13 @@ internal fun editorApplicationMenus(
             EditorMenuEntry("Scene") { onScene(false) },EditorMenuEntry("Game") { onScene(true) },
             EditorMenuEntry("Prefab Workspace",editable) { onEntity(null) },
             EditorMenuEntry("Fit",editable,action=onFit),
+            EditorMenuEntry("Appearance",children=sle.editor.ui.theme.EditorThemeMode.entries.map { mode -> EditorMenuEntry(mode.name) { onTheme(mode) } }),
+            EditorMenuEntry("Density",children=sle.editor.ui.theme.EditorDensity.entries.map { density -> EditorMenuEntry(density.name) { onDensity(density) } }),
             EditorMenuEntry("UI Scale",children=listOf(0.75f,0.85f,1f).map { scale -> EditorMenuEntry("${(scale*100).toInt()}%") { onScale(scale) } }),
         ) + assetEntries,
         "Help" to listOf(
-            EditorMenuEntry("Controls…") { JOptionPane.showMessageDialog(null,"Scene: middle-drag or Alt+left-drag to pan; wheel to zoom.\nRight-click an entity and choose Edit for component editing.\nDrag handles to edit; Shift snaps; Escape cancels.\nCtrl+Z / Ctrl+Y undo and redo entity edits.\nGame shows the active camera. Play runs the scene; Pause freezes it.\nStop discards runtime changes. Click Game to focus input.","Editor Controls",JOptionPane.INFORMATION_MESSAGE) },
-            EditorMenuEntry("About SLE Editor…") { JOptionPane.showMessageDialog(null,"SLE Editor\nKotlin Compose Desktop · SLE native renderer\nScene and prefab authoring", "About",JOptionPane.INFORMATION_MESSAGE) },
+            EditorMenuEntry("Controls…") { EditorDialogs.showMessageDialog(null,"Scene: middle-drag or Alt+left-drag to pan; wheel to zoom.\nRight-click an entity and choose Edit for component editing.\nDrag handles to edit; Shift snaps; Escape cancels.\nCtrl+Z / Ctrl+Y undo and redo entity edits.\nGame shows the active camera. Play runs the scene; Pause freezes it.\nStop discards runtime changes. Click Game to focus input.","Editor Controls",JOptionPane.INFORMATION_MESSAGE) },
+            EditorMenuEntry("About SLE Editor…") { EditorDialogs.showMessageDialog(null,"SLE Editor\nKotlin Compose Desktop · SLE native renderer\nScene and prefab authoring", "About",JOptionPane.INFORMATION_MESSAGE) },
         ),
     )
 }

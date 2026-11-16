@@ -24,6 +24,7 @@ internal class ScenePlaybackState(private val canonicalize: (String)->String = :
         if(playback==Playback.Stopped) {
             require(scene.entities.all { it.fieldErrors.isEmpty() }) { "Finish invalid fields in every entity before Play" }
             val snapshot=canonicalize(scene.serialize())
+            scene.entities.forEach { it.endGesture() }
             source=snapshot
             gameView=true
         }

@@ -3,23 +3,33 @@ package sle.editor.ui
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.*
+import sle.editor.ui.theme.*
 
-/** Scale controls/typography together, retaining the OS density for native rendering. */
+/** One scale application per window; native viewports retain their own pixel density. */
 @Composable
-internal fun EditorTheme(scale: Float,content: @Composable ()->Unit) {
+internal fun EditorTheme(appearance: EditorAppearance,content: @Composable ()->Unit) {
     val systemDensity=LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(systemDensity.density*scale,systemDensity.fontScale)) {
+    val colors=editorColors(appearance.mode)
+    val metrics=editorMetrics(appearance.density)
+    val type=editorTypography(metrics)
+    CompositionLocalProvider(
+        LocalDensity provides Density(systemDensity.density*appearance.scale,systemDensity.fontScale),
+        LocalEditorAppearance provides appearance,
+        LocalEditorColors provides colors,
+        LocalEditorMetrics provides metrics,
+        LocalEditorTypography provides type,
+    ) {
+        // Material roles map onto the editor's few text roles; no feature code sets sizes.
         MaterialTheme(
-            colors=darkColors(primary=Color(0xFFA6B8EE),background=Color(0xFF17191E),surface=Color(0xFF202329),
-                onBackground=Color(0xFFE0E3EA),onSurface=Color(0xFFE0E3EA)),
-            typography=Typography().let { it.copy(h5=it.h5.copy(fontSize=18.sp),h6=it.h6.copy(fontSize=16.sp),button=it.button.copy(fontSize=13.sp)) },
-            shapes=Shapes(RoundedCornerShape(3.dp),RoundedCornerShape(3.dp),RoundedCornerShape(4.dp)),
-            content=content,
-        )
+            colors=colors.material(appearance.mode),
+            typography=Typography(defaultFontFamily=EditorFonts.body,
+                h5=type.heading,h6=type.heading,subtitle1=type.heading,subtitle2=type.heading,
+                body1=type.body,body2=type.body,button=type.toolbar,caption=type.secondary,overline=type.secondary),
+            shapes=Shapes(RoundedCornerShape(metrics.controlRadius),RoundedCornerShape(metrics.controlRadius),RoundedCornerShape(metrics.controlRadius)),
+        ) {
+            CompositionLocalProvider(LocalTextStyle provides type.body,content=content)
+        }
     }
 }

@@ -95,6 +95,7 @@ internal class NativeViewportOwner(
     private var gizmos: ViewportGizmos? = null
     private var camera: PreviewCamera? = null
     private val overlay = GizmoOverlay()
+    var editorSelectionColor = sle.editor.ui.theme.editorColors(sle.editor.ui.theme.EditorThemeMode.Dark).selectionOutline
     fun previewCamera(): PreviewCamera? = camera
     fun contextIdentity(): Long = context
     fun withContext(action: () -> Unit) = runInContext { GL.setCapabilities(capabilities); action() }
@@ -406,7 +407,7 @@ internal class NativeViewportOwner(
             if(!game) gizmos?.resize(request.logicalWidth,request.logicalHeight)
             if (!game && (desiredMode!=ViewportMode.Scene || desiredPlayback==Playback.Stopped) && desiredDocument == lastGoodPreview) gizmos?.selected()?.let {
                 val document=if(desiredMode==ViewportMode.Scene) scene?.selectedKey?.let { key -> scene?.worldDocument(key) } else null
-                overlay.draw(it,frameCamera!!,document)
+                overlay.draw(it,frameCamera!!,document,editorSelectionColor)
             }
         }
         if(game) gameMetrics=NativeEngine.sceneGameViewport(session).toList()

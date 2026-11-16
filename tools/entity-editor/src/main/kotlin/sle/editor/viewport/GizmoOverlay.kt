@@ -1,6 +1,6 @@
 package sle.editor.viewport
 
-import sle.editor.app.main
+import androidx.compose.ui.graphics.Color
 import sle.editor.model.EntityDocument
 
 import org.lwjgl.opengl.GL11
@@ -22,14 +22,14 @@ internal class GizmoOverlay {
             return shader
         }
         val vertex = shader(GL20.GL_VERTEX_SHADER,"#version 330 core\nlayout(location=0) in vec2 p; void main(){gl_Position=vec4(p,0,1);}")
-        val fragment = shader(GL20.GL_FRAGMENT_SHADER,"#version 330 core\nout vec4 color; void main(){color=vec4(1.0,0.55,1.0,1.0);}")
+        val fragment = shader(GL20.GL_FRAGMENT_SHADER,"#version 330 core\nuniform vec4 selectionColor; out vec4 color; void main(){color=selectionColor;}")
         program = GL20.glCreateProgram()
         GL20.glAttachShader(program,vertex); GL20.glAttachShader(program,fragment); GL20.glLinkProgram(program)
         GL20.glDeleteShader(vertex); GL20.glDeleteShader(fragment)
         check(GL20.glGetProgrami(program,GL20.GL_LINK_STATUS) != 0) { GL20.glGetProgramInfoLog(program) }
         vao=GL30.glGenVertexArrays(); buffer=GL15.glGenBuffers()
     }
-    fun draw(shape: GizmoShape, camera: PreviewCamera, entity: EntityDocument? = null) {
+    fun draw(shape: GizmoShape, camera: PreviewCamera, entity: EntityDocument? = null, color: Color) {
         val previousProgram=GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM)
         val previousVao=GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING)
         val previousBuffer=GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING)
@@ -37,7 +37,9 @@ internal class GizmoOverlay {
         try {
             if (program == 0) initialize()
             disabled.keys.forEach { GL11.glDisable(it) }
-            GL20.glUseProgram(program); GL30.glBindVertexArray(vao); GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER,buffer)
+            GL20.glUseProgram(program)
+            GL20.glUniform4f(GL20.glGetUniformLocation(program,"selectionColor"),color.red,color.green,color.blue,color.alpha)
+            GL30.glBindVertexArray(vao); GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER,buffer)
             GL20.glEnableVertexAttribArray(0); GL20.glVertexAttribPointer(0,2,GL11.GL_FLOAT,false,0,0L)
             fun draw(mode: Int, points: List<Vec2>) {
                 if (points.isEmpty()) return

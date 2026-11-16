@@ -37,6 +37,21 @@ class DockLayoutTest {
         movePanel(layout, p("scene"), DockTarget.Detached(LogicalBounds(0f, 0f, 400f, 300f)))
         assertEquals(snapshot, layout)
     }
+    @Test fun singlePanelWindowsHideTheirDockHeader() {
+        var layout = checked(defaultDockLayout(panels))
+        val bounds = LogicalBounds(0f, 0f, 400f, 300f)
+        assertFalse(layout.isSinglePanelWindow(layout.mainHost))
+        layout = checked(movePanel(layout, p("inspector"), DockTarget.Detached(bounds)))
+        val detached = layout.hosts.single { it.id != layout.mainHost }
+        assertTrue(layout.isSinglePanelWindow(detached.id))
+        // A second panel in the same window brings the header back.
+        val group = detached.root!!.tabs().single().group
+        layout = checked(movePanel(layout, p("assets"), DockTarget.Tab(group, 1)))
+        assertFalse(layout.isSinglePanelWindow(detached.id))
+        // The main window keeps its header even when it holds a single panel.
+        val solo = DockLayout(layout.mainHost, listOf(DockHost(layout.mainHost, DockNode.Tabs(GroupId("only"), listOf(p("scene")), p("scene")), bounds)))
+        assertFalse(solo.isSinglePanelWindow(solo.mainHost))
+    }
     @Test fun lastTabCollapsesBranchesAndEmptyToolHosts() {
         var layout = defaultDockLayout(panels)
         val hierarchy = layout.tabs().single { p("hierarchy") in it.panels }.group

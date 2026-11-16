@@ -35,6 +35,15 @@ internal fun DockNode.tabs(): List<DockNode.Tabs> = when (this) {
 }
 fun DockLayout.tabs(): List<DockNode.Tabs> = hosts.flatMap { it.root?.tabs().orEmpty() }
 
+/**
+ * A separate window holding exactly one panel shows no dock header at all: the native
+ * caption names it, minimizes and closes it (close hides the panel), and each panel exists
+ * only once. Windows → Move to / Restore Default Layout re-dock it. The main window
+ * always keeps its headers.
+ */
+fun DockLayout.isSinglePanelWindow(host: HostId): Boolean =
+    host!=mainHost && (hosts.firstOrNull { it.id==host }?.root?.tabs()?.sumOf { it.panels.size } ?: 0)==1
+
 fun defaultDockLayout(panels: List<PanelDescriptor>): DockLayout {
     PanelRegistry(panels)
     val bounds = LogicalBounds(0f, 0f, 1280f, 800f)
@@ -48,8 +57,8 @@ fun defaultDockLayout(panels: List<PanelDescriptor>): DockLayout {
     val center = visible.filter { it.value !in setOf("hierarchy", "inspector", "assets") }
     val top = split(DockAxis.Horizontal, .2f, tabs("hierarchy", named("hierarchy")),
         split(DockAxis.Horizontal, .75f, tabs("center", center), tabs("inspector", named("inspector"))))
-    // Reserve room for the registered tab strip and the existing asset toolbar/tree.
-    val root = split(DockAxis.Vertical, .65f, top, tabs("assets", named("assets")))
+    // Default only: a compact asset strip (toolbar + a few rows). Saved layouts keep their ratios.
+    val root = split(DockAxis.Vertical, .74f, top, tabs("assets", named("assets")))
     return DockLayout(main, listOf(DockHost(main, root, bounds)), hidden = panels.filterNot { it.available }
         .associate { it.id to PanelPlacement(main, GroupId("center"), center.size, bounds) })
 }

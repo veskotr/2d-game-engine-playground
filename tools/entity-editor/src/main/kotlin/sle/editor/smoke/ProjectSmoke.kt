@@ -14,6 +14,7 @@ import javax.swing.*
 internal suspend fun runProjectSmoke(
     window: JFrame,state: ProjectWorkspaceState,commands: ProjectCommands,
     scene: SceneWorkspaceState,fields: Map<String,Rect>,
+    setTheme: (sle.editor.ui.theme.EditorThemeMode)->Unit,
 ) {
     val robot=Robot().apply { autoDelay=12 }
     suspend fun await(message: String,condition: ()->Boolean) {
@@ -65,12 +66,22 @@ internal suspend fun runProjectSmoke(
     val created=state.opened!!;check(Files.isDirectory(created.assets.resolve("Scripts")))
     menu("File","Project Settings…")
     await("Settings dialog did not open") { settingsWindow()!=null && "SaveProjectSettings" in fields }
+    check(settingsWindow()!!.owner===window) { "Project Settings is not owned by the editor window: ${settingsWindow()!!.owner}" }
+    setText("ProjectName","Theme Draft")
+    for(mode in sle.editor.ui.theme.EditorThemeMode.entries) {
+        setTheme(mode);delay(450)
+        val dialog=settingsWindow()!!
+        sle.editor.ui.EditorWindowChrome.darkCaption(dialog)?.let { dark ->
+            check(dark==(mode==sle.editor.ui.theme.EditorThemeMode.Dark)) { "Project Settings caption is not themed for $mode" }
+        }
+        ImageIO.write(robot.createScreenCapture(Rectangle(dialog.locationOnScreen,dialog.size)),"png",reports.resolve("session5-${mode.name.lowercase()}-settings.png").toFile())
+    }
     setText("GameWidth","0")
     saveSettings()
     check(settingsWindow()!=null && state.opened!!.document.game.width==1280) { "Invalid settings saved: dialog=${settingsWindow()!=null} document=${state.opened!!.document}" }
     setText("ProjectName","Project Demo");setText("GameWidth","960");saveSettings()
     await("Project settings failed: ${state.error}") { !state.busy && settingsWindow()==null }
-    check(ProjectFiles.open(created.file).document.name=="Project Demo")
+    check(ProjectFiles.open(created.file).document.name=="Project Demo") { "Saved settings: ${ProjectFiles.open(created.file).document}; bounds=$fields" }
     check(state.opened!!.document.game.width==960)
     menu("View","UI Scale","75%")
     menu("File","Close Project")

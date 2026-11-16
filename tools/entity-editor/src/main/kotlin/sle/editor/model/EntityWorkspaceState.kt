@@ -1,5 +1,7 @@
 package sle.editor.model
 
+import sle.editor.ui.controls.NumberEdit
+import sle.editor.ui.controls.NumberOptions
 import sle.editor.bridge.NativeEngine
 import sle.editor.files.PrefabPackages
 import sle.editor.project.OpenedProjectDocument
@@ -13,6 +15,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition>) {
+    val inspectorSections = sle.editor.ui.inspector.InspectorSectionState()
     var projectDocument by mutableStateOf<OpenedProjectDocument?>(null)
         private set
     // Installed by the project UI; standalone actions retain their existing behavior.
@@ -35,8 +38,14 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         file=path;projectDocument=null;savedDocument=baseline;savedAssets=imported
         error=null;message="Saved ${path.fileName}"
     }
-    var selectedTarget by mutableStateOf("Entity")
-    var selectedComponent by mutableStateOf<String?>(null)
+    private var target by mutableStateOf("Entity")
+    var selectedTarget: String
+        get() = target
+        set(value) { if(target!=value) endGesture();target=value }
+    private var componentSelection by mutableStateOf<String?>(null)
+    var selectedComponent: String?
+        get() = componentSelection
+        set(value) { if(componentSelection!=value) endGesture();componentSelection=value }
     var snap by mutableStateOf(false)
     var document by mutableStateOf(freshDocument())
     private var savedDocument by mutableStateOf<EntityDocument?>(document)
@@ -58,6 +67,12 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
     private var past by mutableStateOf<List<Snapshot>>(emptyList())
     private var future by mutableStateOf<List<Snapshot>>(emptyList())
     private var gesture: Snapshot? = null
+    private var gestureToken: Any? = null
+    // Invalidates delayed inspector actions at selection/tab/playback boundaries, even without a gesture.
+    var editContextVersion = 0L
+        private set
+    private var numberEditEpoch = 0L
+    private val numberEdits = mutableMapOf<Pair<String, NumberOptions>, NumberEdit>()
     val gestureActive get() = gesture != null
     val canUndo get() = past.isNotEmpty()
     val canRedo get() = future.isNotEmpty()
@@ -66,6 +81,7 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         document = value.document; assets = value.assets; drafts = value.drafts; fieldErrors = value.errors; error = null
     }
     private fun change(action: () -> Unit) {
+        if (numberEdits.values.any { it.active }) endGesture()
         val before = snapshot()
         action()
         if (gesture == null && before != snapshot()) {
@@ -73,13 +89,14 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
             future = emptyList()
         }
     }
-    fun beginGesture() { if (gesture == null) gesture = snapshot() }
+    fun beginGesture() { if (gesture == null) { gesture = snapshot(); gestureToken = Any() } }
     fun endGesture() {
+        editContextVersion++
         val before = gesture ?: return
-        gesture = null
+        gesture = null; gestureToken = null
         if (before != snapshot()) { past = (past + before).takeLast(100); future = emptyList() }
     }
-    fun cancelGesture() { gesture?.let(::restore); gesture = null }
+    fun cancelGesture() { editContextVersion++;gesture?.let(::restore); gesture = null; gestureToken = null }
     fun undo() {
         if (gesture != null) { cancelGesture(); return }
         if (past.isEmpty()) return
@@ -89,12 +106,13 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         if (gesture != null || future.isEmpty()) return
         past = (past + snapshot()).takeLast(100); val next = future.last(); future = future.dropLast(1); restore(next)
     }
-    private fun resetHistory() { gesture = null; past = emptyList(); future = emptyList(); selectedTarget = "Entity"; selectedComponent = null }
+    private fun resetHistory() { editContextVersion++;gesture = null; gestureToken = null; numberEditEpoch++; numberEdits.clear(); past = emptyList(); future = emptyList(); selectedTarget = "Entity"; selectedComponent = null }
     fun rename(name: String) = change { document = document.copy(name = name); error = null }
     fun applyGizmo(value: EntityDocument) = change { applyStructure(value) }
 
     // Structural scene operations own their undo record; refresh only changed field drafts.
     fun applyStructure(value: EntityDocument) {
+        if (numberEdits.values.any { it.active }) endGesture()
         val changed = mutableListOf<String>()
         fun compare(before: JsonElement?, after: JsonElement?, path: String) {
             if (before == after) return
@@ -175,13 +193,17 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         error = null
     }
 
-    fun removeComponent(type: String) = change {
-        if (selectedComponent == type) selectedComponent = null
-        if (selectedTarget == type) selectedTarget = "Entity"
-        document = document.removeComponent(type)
-        drafts = drafts.filterKeys { !it.startsWith("$type/") }
-        fieldErrors = fieldErrors.filterNot { it.startsWith("$type/") }.toSet()
-        error = null
+    fun removeComponent(type: String) {
+        endGesture()
+        numberEditEpoch++; numberEdits.clear()
+        change {
+            if (selectedComponent == type) selectedComponent = null
+            if (selectedTarget == type) selectedTarget = "Entity"
+            document = document.removeComponent(type)
+            drafts = drafts.filterKeys { !it.startsWith("$type/") }
+            fieldErrors = fieldErrors.filterNot { it.startsWith("$type/") }.toSet()
+            error = null
+        }
     }
 
     fun editField(component: String, path: List<String>, template: JsonElement, text: String) = change {
@@ -208,6 +230,42 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         drafts = drafts - id
         fieldErrors = fieldErrors - id
         error = null
+    }
+
+    /** Cached on the document owner, not remember() in a dock presenter. */
+    fun numberEdit(component: String, path: List<String>, options: NumberOptions = NumberOptions()): NumberEdit {
+        val fieldPath = path.toList()
+        val id = component + "/" + fieldPath.joinToString("/")
+        fun value(): JsonElement? {
+            var result: JsonElement? = document.components[component]
+            for (part in fieldPath) result = (result as? JsonObject)?.get(part)
+            return result
+        }
+        return numberEdits.getOrPut(id to options) {
+            val epoch = numberEditEpoch
+            var expected: JsonElement? = null
+            var entityKey = ""
+            NumberEdit(options,
+                read = { drafts[id] ?: value()?.toString().orEmpty() },
+                start = {
+                    if (epoch != numberEditEpoch || value() == null) null else {
+                        endGesture(); beginGesture(); expected = value(); entityKey = document.key
+                        gestureToken
+                    }
+                },
+                current = { it === gestureToken && document.key == entityKey && value() == expected },
+                preview = { text, parsed ->
+                    drafts = drafts + (id to text)
+                    if (parsed == null) fieldErrors = fieldErrors + id else {
+                        document = document.setValue(component, fieldPath, parsed)
+                        expected = parsed
+                        fieldErrors = fieldErrors - id
+                    }
+                    error = null
+                },
+                finish = ::endGesture, revert = ::cancelGesture,
+            )
+        }
     }
 
     private fun clearDrafts() {

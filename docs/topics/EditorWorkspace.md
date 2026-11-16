@@ -25,8 +25,22 @@ all panels in that window. Closing a tool window hides its panels and retains
 its placement for reopening. Closing the home window asks before discarding
 unsaved documents; cancel keeps the workspace running, accept closes all tools.
 
-Minimum sizes follow UI scale. Windows that cannot fit their splits on an
-available display collapse into tabs so controls remain reachable.
+Dock tabs, restore controls, splitters, hierarchy rows and viewport commands use
+shared Little Forest metrics. Minimum sizes follow density, font scale and UI scale;
+OS display density is applied by Compose/AWT once. Tabs scroll horizontally and
+viewport controls wrap at narrow widths. The asset toolbar scrolls horizontally;
+Type/Size columns disappear progressively, and **Details** toggles selected-file
+metadata/actions below the list in narrow docks. Wide docks retain the details sidebar.
+The dock divider controls asset panel size; there is no second internal height drag.
+Dock headers are flat: the active tab has a surface fill and a 2dp accent underline,
+and minimize/detach/hide are ghost icon buttons. A separate window that holds a
+single panel shows no dock header: its native caption minimizes and closes it, and
+**Windows → <panel> → Move to** re-docks it (there is no tab to drag). Splitters draw a 1dp rule inside
+their full-width hit slot and highlight on hover or drag. The default layout gives
+Assets about a quarter of the height; saved layouts keep their own ratios.
+
+Windows that cannot fit their splits on an available display collapse into tabs
+so controls remain reachable.
 
 ## Scene and Game together
 
@@ -58,7 +72,10 @@ Layouts save automatically after a short debounce, on project switch and at exit
 | Standalone Windows | `%LOCALAPPDATA%/SLE/EntityEditor/workspace-layout.json` |
 | Without LOCALAPPDATA | `~/.local/share/sle/entity-editor/workspace-layout.json` |
 
-UI scale uses its separate existing settings file. **Windows → Restore Default
+Theme, density and standalone UI scale use user-local `appearance.json` beside
+the standalone layout file. Dark/Compact/100% are the defaults. View menu changes
+propagate to all window theme roots without recreating the shared runtime.
+Existing project-local scale restoration is retained. **Windows → Restore Default
 Layout** resets only panel/window placement; it also saves that reset. It does not
 clear drafts, project files, undo or UI scale. A damaged or unsupported layout
 shows a notice and restores defaults. A failed atomic save preserves the previous

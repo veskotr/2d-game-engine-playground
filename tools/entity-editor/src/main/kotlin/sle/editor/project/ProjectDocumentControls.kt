@@ -1,5 +1,7 @@
 package sle.editor.project
 
+import sle.editor.ui.EditorDialogs
+import sle.editor.ui.EditorFileChooser
 import androidx.compose.runtime.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
@@ -113,7 +115,7 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
         val file=if(kind==ProjectDocumentKind.Scene) scene?.file else prefab?.file
         if(save && !saveAs && !export && file!=null) { save(kind,file);return true }
         val folder=opened.root.resolve(opened.document.assetRoot).resolve(if(kind==ProjectDocumentKind.Scene) "Scenes" else "Prefabs")
-        val chooser=JFileChooser((file?.parent ?: folder).toFile())
+        val chooser=EditorFileChooser((file?.parent ?: folder).toFile())
         val suffix=if(export) { if(kind==ProjectDocumentKind.Scene) ".slescene" else ".sleprefab" } else kind.suffix
         chooser.fileFilter=if(export) FileNameExtensionFilter("Portable package (*$suffix)",suffix.drop(1))
             else FileNameExtensionFilter("Project ${kind.name.lowercase()} (*$suffix)","json")
@@ -126,7 +128,7 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
         var path=chooser.selectedFile.toPath()
         if(save && !path.fileName.toString().endsWith(suffix,true)) path=path.resolveSibling(path.fileName.toString()+suffix)
         if(save) {
-            if(export && Files.exists(path) && javax.swing.JOptionPane.showConfirmDialog(null,"Replace ${path.fileName}?","Export package",javax.swing.JOptionPane.YES_NO_OPTION)!=javax.swing.JOptionPane.YES_OPTION) return false
+            if(export && Files.exists(path) && EditorDialogs.showConfirmDialog(null,"Replace ${path.fileName}?","Export package",javax.swing.JOptionPane.YES_NO_OPTION)!=javax.swing.JOptionPane.YES_OPTION) return false
             save(kind,path,export)
         } else openFile(path,kind)
         return true

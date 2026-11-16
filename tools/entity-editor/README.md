@@ -23,14 +23,94 @@ retain unsaved-change confirmations and portable package validation.
 Creation is also available through nested right-click menus. Right-click selects
 the tree node before offering root/child creation and **Entity → Duplicate
 Subtree**. Menus use the editor palette, vector icons and UI scale. Hierarchy
-expanders and entity/camera icons are drawn vectors rather than font glyphs.
+expanders are drawn vectors; entity/component/asset icons use the bundled editor family.
 
 Open `assets/scenes/editor_camera_demo.slescene` for the included child-camera,
 WASD and physics example, or `assets/scenes/editor_starter.slescene` for ground
 and crates. Standalone Save produces a portable `.slescene` with assets, loadable by the
 engine. Project Save uses plain JSON sources; Export Package produces the portable archive. See [scene workflow](../../docs/topics/SceneEditor.md).
 
-The layout defaults to UI 85%; **View → UI Scale** also offers 75% and 100%.
+UI work follows the design system in [UI_DESIGN.md](UI_DESIGN.md); see
+[HOW_TO_ADD_UI_FEATURES.md](HOW_TO_ADD_UI_FEATURES.md) before adding panels, inspector
+rows, dialogs or commands.
+
+The editor defaults to Dark Forest, Compact density and UI 100%. **View → Appearance**
+switches Dark/Light live across home and detached windows; **View → Density** selects
+Compact/Comfortable metrics. **View → UI Scale** also offers 75% and 85%.
+Saved appearance and project-local scales keep their stored value.
+Appearance preferences save atomically in user-local `appearance.json`, beside the
+standalone workspace layout (including the `sle.workspaceData` override). Failed
+saves report a notice and preserve the previous file. Project-local scale restore
+continues to take precedence when opening a project.
+
+Run `.\gradlew.bat run --args=--theme-gallery` for a standalone presentation fixture
+without project data or JNI. The foundation exposes `LocalEditorColors`,
+`LocalEditorMetrics`, and `LocalEditorAppearance` under `sle.editor.ui.theme`.
+Use these tokens in subsequent UI migrations; load icons through `EditorIcons`.
+Roboto headings and body text use bundled licensed resources; numeric inputs retain
+monospace. Compose controls and Swing menus/dialogs share this font choice.
+Editor confirmations, input prompts and file choosers go through `EditorDialogs` and
+`EditorFileChooser` (`ui/EditorDialogAppearance.kt`): they keep `JOptionPane` /
+`JFileChooser` results and filters, but style only their own dialog roots instead of
+changing global `UIManager` defaults. Use them for new editor dialogs and pass
+`null` (or a component) as parent: `EditorDialogOwner` makes the active editor
+window the owner, so dialogs always open in front of it. `EditorFileChooser` uses
+`EditorFileChooserUI` (Metal layout without the system places bar, editor folder/
+file/action icons, slim scrollbars) instead of the system look-and-feel installed
+by Compose. On Windows, `EditorWindowChrome` themes every editor window caption
+(dark mode on Windows 10 2004+, caption/text/border colors on Windows 11); it is
+best effort and otherwise leaves the OS caption. Drive/computer icons in choosers
+still come from the OS shell. Final dark/light visual acceptance is still pending.
+Workspace tabs, hierarchy and asset folders share compact theme controls and density
+metrics. Viewport commands wrap into one band; narrow tab strips scroll to the active
+tab. In the asset dock, the toolbar scrolls, Type/Size columns hide as width decreases,
+and **Details** exposes metadata and file actions below the list. Wide docks retain
+the sidebar. Resize Assets with the existing dock splitter. Saved placements remain
+compatible. Selection handles follow the theme's `selectionOutline`; the native C++
+grid/axes remain unchanged pending a separate engine task.
+
+Shared compact controls live in `ui/controls/EditorControls.kt`: buttons, toggles,
+icon/glyph buttons, flat tabs, toolbars, separators, empty states, text/number/vector
+fields, checkbox/select, property rows, sections, panel headers, tooltips and tree
+rows. They consume theme metrics, semantic colors and `LocalEditorTypography`
+(body, secondary, heading, toolbar, brand, numeric in `ui/theme/EditorTypography.kt`);
+feature code should not set font sizes, control heights or colors itself.
+`EditorButtonStyle` has three emphases: **Primary** (filled green, the main action
+such as Play), **Secondary** (default; restrained fill and subtle outline) and
+**Ghost** (no resting chrome; zoom, undo/redo, navigation and dock actions).
+Property rows use 36% labels and fill the value column, stacking below 240dp;
+labels display humanized keys (`linearDamping` → "Linear damping"). Swing menus
+and dialogs size text with `editorAwtFont` from the same tokens and the UI scale
+only (Java2D applies OS DPI). Roboto is the UI face; Handjet is reserved for
+branding (the empty-project state). The gallery includes tabs, button variants,
+interaction-state specimens and 100%/150% font controls.
+
+Numeric presenters obtain `state.numberEdit(component, path, NumberOptions(...))`;
+this owner-cached handle preserves drafts through presenter recreation. Valid
+values preview live; Enter or valid blur finishes one undo transaction. Escape
+restores the entry snapshot. Invalid blur retains the last valid value and a
+save-blocking error. JSON decimal syntax is locale independent. Focused undo
+cancels the active edit, following existing gesture semantics. Selection-only and
+read-only events do not start transactions. Hosts must finish edits on tab/target
+changes with the existing `endGesture()` boundary; presenter disposal must not
+unconditionally cancel owner state. Scene and prefab inspectors share these bindings. Component/tool/tab changes and
+playback entry finish owner gestures; panel disposal does not discard drafts.
+
+Inspector fields use `ui/inspector/EditorPropertyDefinition.kt` and the shared
+renderer: booleans, catalog enums, strings, finite numbers, numeric axis objects,
+resource references and structured JSON. Vectors share one row; other objects
+(including texture regions) retain all keys in a multiline JSON editor. Catalog
+metadata supplies choices; no new native schema or numeric limits are inferred.
+`EntityWorkspaceState.inspectorSections` owns session-only collapse state by
+entity identity/component across Scene/Prefab panels and dock remounts. This
+state never enters scene files or undo history. Future component authors should
+reuse `InspectorComponent`/`ComponentField` and native catalog metadata.
+
+Run `.\gradlew.bat run --args=--inspector-gallery` for both real inspector paths
+without JNI. Add `--capture <directory>` to capture dark/light, 100%/150% font
+scale and 900/540px window widths. Full inspector keyboard, detached window and
+mixed-DPI acceptance remains a manual check.
+
 The default layout places hierarchy left, viewport center, and selected inspector right. The standard window menu bar uses flat headings, Alt mnemonics, a subtle
 bottom border, and the editor surface across its full width. Instructional text
 is available in Help instead of beneath toolbars.
@@ -411,8 +491,8 @@ The `_` panel control minimizes to the current window's scrollable restore strip
 Layouts save automatically per project in `.sle/workspace-layout.json`. Standalone
 layouts use `%LOCALAPPDATA%\SLE\EntityEditor\workspace-layout.json` on Windows
 (or `~/.local/share/sle/entity-editor/workspace-layout.json` without LOCALAPPDATA).
-`-Dsle.workspaceData=<directory>` overrides standalone storage. UI scale stays in
-its existing settings file. **Windows → Restore Default Layout** saves only the
+`-Dsle.workspaceData=<directory>` overrides standalone storage. Appearance (including standalone UI scale) uses
+user-local `appearance.json`; project-local scale behavior is retained. **Windows → Restore Default Layout** saves only the
 layout; documents, drafts, undo and UI scale remain intact.
 
 Corrupt or unsupported layouts show a recovery notice and use defaults. Unknown

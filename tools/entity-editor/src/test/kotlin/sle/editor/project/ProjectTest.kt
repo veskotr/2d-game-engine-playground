@@ -93,6 +93,6 @@ class ProjectTest {
         assertEquals(0.75f,ProjectFiles.editorState(project).uiScale)
         assertContentEquals(before,Files.readAllBytes(project.file))
         Files.writeString(project.root.resolve(".sle/editor-state.json"),"broken")
-        assertEquals(0.85f,ProjectFiles.editorState(project).uiScale)
+        assertEquals(1f,ProjectFiles.editorState(project).uiScale)
     }
 }

@@ -20,7 +20,7 @@ internal data class OpenedProject(val file: Path,val document: ProjectDocument) 
     }
 }
 
-internal data class ProjectEditorState(val uiScale: Float=0.85f)
+internal data class ProjectEditorState(val uiScale: Float=1f)
 
 internal object ProjectFiles {
     private const val MAX_DESCRIPTOR=1024*1024

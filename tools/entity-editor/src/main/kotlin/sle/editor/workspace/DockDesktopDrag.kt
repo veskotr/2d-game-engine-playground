@@ -1,5 +1,6 @@
 package sle.editor.workspace
 
+import androidx.compose.ui.graphics.toArgb
 import java.awt.*
 import java.awt.event.*
 import javax.swing.JWindow
@@ -120,8 +121,9 @@ internal class DockDesktopDrag(private val manager: WorkspaceWindowManager) : Au
             background=Color(0,0,0,0)
             contentPane=object: javax.swing.JComponent() {
                 override fun paintComponent(graphics: Graphics) {
-                    graphics.color=Color(100,155,245,80);graphics.fillRect(0,0,width,height)
-                    graphics.color=Color(155,190,255);graphics.drawRect(0,0,width-1,height-1)
+                    val accent=Color(sle.editor.ui.theme.editorColors(sle.editor.ui.EditorDialogAppearance.appearance.mode).accent.toArgb(),true)
+                    graphics.color=Color(accent.red,accent.green,accent.blue,80);graphics.fillRect(0,0,width,height)
+                    graphics.color=accent;graphics.drawRect(0,0,width-1,height-1)
                     graphics.drawRect(1,1,(width-3).coerceAtLeast(0),(height-3).coerceAtLeast(0))
                 }
             }

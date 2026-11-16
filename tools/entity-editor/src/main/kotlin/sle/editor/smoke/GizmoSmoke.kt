@@ -104,7 +104,9 @@ internal suspend fun runGizmoSmoke(canvas: EngineCanvas, state: EntityWorkspaceS
     var handles=0
     for(y in 0 until desktop.height) for(x in 0 until desktop.width) {
         val color=desktop.getRGB(x,y)
-        if (((color shr 16) and 255)>230 && ((color shr 8) and 255) in 100..180 && (color and 255)>220) ++handles
+        val expected=sle.editor.ui.theme.editorColors(sle.editor.ui.theme.EditorThemeMode.Dark).selectionOutline
+        if(abs(((color shr 16) and 255)-expected.red*255)<3 &&
+            abs(((color shr 8) and 255)-expected.green*255)<3 && abs((color and 255)-expected.blue*255)<3) ++handles
     }
     check(handles>30) { "Editor handles missing from desktop: $handles" }
     val report=File(System.getProperty("sle.smokeReport")).parentFile.resolve("gizmo-editor.png")

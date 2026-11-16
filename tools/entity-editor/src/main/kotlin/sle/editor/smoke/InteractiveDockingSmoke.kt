@@ -125,8 +125,10 @@ internal suspend fun redockGameDuringPlaySmoke(workspace: EditorWorkspace, input
     val manager=workspace.windows;val game=PanelId("game")
     val robot=Robot().apply { autoDelay=20 }
     manager.showPanel(game);delay(300)
-    val source=manager.dropAreas().single { it.tabs.any { tab -> tab.first==game } }
-    val tab=source.tabs.single { it.first==game }.second
+    // Game sits alone in its own window, which has no dock header (no tab to drag):
+    // re-dock it the way Windows → Game → Move to → (main group) → As tab does.
+    val source=manager.dropAreas().single { game in it.panelOrder }
+    check(source.host!=manager.layout.mainHost && manager.layout.isSinglePanelWindow(source.host) && source.tabs.isEmpty()) { "Single-panel Game window still shows a dock header" }
     val body=source.bounds
     robot.mouseMove((body.x+body.width/2).toInt(),(body.y+body.height/2).toInt())
     robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
@@ -135,13 +137,8 @@ internal suspend fun redockGameDuringPlaySmoke(workspace: EditorWorkspace, input
     val initialX=probeX()
     robot.keyPress(KeyEvent.VK_D);delay(250)
     check(probeX()>initialX+5) { "Game did not accept held input before docking" }
-    val target=manager.dropAreas().first { it.host==manager.layout.mainHost }.tabs.first().second
-    robot.mouseMove((tab.x+tab.width/2).toInt(),(tab.y+tab.height/2).toInt());robot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
-    for(step in 1..15) {
-        robot.mouseMove((tab.x+tab.width/2+(target.x+target.width/2-tab.x-tab.width/2)*step/15).toInt(),
-            (tab.y+tab.height/2+(target.y+target.height/2-tab.y-tab.height/2)*step/15).toInt());delay(25)
-    }
-    robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);delay(350)
+    val target=manager.layout.hosts.single { it.id==manager.layout.mainHost }.root!!.tabs().first()
+    manager.movePanel(game,DockTarget.Tab(target.group,target.panels.size));delay(350)
     val afterDropX=probeX();delay(250)
     robot.keyRelease(KeyEvent.VK_D)
     check(kotlin.math.abs(probeX()-afterDropX)<.01) { "Game retained held input across docking" }

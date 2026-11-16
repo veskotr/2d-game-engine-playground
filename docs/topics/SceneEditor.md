@@ -15,7 +15,7 @@ portable `.slescene` workflow.
   enter its name. Creation menus replace the former add/import buttons.
 - Prefab imports are editable copies, with new UUIDs and remapped self references.
   Editing a scene copy never modifies its source `.sleprefab` or another copy.
-- The expandable **Scene Tree** contains the scene root and entity nodes, with
+- The expandable scene tree in **Hierarchy** contains the scene root and entity nodes, with
   no component nodes. Select a node or click its geometry/origin in the viewport.
   Both select the complete entity. Dragging its center or body and arrow nudges
   change Transform position; the outline encloses its visible geometry. Components
@@ -103,7 +103,7 @@ Open `assets/scenes/editor_camera_demo.slescene` for a player with a child camer
 a Lua movement script (WASD), and a falling crate. Run the same package standalone
 with `engine_app.exe --config examples/editor_camera/engine.json`. The example runs through the same runtime in the editor and standalone.
 
-The compact tool layout defaults to **UI 85%**. **View → UI Scale** offers
+The compact tool layout defaults to **UI 100%**. **View → UI Scale** offers
 75%, 85% and 100%; changing scale preserves documents/selection and updates native
 viewport sizing.
 

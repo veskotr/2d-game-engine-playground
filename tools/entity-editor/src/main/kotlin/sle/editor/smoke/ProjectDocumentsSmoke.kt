@@ -25,6 +25,16 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     }
     suspend fun click(id: String,double: Boolean=false) {
         await("Missing browser control $id") { id in bounds }
+        // Lazy rows keep their last bounds after scrolling away; bring the row inside its list first.
+        val list=when { id.startsWith("AssetFolder:") -> "AssetFolders";id.startsWith("AssetFile:") -> "AssetFiles";else -> null }
+        if(list!=null) repeat(16) {
+            val container=bounds[list] ?: return@repeat
+            val row=bounds.getValue(id)
+            if(row.top>=container.top && row.bottom<=container.bottom) return@repeat
+            val center=container.center;val o=window.contentPane.locationOnScreen
+            robot.mouseMove(o.x+center.x.toInt(),o.y+center.y.toInt())
+            robot.mouseWheel(if(row.bottom>container.bottom) 1 else -1);delay(120)
+        }
         val point=bounds.getValue(id).center;val at=window.contentPane.locationOnScreen
         robot.mouseMove(at.x+point.x.toInt(),at.y+point.y.toInt())
         repeat(if(double) 2 else 1) { robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);delay(65) }

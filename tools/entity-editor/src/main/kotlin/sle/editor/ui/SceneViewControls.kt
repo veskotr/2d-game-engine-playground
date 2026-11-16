@@ -1,5 +1,7 @@
 package sle.editor.ui
 
+import sle.editor.ui.controls.*
+import sle.editor.ui.theme.*
 import sle.editor.model.ScenePlaybackState
 import sle.editor.viewport.Playback
 
@@ -11,11 +13,10 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SceneViewControls(state: ScenePlaybackState,enabled: Boolean,onPlay: ()->Unit,onStop: ()->Unit) {
-    FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        Button(onClick=onPlay,enabled=enabled && state.playback!=Playback.Running) {
-            Text(if(state.playback==Playback.Paused) "Resume" else "Play")
-        }
-        OutlinedButton(onClick={state.pause()},enabled=enabled && state.playback==Playback.Running) { Text("Pause") }
-        OutlinedButton(onClick=onStop,enabled=enabled && state.playback!=Playback.Stopped) { Text("Stop") }
+    Row(horizontalArrangement=Arrangement.spacedBy(LocalEditorMetrics.current.gap/2)) {
+        EditorButton(if(state.playback==Playback.Paused) "Resume" else "Play",onPlay,
+            enabled=enabled && state.playback!=Playback.Running,primary=true)
+        EditorButton("Pause",{state.pause()},enabled=enabled && state.playback==Playback.Running)
+        EditorButton("Stop",onStop,enabled=enabled && state.playback!=Playback.Stopped)
     }
 }

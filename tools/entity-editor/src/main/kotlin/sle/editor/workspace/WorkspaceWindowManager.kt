@@ -75,6 +75,12 @@ internal class WorkspaceWindowManager(
     var revision = 0L
         private set
     private var uiScale = 1f
+    private var chrome = DockChrome()
+    fun updateChrome(next: DockChrome) {
+        if(chrome==next) return
+        chrome=next;desktop.cancel()
+        SwingUtilities.invokeLater { if(!closed) enforceSizing() }
+    }
     private val surfaces = mutableMapOf<HostId, Rect>()
     private val listeners = mutableMapOf<HostId, ComponentAdapter>()
     private val desktop by lazy { DockDesktopDrag(this) }
@@ -139,6 +145,8 @@ internal class WorkspaceWindowManager(
     fun measureStrip(host: HostId, group: GroupId, rect: Rect) { measurements.getOrPut(host to group) { GroupMeasurement() }.strip=rect }
     fun measureTab(host: HostId, group: GroupId, panel: PanelId, rect: Rect) { measurements.getOrPut(host to group) { GroupMeasurement() }.tabs[panel]=rect }
     fun forgetGroup(host: HostId, group: GroupId) { measurements.remove(host to group) }
+    /** Header not drawn (single-panel window): no stale grip/tab hit areas may start a drag. */
+    fun forgetHeader(host: HostId, group: GroupId) { measurements[host to group]?.apply { handle=null;strip=null;tabs.clear() } }
     internal fun dropAreas(): List<DockDropArea> = stacking.toList().flatMap { host ->
         val window=windows.getValue(host)
         if(!window.isShowing || (window is Frame && window.extendedState and Frame.ICONIFIED!=0)) emptyList() else
@@ -174,7 +182,7 @@ internal class WorkspaceWindowManager(
         return node as? DockNode.Split
     }
     fun resizeSplit(host: HostId, path: List<Boolean>, ratio: Float, span: Float) =
-        commit(resizeDockSplit(layout,host,path,ratio,span,registry))
+        commit(resizeDockSplit(layout,host,path,ratio,span,registry,chrome=chrome))
     private fun enforceSizing() {
         if(closed) return
         var next=layout
@@ -187,9 +195,9 @@ internal class WorkspaceWindowManager(
             val decorations=window.insets
             val overhead=PanelMinimum((window.width-(surface?.width ?: (window.width-decorations.left-decorations.right).toFloat())).coerceAtLeast(0f),
                 (window.height-(surface?.height ?: (window.height-decorations.top-decorations.bottom).toFloat())).coerceAtLeast(0f))
-            next=fitHostToWorkArea(next,id,work,registry,insets=overhead,scale=uiScale)
+            next=fitHostToWorkArea(next,id,work,registry,chrome,insets=overhead,scale=uiScale)
             val host=next.hosts.firstOrNull { it.id==id } ?: continue
-            val minimum=hostMinimum(host,registry,hasMinimized=next.minimized.values.any { it.host==id },insets=overhead,scale=uiScale)
+            val minimum=hostMinimum(host,registry,chrome,hasMinimized=next.minimized.values.any { it.host==id },insets=overhead,scale=uiScale)
             window.minimumSize=Dimension(ceil(minOf(minimum.width,work.width)).toInt(),ceil(minOf(minimum.height,work.height)).toInt())
             if(window.bounds != Rectangle(host.bounds.x.toInt(),host.bounds.y.toInt(),host.bounds.width.toInt(),host.bounds.height.toInt()))
                 window.setBounds(host.bounds.x.toInt(),host.bounds.y.toInt(),host.bounds.width.toInt(),host.bounds.height.toInt())

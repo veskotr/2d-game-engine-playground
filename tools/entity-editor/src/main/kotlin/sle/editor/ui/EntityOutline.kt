@@ -1,5 +1,7 @@
 package sle.editor.ui
 
+import sle.editor.ui.controls.*
+import sle.editor.ui.theme.*
 import sle.editor.model.EntityWorkspaceState
 import sle.editor.viewport.GizmoShape
 
@@ -17,23 +19,16 @@ internal fun EntityOutline(state: EntityWorkspaceState,modifier: Modifier=Modifi
     val projectAssets=sle.editor.project.assets.LocalProjectAssets.current
     val components=state.document.components.keys.toList()
     LaunchedEffect(components) { if(state.selectedComponent !in components) state.selectedComponent=null }
-    Column(modifier.editorContextMenu { entityCreationMenu(state,projectAssets=projectAssets) },verticalArrangement=Arrangement.spacedBy(6.dp)) {
-        Text("Entity",style=MaterialTheme.typography.subtitle1)
-        Text(state.document.name.ifBlank { "(Unnamed entity)" })
-        TextButton(onClick={state.selectedComponent=null}) { Text("All components") }
-        Divider()
+    Column(modifier.editorContextMenu { entityCreationMenu(state,projectAssets=projectAssets) }) {
+        EditorPanelHeader(state.document.name.ifBlank { "(Unnamed entity)" })
+        EditorTreeRow("All components",state.selectedComponent==null,{state.selectedComponent=null})
+        EditorSeparator()
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             items(components,key={it}) { component ->
-                TextButton(onClick={
+                EditorTreeRow(component,state.selectedComponent==component,{
                     state.selectedComponent=component
                     state.selectedTarget=if(component=="Transform" || component !in GizmoShape.targets) "Entity" else component
-                },modifier=Modifier.fillMaxWidth().background(if(state.selectedComponent==component) MaterialTheme.colors.primary.copy(alpha=0.15f) else MaterialTheme.colors.surface)) {
-                    Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
-                        TreeIcon(if(component=="Camera2D") "Camera" else "Component")
-                        Spacer(Modifier.width(6.dp))
-                        Text(component)
-                    }
-                }
+                },help=component,leading={TreeIcon(component)})
             }
         }
     }

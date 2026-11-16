@@ -208,9 +208,14 @@ private fun launchEditor(args: Array<String>) = application {
             exitProcess(1)
         }.apply { isRepeats=false; start() } else null
     }
+    // e.g. "SLE Editor 0.6.0 · engine 0.16.0"; the engine version comes from the loaded bridge.
+    val editorTitle=remember {
+        val engine=runCatching { sle.editor.bridge.NativeEngine.engineVersion() }.getOrNull()
+        "SLE Editor ${EditorVersion.text}"+(engine?.let { " · engine $it" } ?: "")
+    }
     Window(
         onCloseRequest={ if (manager.requestExit { (testing && !dockingSmoke) || (confirmDiscard(authoring.getOrNull()) && confirmDiscardScene(scene.getOrNull())) }) { watchdog?.stop(); exitApplication() } },
-        title=project.opened?.let { "SLE Editor — ${it.document.name}" } ?: "SLE Entity Editor",
+        title=project.opened?.let { "$editorTitle — ${it.document.name}" } ?: editorTitle,
         state=windowState,
         icon=appIcon,
         visible=!manager.loading,
@@ -564,6 +569,7 @@ private fun launchEditor(args: Array<String>) = application {
                         onDensity={ workspace.appearance.update(appearance.copy(density=it)) },
                         onExit={if(manager.requestExit { confirmDiscard(authoring.getOrNull()) && confirmDiscardScene(scene.getOrNull()) }) exitApplication()},
                         projectEntries=projectFileMenu(project,commands,scenePlayback.editing)+listOf(
+                            sle.editor.ui.EditorMenuEntry("Build Game…",project.opened!=null && !project.busy,action=distribution.buildGame),
                             sle.editor.ui.EditorMenuEntry("Export Game…",project.opened!=null && !project.busy,action=distribution.exportGame)),
                         projectAssets=assetCommands,projectDocuments=documents,
                         assetEntries=assetBrowserMenu(assets,assetBrowserVisible) { if(assetBrowserVisible) manager.hidePanel(PanelId("assets")) else manager.showPanel(PanelId("assets")) },

@@ -25,6 +25,57 @@ in a Linux/WSL shell. Use Windows tooling for the supported workflow; a Linux
 port needs a separate build directory, generator, and system graphics dependencies.
 Do not reuse a Windows CMake cache from Linux.
 
+## VS Code
+
+`.vscode/tasks.json` (**Terminal → Run Task…**) and `.vscode/launch.json`
+(**Run and Debug**, F5) cover every build and launch step. They need CMake and
+Visual Studio 2022, plus JDK 21 for the editor (found the same way as
+`tools/entity-editor/run-editor.ps1`, through `find-jdk.ps1`).
+
+| Task | What it does |
+|---|---|
+| Engine: Build Debug (Ctrl+Shift+B) | Configure and build `build/debug`, including the Debug editor bridge |
+| Engine: Build Release | Everything in `build/release` |
+| Engine: Run All Tests / Smoke Tests / Tests Matching… | CTest on `build/debug` |
+| Engine: Run engine_app / Project… / Built Game Config… | Debug engine with `engine.json`, a `.sleproject`, or a built game's `config.json` |
+| Game: Build Runtime Bundle (Release) | Prebuilt engine exe + DLLs + engine assets in `build/release/runtime/Release` |
+| Game: Run Built Game… | Runs a Build Game output (`My Game.exe`) |
+| Editor: Run / Run Tests | `gradle run` with the Debug bridge / `gradle build` |
+| Editor: Package Windows App | Release bridge + runtime bundle, then `createDistributable` |
+| Editor: Package Installers (MSI/EXE) | Same, then `packageDistributionForCurrentOS` |
+| Editor: Run Packaged App | Starts the packaged `SLE Editor.exe` |
+
+To produce the Windows editor executable yourself, run **Editor: Package Windows App**,
+or the same steps from a terminal:
+
+```powershell
+cmake --preset release -DSLE_BUILD_EDITOR=ON
+cmake --build build/release --config Release --target sle_editor_native sle_runtime_bundle --parallel
+tools/entity-editor/gradle.ps1 createDistributable
+```
+
+The result is `tools/entity-editor/build/compose/binaries/main/app/SLE Editor/SLE Editor.exe`.
+Copy the whole `SLE Editor` folder to distribute it. The debug configurations
+(**Debug engine_app …**) use the Visual Studio debugger from the C/C++ extension.
+
+The first Release build after engine changes is the slow step: it recompiles the
+engine with full optimization and relinks the editor bridge and `engine_app`
+(minutes). Later runs only rebuild what changed. The editor scripts use their own
+Gradle home (`tools/entity-editor/.gradle-user-home`), so the first Gradle run there
+starts a fresh daemon.
+
+## Versions
+
+The engine and the editor have separate `0.MINOR.PATCH` versions while pre-1.0. Bump
+MINOR for each added feature and PATCH for fixes.
+
+- **Engine:** `project(GameEngine VERSION …)` in the root [CMakeLists.txt](CMakeLists.txt).
+  It generates `sle/core/Version.hpp` (`sle::core::EngineVersion`), is printed by
+  `engine_app --version` and at startup, and is recorded in the runtime bundle
+  (`sle-runtime.json`) and in Build Game output (`sle-distribution.json`).
+- **Editor:** `version` in [build.gradle.kts](tools/entity-editor/build.gradle.kts).
+  It sets the packaged app version and the window title (`SLE Editor 0.6.0 · engine 0.16.0`).
+
 ## Validation
 
 Build any changed targets before running CTest; CTest does not rebuild them.

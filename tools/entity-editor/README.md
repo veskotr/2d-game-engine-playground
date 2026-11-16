@@ -1,4 +1,4 @@
-# SLE Entity Editor
+# SLE Editor
 
 Kotlin/JVM Compose Desktop authoring tool using SLE's native renderer and runtime.
 
@@ -360,21 +360,32 @@ are unreliable under WSLg.
 ## Package a standalone editor
 
 `createDistributable` builds a runnable folder that includes its own Java runtime, the
-engine library and the shared `assets/`. Package on each target OS; jpackage cannot
-cross-build. First build `sle_editor_native` in Release:
+engine library and the shared `assets/`. On Windows it also includes the prebuilt
+standalone game runtime (`engine_app.exe`, DLLs, engine assets) under `runtime/`.
+Build Game and Export Game copy that runtime, so editor users never need a compiler.
+Package on each target OS; jpackage cannot cross-build. First build `sle_editor_native`
+and, on Windows, `sle_runtime_bundle` in Release:
 
 ```powershell
 cmake --preset release -DSLE_BUILD_EDITOR=ON
-cmake --build build/release --config Release --target sle_editor_native
+cmake --build build/release --config Release --target sle_editor_native sle_runtime_bundle
 cd tools/entity-editor
 .\gradlew.bat createDistributable
 ```
+
+In VS Code, **Terminal → Run Task → Editor: Package Windows App** runs all three steps.
+`gradle.ps1 <task>` runs any Gradle task with JDK 21 selected automatically. See
+[VS Code tasks and versions](../../CONTRIBUTING.md#vs-code). The editor version is
+`version` in `build.gradle.kts` and is shown in the window title with the engine version.
 
 Run `build/compose/binaries/main/app/SLE Editor/SLE Editor.exe`. On Linux, build
 `libsle_editor_native.so` in Release and pass it with
 `-PslePackageNativeLibrary=<path>` unless it is at `build/release/tools/editor-native/`.
 The launcher is `SLE Editor/bin/SLE Editor`. `packageDistributionForCurrentOS` builds
 installers (MSI/EXE on Windows, which need the WiX download; DEB on Linux).
+
+Pass `-PslePackageRuntimeBundle=<path>` when the runtime bundle is not at
+`build/release/runtime/Release`. Windows packaging fails if it is missing.
 
 Packaged editors load the engine library from `compose.application.resources.dir`.
 When the working directory has no `assets/`, they switch the process working directory
@@ -505,6 +516,12 @@ selects the startup project independently of cwd. See
 [distribution details](../../docs/topics/Projects.md#export-a-runnable-game).
 `run --args=--project-distribution-smoke` exercises actual export and relocated
 standalone launch; it requires that Release runtime bundle first.
+
+Packaged build: **File → Build Game…** writes `config.json` (window, target FPS,
+package list) plus `game.slepkg` (all project assets, scenes and the main scene)
+beside the engine executable, which is renamed after the project (`My Game.exe`).
+Packaged editors use their bundled runtime; development runs choose one as above. The engine mounts the
+staged package before publishing. See [game packages](../../docs/topics/GamePackages.md).
 
 The opt-in docking graphics experiment runs for about 48 seconds after startup:
 `gradlew.bat run --args=--docking-feasibility-smoke` measures CPU image transport;

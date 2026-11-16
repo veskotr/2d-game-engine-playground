@@ -16,6 +16,8 @@ internal object NativeEngine {
     }
 
     external fun prepareProject(path: ByteArray): ByteArray
+    // config.json of a built game; same result shape and release as prepareProject.
+    external fun prepareGame(path: ByteArray): ByteArray
     external fun releaseProject(handle: Long)
     external fun startProject(session: Long, handle: Long)
     external fun create(): Long
@@ -26,6 +28,7 @@ internal object NativeEngine {
     external fun previewCamera(session: Long, zoom: Float, fit: Boolean)
     external fun enableAudio(session: Long)
     external fun componentCatalog(): String
+    external fun engineVersion(): String
     external fun validatePrefab(source: ByteArray)
     external fun canonicalPrefab(source: ByteArray): ByteArray
     external fun canonicalScene(source: ByteArray): ByteArray

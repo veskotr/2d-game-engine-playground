@@ -249,7 +249,8 @@ separately configured Release build tree. Export does not compile or download
 anything. Debug runtimes cannot be distributed through this workflow.
 
 Choose **File → Export Game…**, select that prepared runtime folder, then choose a
-**new** delivery folder outside the source project and runtime bundle. The second
+**new** delivery folder outside the source project and runtime bundle. A packaged
+Windows editor ships this runtime and skips the first chooser. The output
 chooser states that export uses saved files: unsaved scene/prefab drafts are kept
 in the editor and excluded from the game. Select a startup scene in Project
 Settings and save your intended changes before exporting. Export runs on a worker
@@ -303,7 +304,11 @@ The bundle includes app-local Release MSVC libraries and engine resources. It
 expects Windows 10 or later and a compatible OpenGL driver. Relocation and source
 independence are tested locally; a separate clean-machine deployment test remains
 necessary for any wider platform support claim. Installers, encrypted archives,
-asset pruning, content streaming and multiple runtime packs are future formats.
+asset pruning and content streaming are future formats.
+
+**File → Build Game…** produces the packaged alternative: the same runtime with
+`config.json` and a `game.slepkg` holding the assets, scenes and main scene. See
+[game packages](GamePackages.md).
 
 ## Validation
 

@@ -44,6 +44,7 @@ not proof of completion.
 | Docking, tool windows and layout recovery | [Editor workspace](topics/EditorWorkspace.md) |
 | Editor UI design system (Little Forest) | [UI design](../tools/entity-editor/UI_DESIGN.md), [adding UI features](../tools/entity-editor/HOW_TO_ADD_UI_FEATURES.md) |
 | Project folders and editor project settings | [Projects](topics/Projects.md) |
+| Built games: `.slepkg` packages and `config.json` | [Game packages](topics/GamePackages.md) |
 | Scripting and Lua | `topics/Scripting.md` |
 | Rendering | `topics/Rendering.md` |
 | Events | `topics/Events.md` |

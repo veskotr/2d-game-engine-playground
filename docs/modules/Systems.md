@@ -138,6 +138,13 @@ unique disposable `.sle/runtime` folders. No lower module depends on Systems and
 native launch does not assign metadata or rewrite source files. See
 [projects](../topics/Projects.md#run-the-whole-project).
 
+`ProjectRuntime::openPackages` mounts ordered `.slepkg` game packages into the
+same resolver as several asset roots. `GameConfig` loads `engine.json` /
+`config.json`, either with scene lists or with a `packages` list. Package
+archives share the STORED ZIP reader (`src/StoredZip.*`) with prefab packages,
+and `src/GamePackage.*` unpacks them into a verified content-keyed cache. See
+[game packages](../topics/GamePackages.md).
+
 Scene/Project Play passes `allowDebugInput=false` so Game F3 cannot toggle the
 editor debug HUD. The default remains true for Sandbox/legacy hosted callers;
 standalone input policy is unchanged. Docking and presenter lifetime are editor

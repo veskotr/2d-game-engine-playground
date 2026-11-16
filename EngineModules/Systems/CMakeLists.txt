@@ -8,6 +8,9 @@ add_library(sle_engine STATIC
     src/ScriptApiImplComponents.cpp
     src/ScriptApiImplGameplay.cpp
     src/ProjectRuntime.cpp
+    src/GameConfig.cpp
+    src/GamePackage.cpp
+    src/StoredZip.cpp
     src/RuntimeLua.cpp
     src/ChunkActivationController.cpp
     src/ChunkActivityTracker.cpp

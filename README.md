@@ -72,6 +72,8 @@ Use `--frames N` for a bounded diagnostic run.
 To distribute a saved project, build the `sle_runtime_bundle` target in Release
 and use the editor's **File → Export Game…**. The exported executable discovers
 its adjacent game data. See [runnable export](docs/topics/Projects.md#export-a-runnable-game).
+**File → Build Game…** instead packs the content into `game.slepkg` beside a
+`config.json` engine config; see [game packages](docs/topics/GamePackages.md).
 
 The default [`engine.json`](engine.json) starts `assets/scenes/npc_zone_demo.json`.
 

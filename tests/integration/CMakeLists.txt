@@ -591,3 +591,19 @@ add_test(NAME integration_distribution_launch_path
         -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/systems/integration_distribution_launch_path.cmake)
 set_tests_properties(integration_distribution_launch_path PROPERTIES LABELS "integration;systems")
+
+sle_add_integration_test(
+    integration_game_package_path
+    systems/integration_game_package_path.cpp
+    systems
+    LINK_LIBS sle::engine
+)
+foreach(mode IN ITEMS discovery launch)
+    add_test(NAME integration_package_${mode}_path
+        COMMAND ${CMAKE_COMMAND} -DENGINE_APP=$<TARGET_FILE:engine_app>
+            -DFIXTURE=$<TARGET_FILE:integration_game_package_path>
+            -DSOURCE_ROOT=${PROJECT_SOURCE_DIR} -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR} -DMODE=${mode}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/systems/integration_package_launch_path.cmake)
+endforeach()
+set_tests_properties(integration_package_discovery_path PROPERTIES LABELS "integration;systems")
+set_tests_properties(integration_package_launch_path PROPERTIES LABELS "integration;systems;windowed")

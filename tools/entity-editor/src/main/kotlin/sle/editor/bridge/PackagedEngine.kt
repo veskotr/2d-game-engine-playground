@@ -18,6 +18,14 @@ internal object PackagedEngine {
         get() = resources?.resolve(if (windows) "sle_editor_native.dll" else "libsle_editor_native.so")?.takeIf { it.isFile }
 
     /**
+     * Prebuilt standalone runtime (engine executable, DLLs, engine assets) shipped with packaged
+     * editors. Build/Export Game copy it next to the game data; no compiler is ever needed.
+     * Development runs have none and choose a `sle_runtime_bundle` output instead.
+     */
+    val runtimeBundle: File?
+        get() = resources?.resolve("runtime")?.takeIf { it.resolve("sle-runtime.json").isFile }
+
+    /**
      * The engine resolves `assets/...` against the process working directory. A packaged editor
      * launched from elsewhere moves the process there; Java's cached `user.dir` is unaffected.
      */

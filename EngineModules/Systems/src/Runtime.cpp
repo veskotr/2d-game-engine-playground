@@ -94,7 +94,9 @@ namespace sle
             config=project.engineConfig();config.engineAssetRoot=engineAssets;
             projectContext=std::make_shared<ProjectRuntime>(project);
             projectContext->registerScenes(*this);
-            scriptEngine.prependModulePaths({(project.assetRoot()/"Scripts").generic_string(),project.assetRoot().generic_string()});
+            std::vector<std::string> modulePaths;
+            for (const auto& root : project.assetRoots()) { modulePaths.push_back((root/"Scripts").generic_string());modulePaths.push_back(root.generic_string()); }
+            scriptEngine.prependModulePaths(modulePaths);
             camera.setViewport(static_cast<float>(config.width),static_cast<float>(config.height));
             const auto loaded=loadScene(project.startupScene());
             if (!loaded.ok()) return loaded;

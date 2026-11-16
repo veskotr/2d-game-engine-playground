@@ -2,6 +2,8 @@
 #include <jni.h>
 #include <sle/engine/Runtime.hpp>
 #include <sle/engine/ProjectRuntime.hpp>
+#include <sle/engine/GameConfig.hpp>
+#include <sle/core/Version.hpp>
 #include <map>
 #include <sle/engine/EntityAuthoring.hpp>
 #include <sle/engine/SceneAuthoring.hpp>
@@ -78,6 +80,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_sle_editor_bridge_NativeEngine_compone
     jstring result = nullptr;
     guarded(env, [&] { result = env->NewStringUTF(sle::EntityAuthoring::componentCatalog().dump().c_str()); });
     return result;
+}
+
+// Version of the engine compiled into this bridge (and of its matching runtime bundle).
+extern "C" JNIEXPORT jstring JNICALL Java_sle_editor_bridge_NativeEngine_engineVersion(JNIEnv* env, jobject)
+{
+    return env->NewStringUTF(sle::core::EngineVersion::text);
 }
 
 extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_validatePrefab(JNIEnv* env, jobject, jbyteArray source)
@@ -380,15 +388,15 @@ namespace {
 std::mutex preparedMutex;
 std::map<jlong,std::shared_ptr<sle::ProjectRuntime>> preparedProjects;
 jlong nextPrepared=1;
-}
-extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_prepareProject(JNIEnv* env,jobject,jbyteArray source) {
+template<class Open>
+jbyteArray prepare(JNIEnv* env,jbyteArray source,const Open& open) {
     jbyteArray result=nullptr;
     try {
         if(!source) throw std::runtime_error("Missing project descriptor path");
         std::string path(static_cast<std::size_t>(env->GetArrayLength(source)),'\0');
         env->GetByteArrayRegion(source,0,static_cast<jsize>(path.size()),reinterpret_cast<jbyte*>(path.data()));
         if(env->ExceptionCheck()) return nullptr;
-        auto opened=sle::ProjectRuntime::open(std::filesystem::u8path(path));
+        auto opened=open(std::filesystem::u8path(path));
         if(!opened.ok()) throw std::runtime_error(opened.error());
         auto project=std::make_shared<sle::ProjectRuntime>(std::move(opened.value()));
         const auto& config=project->engineConfig();
@@ -402,6 +410,20 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_prep
         }
     } catch(const std::exception& error) { fail(env,error.what()); }
     return result;
+}
+}
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_prepareProject(JNIEnv* env,jobject,jbyteArray source) {
+    return prepare(env,source,[](const std::filesystem::path& path) { return sle::ProjectRuntime::open(path); });
+}
+// A built game's config.json and its .slepkg packages, mounted exactly as engine_app does.
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_prepareGame(JNIEnv* env,jobject,jbyteArray source) {
+    return prepare(env,source,[](const std::filesystem::path& path) {
+        using Result=sle::core::Result<sle::ProjectRuntime>;
+        const auto config=sle::GameConfig::load(path);
+        if(!config.ok()) return Result::error(config.error());
+        if(config.value().packages.empty()) return Result::error("Game config lists no packages");
+        return sle::ProjectRuntime::openPackages(config.value().packages,config.value().engine);
+    });
 }
 extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_releaseProject(JNIEnv* env,jobject,jlong handle) {
     try { std::lock_guard lock(preparedMutex);preparedProjects.erase(handle); }

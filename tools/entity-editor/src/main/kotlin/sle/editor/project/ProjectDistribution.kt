@@ -8,8 +8,8 @@ import java.security.MessageDigest
 
 /** Saved-source delivery. No scanner: export must never create metadata in the source. */
 internal object ProjectDistribution {
-    private data class Inventory(val folders: List<String>,val files: Map<String,String>)
-    private fun hash(path: Path): String {
+    internal data class Inventory(val folders: List<String>,val files: Map<String,String>)
+    internal fun hash(path: Path): String {
         val digest=MessageDigest.getInstance("SHA-256")
         Files.newInputStream(path).use { stream ->
             val buffer=ByteArray(128*1024)
@@ -17,7 +17,7 @@ internal object ProjectDistribution {
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
-    private fun inventory(root: Path): Inventory {
+    internal fun inventory(root: Path): Inventory {
         val folders=mutableListOf<String>();val files=sortedMapOf<String,String>();val names=mutableSetOf<String>()
         Files.walkFileTree(root,object: SimpleFileVisitor<Path>() {
             private fun checked(path: Path): String {
@@ -38,12 +38,12 @@ internal object ProjectDistribution {
         })
         return Inventory(folders.sorted(),files)
     }
-    private fun copy(root: Path,to: Path,inventory: Inventory) {
+    internal fun copy(root: Path,to: Path,inventory: Inventory) {
         Files.createDirectories(to)
         inventory.folders.sortedBy { it.count { c -> c=='/' } }.forEach { Files.createDirectory(to.resolve(it)) }
         inventory.files.keys.forEach { Files.copy(root.resolve(it),to.resolve(it)) }
     }
-    private fun identities(root: Path,inventory: Inventory) {
+    internal fun identities(root: Path,inventory: Inventory) {
         val ids=mutableSetOf<String>()
         for(relative in inventory.files.keys) {
             val path=root.resolve(relative)
@@ -54,6 +54,20 @@ internal object ProjectDistribution {
                 require(ids.add(AssetIdentity.read(AssetIdentity.sidecar(path)))) { "Duplicate asset UUID: $relative" }
             }
         }
+    }
+    /** Complete, unmodified Windows x64 Release bundle produced by sle_runtime_bundle. */
+    internal fun runtimeInventory(runtime: Path): Inventory {
+        val runtimeFiles=inventory(runtime)
+        val manifest=Json.parseToJsonElement(Files.readString(runtime.resolve("sle-runtime.json"))).jsonObject
+        require(manifest["format"]==JsonPrimitive("sle-runtime") && manifest["version"]==JsonPrimitive(1) &&
+            manifest["platform"]==JsonPrimitive("windows-x64") && manifest["configuration"]==JsonPrimitive("Release") &&
+            manifest["executable"]==JsonPrimitive("engine_app.exe")) { "Select a Windows x64 Release SLE runtime bundle" }
+        val expected=manifest.getValue("files").jsonObject.mapValues { (_,value) -> value.jsonPrimitive.content }
+        require(expected==runtimeFiles.files-"sle-runtime.json") { "Runtime bundle files are missing, modified or unexpected; rebuild sle_runtime_bundle" }
+        require("engine_app.exe" in runtimeFiles.files && runtimeFiles.files.keys.any { it.startsWith("assets/shaders/") }) { "Runtime executable/resources are missing" }
+        require(runtimeFiles.files.keys.none { it.substringBefore('/').equals("game",true) || it.substringBefore('/').equals(".sle",true) ||
+            it.equals("sle-distribution.json",true) || it.equals("config.json",true) || it.endsWith(".slepkg",true) }) { "Select a runtime bundle, not an exported game" }
+        return runtimeFiles
     }
     fun export(project: OpenedProject,runtimeBundle: Path,destination: Path,validate: (Path)->Unit): Path {
         val source=ProjectFiles.open(project.file)
@@ -68,15 +82,7 @@ internal object ProjectDistribution {
         val sourceRoot=source.root.toRealPath()
         require(!target.startsWith(sourceRoot) && !sourceRoot.startsWith(target) && !target.startsWith(runtime) && !runtime.startsWith(target)) { "Export outside the source project and runtime bundle" }
         require(!Files.exists(target,LinkOption.NOFOLLOW_LINKS)) { "Export destination already exists; choose a new folder" }
-        val runtimeFiles=inventory(runtime)
-        val manifest=Json.parseToJsonElement(Files.readString(runtime.resolve("sle-runtime.json"))).jsonObject
-        require(manifest["format"]==JsonPrimitive("sle-runtime") && manifest["version"]==JsonPrimitive(1) &&
-            manifest["platform"]==JsonPrimitive("windows-x64") && manifest["configuration"]==JsonPrimitive("Release") &&
-            manifest["executable"]==JsonPrimitive("engine_app.exe")) { "Select a Windows x64 Release SLE runtime bundle" }
-        val expected=manifest.getValue("files").jsonObject.mapValues { (_,value) -> value.jsonPrimitive.content }
-        require(expected==runtimeFiles.files-"sle-runtime.json") { "Runtime bundle files are missing, modified or unexpected; rebuild sle_runtime_bundle" }
-        require("engine_app.exe" in runtimeFiles.files && runtimeFiles.files.keys.any { it.startsWith("assets/shaders/") }) { "Runtime executable/resources are missing" }
-        require(runtimeFiles.files.keys.none { it.substringBefore('/').equals("game",true) || it.substringBefore('/').equals(".sle",true) || it.equals("sle-distribution.json",true) }) { "Select a runtime bundle, not an exported game" }
+        val runtimeFiles=runtimeInventory(runtime)
         val assetFiles=inventory(assets);identities(assets,assetFiles)
         val stage=Files.createTempDirectory(target.parent,".sle-export-")
         try {
@@ -104,7 +110,7 @@ internal object ProjectDistribution {
             return target.resolve("game/game.sleproject")
         } finally { removeTree(stage) }
     }
-    private fun removeTree(root: Path) {
+    internal fun removeTree(root: Path) {
         if(!Files.exists(root,LinkOption.NOFOLLOW_LINKS)) return
         Files.walkFileTree(root,object: SimpleFileVisitor<Path>() {
             override fun visitFile(file: Path,attrs: BasicFileAttributes): FileVisitResult { Files.delete(file);return FileVisitResult.CONTINUE }

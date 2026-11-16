@@ -396,7 +396,8 @@ void renderElement(
     float rotation,
     uint32_t shaderID,
     bool yAxisDown,
-    std::vector<HitTarget>& hitTargets)
+    std::vector<HitTarget>& hitTargets,
+    bool submitGeometry)
 {
     const glm::vec2 size{
         parseFloat(element, "width", element.type == "Label" ? 0.0f : 100.0f) * scaleFactor,
@@ -442,7 +443,7 @@ void renderElement(
     const glm::vec2 anchoredRenderPos = renderPosition + anchorOffset;
     const glm::vec2 layoutTopLeft = anchoredRenderPos + glm::vec2{0.0f, size.y};
 
-    if (size.x > 0.0f && size.y > 0.0f && element.type != "Label")
+    if (submitGeometry && size.x > 0.0f && size.y > 0.0f && element.type != "Label")
     {
         renderer::QuadCommand cmd;
         cmd.modelMatrix = buildQuadModel(documentPivot, anchoredRenderPos, size, rotation);
@@ -455,7 +456,7 @@ void renderElement(
     }
 
     const std::string text = !element.resolvedText.empty() ? element.resolvedText : element.text;
-    if (!text.empty() && document.getFontResource())
+    if (submitGeometry && !text.empty() && document.getFontResource())
     {
         auto& font = *document.getFontResource();
         const float requestedFontSize = parseFloat(element, "fontSize", font.getPixelHeight());
@@ -555,7 +556,7 @@ void renderElement(
 
     const bool childLayoutYAxisDown = (size.x > 0.0f || size.y > 0.0f) ? true : yAxisDown;
     for (const auto& child : element.children)
-        renderElement(ctx, document, child, documentPivot, layoutTopLeft, scaleFactor, rotation, shaderID, childLayoutYAxisDown, hitTargets);
+        renderElement(ctx, document, child, documentPivot, layoutTopLeft, scaleFactor, rotation, shaderID, childLayoutYAxisDown, hitTargets, submitGeometry);
 }
 
 void dispatchClick(
@@ -618,7 +619,7 @@ void UISystem::shutdown()
     initialized = false;
 }
 
-void UISystem::update(UIFrameContext& ctx)
+void UISystem::update(UIFrameContext& ctx, bool submitGeometry)
 {
     if (!initialized)
         return;
@@ -631,7 +632,7 @@ void UISystem::update(UIFrameContext& ctx)
         if (!dirtyKeys.empty())
             document.refreshBindings();
 
-        submitDocument(ctx, document);
+        submitDocument(ctx, document, true, submitGeometry);
     }
 
     for (auto& [_, document] : entityDocuments)
@@ -642,7 +643,7 @@ void UISystem::update(UIFrameContext& ctx)
         if (!dirtyKeys.empty())
             document.refreshBindings();
 
-        submitDocument(ctx, document);
+        submitDocument(ctx, document, true, submitGeometry);
     }
 }
 
@@ -798,7 +799,7 @@ bool UISystem::parseDocumentLayout(UIDocument& document)
     return true;
 }
 
-void UISystem::submitDocument(UIFrameContext& ctx, UIDocument& document, bool interactive)
+void UISystem::submitDocument(UIFrameContext& ctx, UIDocument& document, bool interactive, bool submitGeometry)
 {
     if (document.getDescriptor().ownerEntityId != 0 &&
         !sle::entity::isChunkActive(ctx.registry, sle::entity::Entity(document.getDescriptor().ownerEntityId),
@@ -836,7 +837,7 @@ void UISystem::submitDocument(UIFrameContext& ctx, UIDocument& document, bool in
 
     std::vector<HitTarget> hitTargets;
     hitTargets.reserve(16);
-    renderElement(ctx, document, *document.getLayoutRoot(), basePosition, basePosition, scaleFactor, rotation, defaultShaderID, yAxisDown, hitTargets);
+    renderElement(ctx, document, *document.getLayoutRoot(), basePosition, basePosition, scaleFactor, rotation, defaultShaderID, yAxisDown, hitTargets, submitGeometry);
 
     if (interactive) {
         const auto world=mouseToWorldUiPoint(ctx.camera)-basePosition;

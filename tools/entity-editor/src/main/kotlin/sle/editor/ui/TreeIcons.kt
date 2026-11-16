@@ -32,6 +32,14 @@ internal fun TreeIcon(kind: String) {
     Canvas(Modifier.size(16.dp).semantics { contentDescription=kind }) {
         val w=size.width;val h=size.height;val stroke=Stroke(1.2.dp.toPx())
         when(kind) {
+            "Folder" -> {
+                drawRect(color,Offset(.1f*w,.32f*h),Size(.8f*w,.52f*h),style=stroke)
+                drawLine(color,Offset(.1f*w,.32f*h),Offset(.1f*w,.16f*h),stroke.width)
+                drawLine(color,Offset(.1f*w,.16f*h),Offset(.45f*w,.16f*h),stroke.width)
+                drawLine(color,Offset(.45f*w,.16f*h),Offset(.58f*w,.32f*h),stroke.width)
+            }
+            "File" -> { drawRect(color,Offset(.23f*w,.1f*h),Size(.55f*w,.8f*h),style=stroke);drawLine(color,Offset(.35f*w,.4f*h),Offset(.65f*w,.4f*h),stroke.width);drawLine(color,Offset(.35f*w,.6f*h),Offset(.65f*w,.6f*h),stroke.width) }
+            "Link" -> { drawCircle(color,.22f*w,Offset(.38f*w,.38f*h),style=stroke);drawCircle(color,.22f*w,Offset(.62f*w,.62f*h),style=stroke) }
             "Camera" -> { drawRect(color,Offset(.1f*w,.3f*h),Size(.8f*w,.55f*h),style=stroke);drawCircle(color,.16f*w,Offset(.55f*w,.57f*h),style=stroke);drawLine(color,Offset(.3f*w,.18f*h),Offset(.65f*w,.18f*h),stroke.width) }
             "Scene" -> { drawRect(color,Offset(.12f*w,.12f*h),Size(.76f*w,.76f*h),style=stroke);for(y in listOf(.35f,.6f)) drawLine(color,Offset(.28f*w,y*h),Offset(.72f*w,y*h),stroke.width) }
             else -> { drawRect(color,Offset(.18f*w,.18f*h),Size(.64f*w,.64f*h),style=stroke);drawLine(color,Offset(.18f*w,.4f*h),Offset(.82f*w,.4f*h),stroke.width);drawLine(color,Offset(.4f*w,.4f*h),Offset(.4f*w,.82f*h),stroke.width) }

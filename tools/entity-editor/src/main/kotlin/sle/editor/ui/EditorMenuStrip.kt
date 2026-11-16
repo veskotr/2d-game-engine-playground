@@ -97,14 +97,14 @@ internal fun editorApplicationMenus(
     scene: SceneWorkspaceState?,entity: EntityWorkspaceState?,prefab: EntityWorkspaceState?,
     entityMode: Boolean,linked: Boolean,editable: Boolean,
     onScene: (Boolean)->Unit,onEntity: (String?)->Unit,onFit: ()->Unit,
-    onScale: (Float)->Unit,onExit: ()->Unit,
+    onScale: (Float)->Unit,onExit: ()->Unit,projectEntries: List<EditorMenuEntry> = emptyList(),assetEntries: List<EditorMenuEntry> = emptyList(),projectAssets: sle.editor.project.assets.ProjectAssetCommands?=null,projectDocuments: sle.editor.project.ProjectDocumentCommands?=null,
 ): List<Pair<String,List<EditorMenuEntry>>> {
     fun attempt(action: ()->Unit) { try { action() } catch(failure: Exception) { if(entityMode && !linked) entity?.error=failure.message else scene?.error=failure.message } }
     val sceneDocument=!entityMode || linked
     fun save(saveAs: Boolean) { if(sceneDocument) scene?.let { sceneFileAction(it,true,saveAs) } else entity?.let { entityFileAction(it,true,saveAs) } }
-    val creation=if(entityMode) entity?.let { entityCreationMenu(it,linked) } ?: emptyList() else scene?.let { sceneCreationMenu(it,editable) { key -> onEntity(key) } } ?: emptyList()
+    val creation=if(entityMode) entity?.let { entityCreationMenu(it,linked,projectAssets) } ?: emptyList() else scene?.let { sceneCreationMenu(it,editable) { key -> onEntity(key) } } ?: emptyList()
     return listOf(
-        "File" to listOf(
+        "File" to projectEntries + listOf(
             EditorMenuEntry("New",editable,listOf(
                 EditorMenuEntry("Scene") { scene?.let { if(confirmDiscardScene(it)) { it.newScene();onScene(false) } } },
                 EditorMenuEntry("Prefab") { prefab?.let { if(confirmDiscard(it)) { it.newDocument();onEntity(null) } } },
@@ -115,6 +115,7 @@ internal fun editorApplicationMenus(
             )),
             EditorMenuEntry("Save",editable && (!entityMode || entity!=null)) { save(false) },
             EditorMenuEntry("Save As…",editable && (!entityMode || entity!=null)) { save(true) },
+            EditorMenuEntry("Export Package…",editable && projectDocuments!=null) { projectDocuments?.exportPackage(if(sceneDocument) sle.editor.project.ProjectDocumentKind.Scene else sle.editor.project.ProjectDocumentKind.Prefab) },
             EditorMenuEntry("Exit",action=onExit),
         ),
         "Edit" to listOf(
@@ -132,7 +133,7 @@ internal fun editorApplicationMenus(
             EditorMenuEntry("Prefab Workspace",editable) { onEntity(null) },
             EditorMenuEntry("Fit",editable,action=onFit),
             EditorMenuEntry("UI Scale",children=listOf(0.75f,0.85f,1f).map { scale -> EditorMenuEntry("${(scale*100).toInt()}%") { onScale(scale) } }),
-        ),
+        ) + assetEntries,
         "Help" to listOf(
             EditorMenuEntry("Controls…") { JOptionPane.showMessageDialog(null,"Scene: middle-drag or Alt+left-drag to pan; wheel to zoom.\nRight-click an entity and choose Edit for component editing.\nDrag handles to edit; Shift snaps; Escape cancels.\nCtrl+Z / Ctrl+Y undo and redo entity edits.\nGame shows the active camera. Play runs the scene; Pause freezes it.\nStop discards runtime changes. Click Game to focus input.","Editor Controls",JOptionPane.INFORMATION_MESSAGE) },
             EditorMenuEntry("About SLE Editor…") { JOptionPane.showMessageDialog(null,"SLE Editor\nKotlin Compose Desktop · SLE native renderer\nScene and prefab authoring", "About",JOptionPane.INFORMATION_MESSAGE) },

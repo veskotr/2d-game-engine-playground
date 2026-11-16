@@ -44,3 +44,10 @@ ScriptEngine owns entity+attachment-key instances with independent named Lua
 environments and generation-scoped event references. Legacy primary scripts retain
 their shared-global compatibility. See [behaviours](../topics/Behaviours.md) for
 update order and [prefabs](../topics/Prefabs.md) for Lua instantiation.
+
+
+The host can prepend Lua module roots through `ScriptEngine::prependModulePaths`.
+Systems uses this for project Scripts/asset-root `require` patterns before gameplay
+starts. Existing Lua search paths remain afterward; scene switches keep the same
+VM/module cache. The project context resolves dynamic engine asset arguments;
+raw Lua IO keeps ordinary Lua semantics. See [projects](../topics/Projects.md).

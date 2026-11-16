@@ -1,6 +1,7 @@
 package sle.editor.model
 
 import sle.editor.viewport.Playback
+import sle.editor.project.PreparedProject
 
 import androidx.compose.runtime.*
 
@@ -10,6 +11,12 @@ internal class ScenePlaybackState(private val canonicalize: (String)->String = :
         private set
     var source by mutableStateOf<String?>(null)
         private set
+    var project by mutableStateOf<PreparedProject?>(null)
+        private set
+    fun playProject(value: PreparedProject) {
+        require(editing) { "Stop playback before launching a project" }
+        project=value;source=value.source;gameView=true;playback=Playback.Running
+    }
     var gameView by mutableStateOf(false)
     val editing get() = playback==Playback.Stopped
     fun play(scene: SceneWorkspaceState) {
@@ -23,5 +30,5 @@ internal class ScenePlaybackState(private val canonicalize: (String)->String = :
         playback=Playback.Running
     }
     fun pause() { if(playback==Playback.Running) playback=Playback.Paused }
-    fun stop() { playback=Playback.Stopped;source=null;gameView=false }
+    fun stop() { playback=Playback.Stopped;source=null;project=null;gameView=false }
 }

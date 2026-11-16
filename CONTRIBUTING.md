@@ -63,3 +63,17 @@ by hand; see [scripting guidance](EngineModules/Scripting/AGENTS.md).
 Release tests must execute setup and verification independently of `assert` or
 `NDEBUG`. The audio Lua API regression uses explicit failure exit codes in every
 configuration.
+
+For distribution changes, build the Windows Release bundle before the editor's
+export regression:
+
+```powershell
+cmake --build build/debug --config Release --target sle_runtime_bundle --parallel 4
+cd tools/entity-editor
+./gradlew.bat build run --args=--project-distribution-smoke
+```
+
+The smoke launches the copied Release executable after relocation, without an
+explicit config/project and from an unrelated cwd. Native launcher discovery and
+explicit-config precedence also have `integration_distribution_launch_path`
+CTest coverage; build `engine_app` before running it.

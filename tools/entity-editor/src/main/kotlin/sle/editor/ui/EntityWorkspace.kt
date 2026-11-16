@@ -1,5 +1,6 @@
 package sle.editor.ui
 
+import sle.editor.project.assets.LocalProjectAssets
 import sle.editor.files.PrefabPackages
 import sle.editor.model.documentJson
 import sle.editor.files.chooseTexture
@@ -20,9 +21,10 @@ internal fun confirmDiscard(state: EntityWorkspaceState?): Boolean = state == nu
 
 @Composable
 internal fun EntityWorkspace(state: EntityWorkspaceState, embedded: Boolean = false) {
+    val projectAssets=LocalProjectAssets.current
     var assetsExpanded by remember { mutableStateOf(false) }
     var choosingComponent by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().editorContextMenu { entityCreationMenu(state,embedded) }, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxSize().editorContextMenu { entityCreationMenu(state,embedded,projectAssets) }, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         state.error?.let { Text(it, color = MaterialTheme.colors.error) }
         OutlinedTextField(state.document.name, { state.rename(it) },
             label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -75,6 +77,7 @@ internal fun EntityWorkspace(state: EntityWorkspaceState, embedded: Boolean = fa
 
 @Composable
 internal fun ComponentField(state: EntityWorkspaceState, component: String, path: List<String>, value: JsonElement, choices: JsonArray? = null) {
+    val projectAssets=LocalProjectAssets.current
     val label = path.joinToString(".")
     val id = component + "/" + path.joinToString("/")
     when {
@@ -88,13 +91,15 @@ internal fun ComponentField(state: EntityWorkspaceState, component: String, path
                     label = { Text(label) }, readOnly = importedName != null, singleLine = true, modifier = Modifier.weight(1f))
                 OutlinedButton(onClick = {
                     try {
-                        chooseTexture(display, component == "SpriteRenderer" && path.single() == "texture")?.let { selected ->
+                        if(projectAssets!=null) {
+                            projectAssets.browse(display,component=="SpriteRenderer" && path.single()=="texture",projectAssetSelection(state,component,path))
+                        } else chooseTexture(display, component == "SpriteRenderer" && path.single() == "texture")?.let { selected ->
                             state.setValue(component, path, JsonPrimitive(state.importAsset(selected).toString().replace('\\', '/')))
                         }
                     } catch (failure: Exception) {
                         state.error = failure.message ?: "Could not select asset"
                     }
-                }) { Text("Browse…") }
+                },enabled=projectAssets?.busy!=true) { Text("Browse…") }
             }
             if (display.isNotBlank()) TextButton(onClick = { state.setValue(component, path, JsonPrimitive("")) }) { Text("Clear asset") }
         }
@@ -130,5 +135,16 @@ internal fun ComponentField(state: EntityWorkspaceState, component: String, path
                 singleLine = !structured, modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp))
             if (id in state.fieldErrors) Text("Enter a valid ${if (structured) "JSON value" else "number"}.", color = MaterialTheme.colors.error, style = MaterialTheme.typography.caption)
         }
+    }
+}
+
+internal fun projectAssetSelection(state: EntityWorkspaceState,component: String,path: List<String>): (java.nio.file.Path)->Unit {
+    val original=state.document.components[component]?.jsonObject?.get(path.single())
+    val originalKey=state.document.key
+    val id=component+"/"+path.joinToString("/")
+    val originalDraft=state.drafts[id]
+    return { selected ->
+        if(state.document.key==originalKey && state.document.components[component]?.jsonObject?.get(path.single())==original && state.drafts[id]==originalDraft)
+            state.setValue(component,path,JsonPrimitive(selected.toString().replace('\\','/')))
     }
 }

@@ -14,9 +14,13 @@ internal object NativeEngine {
         System.load(library.absolutePath)
     }
 
+    external fun prepareProject(path: ByteArray): ByteArray
+    external fun releaseProject(handle: Long)
+    external fun startProject(session: Long, handle: Long)
     external fun create(): Long
     external fun loadPreview(session: Long, source: ByteArray, preserveView: Boolean = false)
     external fun previewView(session: Long): FloatArray
+    external fun gameCamera(session: Long): FloatArray
     external fun loadSandbox(session: Long)
     external fun previewCamera(session: Long, zoom: Float, fit: Boolean)
     external fun enableAudio(session: Long)
@@ -26,6 +30,10 @@ internal object NativeEngine {
     external fun canonicalScene(source: ByteArray): ByteArray
     external fun loadScenePreview(session: Long, source: ByteArray, preserveView: Boolean)
     external fun startScenePlay(session: Long, source: ByteArray)
+    // Owner frame: drain input and advance once, then draw zero or more views.
+    external fun advanceFrame(session: Long, dt: Float)
+    external fun drawEmbeddedFrame(session: Long, width: Int, height: Int)
+    external fun drawSceneView(session: Long, width: Int, height: Int, gameView: Boolean, fit: Boolean)
     external fun renderSceneView(session: Long, width: Int, height: Int, dt: Float, gameView: Boolean, playing: Boolean)
     external fun panPreview(session: Long, dx: Float, dy: Float)
     external fun sceneTransforms(session: Long): ByteArray

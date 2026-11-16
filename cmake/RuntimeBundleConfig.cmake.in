@@ -1,0 +1,5 @@
+set(MSVC_RUNTIME_FILES "@CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS@")
+set(DUMPBIN "@sle_compiler_directory@/dumpbin.exe")
+set(SOURCE_ROOT "@CMAKE_SOURCE_DIR@")
+set(DEPENDENCY_ROOT "@FETCHCONTENT_BASE_DIR@")
+include("@CMAKE_SOURCE_DIR@/cmake/BuildRuntimeBundle.cmake")

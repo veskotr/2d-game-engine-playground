@@ -2,6 +2,8 @@ package sle.editor.model
 
 import sle.editor.bridge.NativeEngine
 import sle.editor.files.PrefabPackages
+import sle.editor.project.OpenedProjectDocument
+import sle.editor.project.ProjectDocumentKind
 import sle.editor.viewport.Vec2
 
 import androidx.compose.runtime.*
@@ -15,6 +17,26 @@ internal fun canonicalSceneDocument(source: String): String =
 
 internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefinition>,
     private val canonicalize: (String) -> String = ::canonicalSceneDocument) {
+    var projectDocument by mutableStateOf<OpenedProjectDocument?>(null)
+        private set
+    var projectImportPrefab: ((Path)->Unit)? = null
+    var projectFileAction: ((Boolean,Boolean)->Boolean)? = null
+    fun openProject(opened: OpenedProjectDocument) {
+        require(opened.kind==ProjectDocumentKind.Scene) { "Select a project scene" }
+        openResolved(opened.source,opened.assets,opened.path)
+        projectDocument=opened
+    }
+    fun openResolved(source: String,imported: Map<Path,String>,path: Path) {
+        loadDocument(SceneDocument.parse(source),imported,path)
+        projectDocument=null
+    }
+    fun savedProject(opened: OpenedProjectDocument,source: String=serialize(),imported: Map<Path,String> = allAssets()) {
+        savedResolved(opened.path,source,imported);projectDocument=opened
+    }
+    fun savedResolved(path: Path,source: String=serialize(),imported: Map<Path,String> = allAssets()) {
+        val baseline=Saved(SceneDocument.parse(source),imported)
+        file=path;projectDocument=null;saved=baseline;error=null;message="Saved ${path.fileName}"
+    }
     var key by mutableStateOf(UUID.randomUUID().toString())
         private set
     var name by mutableStateOf("New Scene")
@@ -79,9 +101,14 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     }
     fun importPrefab(path: Path) {
         require(entities.size<MAX_SCENE_ENTITIES) { "Scene editor supports at most $MAX_SCENE_ENTITIES entities" }
+        projectImportPrefab?.let { it(path);return }
         val imported=EntityWorkspaceState(catalog).apply { open(path) }
-        val copy=copySceneEntity(imported.document,listOf(imported.document.key))
-        val state=EntityWorkspaceState(catalog).apply { resetTo(copy,imported.assets) }
+        insertPrefab(imported.document,imported.assets)
+    }
+    fun insertPrefab(document: EntityDocument,imported: Map<Path,String>) {
+        require(entities.size<MAX_SCENE_ENTITIES) { "Scene editor supports at most $MAX_SCENE_ENTITIES entities" }
+        val copy=copySceneEntity(document,listOf(document.key))
+        val state=EntityWorkspaceState(catalog).apply { resetTo(copy,imported) }
         change { entities=entities+state;selectedKey=copy.key }
     }
     private fun subtree(root: String): Set<String> {
@@ -162,12 +189,15 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     fun redoStructure() { if(future.isNotEmpty()) { val next=future.last();requireReferences(next.entities);selected?.cancelGesture();val current=structure();past=(past+current.copy(poseChanges=next.poseChanges,cameraChanges=next.cameraChanges)).takeLast(100);future=future.dropLast(1);restoreOperation(next) } }
     fun newScene() {
         selected?.cancelGesture();key=UUID.randomUUID().toString();name="New Scene";entities=emptyList();parents=emptyMap();selectedKey=null
-        extras=emptyMap();file=null;past=emptyList();future=emptyList();error=null;message=null;saved=snapshot()
+        extras=emptyMap();file=null;projectDocument=null;past=emptyList();future=emptyList();error=null;message=null;saved=snapshot()
     }
     fun open(path: Path) {
         val packet=if (path.toString().endsWith(".slescene",true)) PrefabPackages.openScene(path) else null
         val loaded=SceneDocument.parse(canonicalize(packet?.document?.toString() ?: Files.readString(path)))
-        val assets=packet?.assets ?: emptyMap()
+        loadDocument(loaded,packet?.assets ?: emptyMap(),path)
+        projectDocument=null
+    }
+    private fun loadDocument(loaded: SceneDocument,assets: Map<Path,String>,path: Path) {
         val used=mutableSetOf<Path>()
         val states=loaded.entities.map { entity ->
             val text=entity.serialize()
@@ -182,6 +212,6 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         require(entities.all { it.fieldErrors.isEmpty() }) { "Finish invalid fields in every entity before saving" }
         val source=canonicalize(serialize())
         PrefabPackages.saveScene(source,allAssets(),path) { canonicalize(it) }
-        file=path;saved=snapshot();error=null;message="Saved ${path.fileName}"
+        file=path;projectDocument=null;saved=snapshot();error=null;message="Saved ${path.fileName}"
     }
 }

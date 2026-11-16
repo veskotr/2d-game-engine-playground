@@ -7,6 +7,7 @@ add_library(sle_engine STATIC
     src/EntityPreviewSystem.cpp
     src/ScriptApiImplComponents.cpp
     src/ScriptApiImplGameplay.cpp
+    src/ProjectRuntime.cpp
     src/RuntimeLua.cpp
     src/ChunkActivationController.cpp
     src/ChunkActivityTracker.cpp

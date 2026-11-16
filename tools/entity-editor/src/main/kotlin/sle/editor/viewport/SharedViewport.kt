@@ -10,6 +10,7 @@ import androidx.compose.ui.awt.SwingPanel
 @Composable
 internal fun SharedViewport(
     modifier: Modifier,
+    engine: EditorEngineSession,
     mode: ViewportMode,
     document: String,
     playback: Playback,
@@ -18,6 +19,7 @@ internal fun SharedViewport(
     authoring: EntityWorkspaceState? = null,
     scene: SceneWorkspaceState? = null,
     gameView: Boolean = false,
+    project: sle.editor.project.PreparedProject? = null,
     onSceneError: (String)->Unit = {},
     onContextMenu: (Int,Int)->Unit = {_,_->},
     onCanvas: (EngineCanvas) -> Unit,
@@ -33,10 +35,12 @@ internal fun SharedViewport(
     SwingPanel(
         modifier=modifier,
         factory={
-            EngineCanvas(sandboxSmoke,{ frame,renderedMode -> frameHandler(frame,renderedMode) },
-                { failure -> failureHandler(failure) },{ text -> statusHandler(text) },previewSmoke).also { canvas ->
+            engine.onFrame={ frame,mode -> frameHandler(frame,mode) }
+            engine.onStatus={ statusHandler(it) };engine.onFailure={ failureHandler(it) }
+            engine.start()
+            EngineCanvas(engine).also { canvas ->
                 canvas.onContextMenu={x,y -> contextMenuHandler(x,y)}
-                canvas.setContent(mode,document,playback)
+                canvas.setProject(project);canvas.setContent(mode,document,playback)
                 canvas.setScene(scene)
                 canvas.setAuthoring(authoring)
                 canvas.setSceneView(gameView) { sceneErrorHandler(it) }
@@ -44,7 +48,7 @@ internal fun SharedViewport(
             }
         },
         update={ canvas ->
-            canvas.setContent(mode,document,playback);canvas.setScene(scene);canvas.setAuthoring(authoring)
+            canvas.setProject(project);canvas.setContent(mode,document,playback);canvas.setScene(scene);canvas.setAuthoring(authoring)
             canvas.setSceneView(gameView) { sceneErrorHandler(it) }
         },
     )

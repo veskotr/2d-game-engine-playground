@@ -41,6 +41,8 @@ not proof of completion.
 | Prefab subtrees and overrides | [Prefabs](topics/Prefabs.md) |
 | Portable prefab packages and bundled assets | [Prefab packages](topics/PrefabPackages.md) |
 | Scene editor and self-contained scene packages | [Scene editor](topics/SceneEditor.md) |
+| Docking, tool windows and layout recovery | [Editor workspace](topics/EditorWorkspace.md) |
+| Project folders and editor project settings | [Projects](topics/Projects.md) |
 | Scripting and Lua | `topics/Scripting.md` |
 | Rendering | `topics/Rendering.md` |
 | Events | `topics/Events.md` |

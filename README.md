@@ -65,6 +65,14 @@ From the repository root:
 build/debug/engine_app/Debug/engine_app.exe
 ```
 
+For a folder project, pass `--project path/to/Game.sleproject`. Project settings
+select the startup scene and game window; UUID assets resolve independently of
+the working directory. See [projects](docs/topics/Projects.md#run-the-whole-project).
+Use `--frames N` for a bounded diagnostic run.
+To distribute a saved project, build the `sle_runtime_bundle` target in Release
+and use the editor's **File → Export Game…**. The exported executable discovers
+its adjacent game data. See [runnable export](docs/topics/Projects.md#export-a-runnable-game).
+
 The default [`engine.json`](engine.json) starts `assets/scenes/npc_zone_demo.json`.
 
 ## Run Tests

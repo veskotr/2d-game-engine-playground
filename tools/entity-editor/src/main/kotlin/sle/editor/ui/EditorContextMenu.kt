@@ -118,7 +118,7 @@ private fun componentGroup(type: String): String = when {
     else -> "Other"
 }
 
-internal fun entityCreationMenu(state: EntityWorkspaceState, embedded: Boolean = false): List<EditorMenuEntry> {
+internal fun entityCreationMenu(state: EntityWorkspaceState, embedded: Boolean = false, projectAssets: sle.editor.project.assets.ProjectAssetCommands?=null): List<EditorMenuEntry> {
     fun attempt(action: () -> Unit) {
         try { state.endGesture(); action() } catch (failure: Exception) { state.error = failure.message ?: "Operation failed" }
     }
@@ -135,9 +135,11 @@ internal fun entityCreationMenu(state: EntityWorkspaceState, embedded: Boolean =
     return buildList {
         add(EditorMenuEntry("Add Component", enabled = components.isNotEmpty(), children = components))
         add(EditorMenuEntry("Import", children = listOf(EditorMenuEntry("Assets…") {
+            if(projectAssets!=null) projectAssets.importFiles() else {
             val chooser = JFileChooser().apply { dialogTitle = "Import assets"; isMultiSelectionEnabled = true }
             if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION)
                 attempt { chooser.selectedFiles.forEach { state.importAsset(it.toPath()) } }
+            }
         })))
         if (!embedded) add(EditorMenuEntry("New", children = listOf(EditorMenuEntry("Entity") {
             if (confirmDiscard(state)) state.newDocument()

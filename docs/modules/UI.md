@@ -44,3 +44,9 @@ XML-driven UI documents, layout parsing, bindings, and UI rendering support.
 UI without dispatching clicks or executing behavior chunks. Newly prepared
 behaviors are deferred until the next running `update()`. This lets the editor
 show a stopped/reset scene and resize a paused viewport without advancing scripts.
+
+`UISystem::update(ctx, false)` runs behavior preparation, bindings and click hit
+testing without submitting quad/text geometry. Runtime uses this once during
+embedded advance with the gameplay camera; each subsequent view uses
+`renderSnapshot()` without interaction. The default `update(ctx)` still combines
+interaction and geometry submission for standalone and other existing callers.

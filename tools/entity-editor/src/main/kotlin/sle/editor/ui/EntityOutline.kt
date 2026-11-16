@@ -14,9 +14,10 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun EntityOutline(state: EntityWorkspaceState,modifier: Modifier=Modifier) {
+    val projectAssets=sle.editor.project.assets.LocalProjectAssets.current
     val components=state.document.components.keys.toList()
     LaunchedEffect(components) { if(state.selectedComponent !in components) state.selectedComponent=null }
-    Column(modifier.editorContextMenu { entityCreationMenu(state) },verticalArrangement=Arrangement.spacedBy(6.dp)) {
+    Column(modifier.editorContextMenu { entityCreationMenu(state,projectAssets=projectAssets) },verticalArrangement=Arrangement.spacedBy(6.dp)) {
         Text("Entity",style=MaterialTheme.typography.subtitle1)
         Text(state.document.name.ifBlank { "(Unnamed entity)" })
         TextButton(onClick={state.selectedComponent=null}) { Text("All components") }

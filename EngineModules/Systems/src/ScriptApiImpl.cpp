@@ -252,7 +252,9 @@ void ScriptApiImpl::setCameraZoom(float zoom)
 
 uint32_t ScriptApiImpl::loadTexture(const std::string& assetPath)
 {
-    auto texture = sle::core::Resources::create<sle::renderer::Texture>(assetPath, assetPath);
+    const auto resolved=runtime.resolveProjectAsset(assetPath);
+    if (resolved.empty()) return 0;
+    auto texture = sle::core::Resources::create<sle::renderer::Texture>(resolved, resolved);
     if (!texture)
         return 0;
 
@@ -264,7 +266,9 @@ bool ScriptApiImpl::setSpriteTexture(sle::scripting::ScriptEntityRef entity, con
     if (!isEntityAlive(entity))
         return false;
 
-    auto texture = sle::core::Resources::create<sle::renderer::Texture>(assetPath, assetPath);
+    const auto resolved=runtime.resolveProjectAsset(assetPath);
+    if (resolved.empty()) return 0;
+    auto texture = sle::core::Resources::create<sle::renderer::Texture>(resolved, resolved);
     if (!texture)
         return false;
 
@@ -815,9 +819,11 @@ bool ScriptApiImpl::playAnimation(sle::scripting::ScriptEntityRef entity, const 
     if (!animator)
         return false;
 
-    if (!clipAsset.empty() && animator->clipAsset != clipAsset)
+    const auto resolved=runtime.resolveProjectAsset(clipAsset);
+    if (!clipAsset.empty() && resolved.empty()) return false;
+    if (!clipAsset.empty() && animator->clipAsset != resolved)
     {
-        animator->clipAsset = clipAsset;
+        animator->clipAsset = resolved;
         animator->clip.reset();
         animator->clipLoadAttempted = false;
     }
@@ -972,8 +978,11 @@ bool ScriptApiImpl::playSound(
         return false;
 
     // Only override the stored path when the caller provides one.
-    if (!assetPath.empty())
-        audio->assetPath = assetPath;
+    if (!assetPath.empty()) {
+        const auto resolved=runtime.resolveProjectAsset(assetPath);
+        if (resolved.empty()) return false;
+        audio->assetPath=resolved;
+    }
 
     if (audio->assetPath.empty())
         return false;

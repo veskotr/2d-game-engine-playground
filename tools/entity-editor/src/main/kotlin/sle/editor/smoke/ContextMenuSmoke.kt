@@ -15,7 +15,7 @@ import javax.swing.*
 
 internal suspend fun runContextMenuSmoke(
     window: Window,
-    canvas: EngineCanvas,
+    canvas: ()->EngineCanvas,
     scene: SceneWorkspaceState,
     bounds: Map<String, Rect>,
     inspectorBounds: () -> Rect?,
@@ -62,9 +62,9 @@ internal suspend fun runContextMenuSmoke(
         check((pixel shr 16 and 255)<90 && (pixel shr 8 and 255)<90 && (pixel and 255)<90) { "Menu bar filler does not match the dark surface" }
     }
     println("MENU_SMOKE_STAGE viewport")
-    val canvasOrigin=canvas.locationOnScreen
+    val canvasOrigin=canvas().locationOnScreen
     val originalCount=scene.entities.size
-    open(canvasOrigin.x+canvas.width-20,canvasOrigin.y+canvas.height-20)
+    open(canvasOrigin.x+canvas().width-20,canvasOrigin.y+canvas().height-20)
     check(scene.selectedKey==null) { "Empty viewport right-click did not select scene root" }
     choose("Create","Entity","At Scene Root")
     check(scene.entities.size==originalCount+1)
@@ -97,11 +97,11 @@ internal suspend fun runContextMenuSmoke(
     // Inspector is to the right of the native viewport; its header is a context target.
     await("Missing inspector bounds") { inspectorBounds()!=null }
     println("MENU_SMOKE_STAGE inspector")
-    open(canvas.locationOnScreen.x+canvas.width-20,canvas.locationOnScreen.y+canvas.height-20)
+    open(canvas().locationOnScreen.x+canvas().width-20,canvas().locationOnScreen.y+canvas().height-20)
     val state: EntityWorkspaceState=scene.entities.first { it.document.key==child }
     choose("Add Component","Physics","BoxCollider")
     check("BoxCollider" in state.document.components && state.selectedComponent=="BoxCollider")
-    open(canvas.locationOnScreen.x+canvas.width-20,canvas.locationOnScreen.y+canvas.height-20)
+    open(canvas().locationOnScreen.x+canvas().width-20,canvas().locationOnScreen.y+canvas().height-20)
     val add=popup()!!.components.filterIsInstance<JMenu>().single { it.text=="Add Component" }
     val physics=add.menuComponents.filterIsInstance<JMenu>().single { it.text=="Physics" }
     check(physics.menuComponents.filterIsInstance<JMenuItem>().none { it.text=="BoxCollider" })
@@ -122,19 +122,19 @@ internal suspend fun runContextMenuSmoke(
         delay(100)
     }
     clickShell("View");choose("Game")
-    await("Game tab not applied") { canvas.gameViewActive() }
+    await("Game tab not applied") { canvas().gameViewActive() }
     clickShell("SceneTab")
-    await("Scene tab not applied") { !canvas.gameViewActive() }
+    await("Scene tab not applied") { !canvas().gameViewActive() }
     clickShell("GameTab")
-    await("Game tab not applied") { canvas.gameViewActive() }
+    await("Game tab not applied") { canvas().gameViewActive() }
     clickShell("SceneTab")
     clickShell("View");choose("Prefab Workspace")
-    await("Prefab workspace not ready") { canvas.authoringReady() }
-    open(canvas.locationOnScreen.x+canvas.width-20,canvas.locationOnScreen.y+canvas.height-20)
+    await("Prefab workspace not ready") { canvas().authoringReady() }
+    open(canvas().locationOnScreen.x+canvas().width-20,canvas().locationOnScreen.y+canvas().height-20)
     check(popup()!!.components.filterIsInstance<JMenuItem>().any { it.text=="New" }) { "Prefab navigation retained the scene entity context" }
     MenuSelectionManager.defaultManager().clearSelectedPath()
     clickShell("View");choose("Scene")
-    await("Scene authoring not restored") { canvas.authoringReady() }
+    await("Scene authoring not restored") { canvas().authoringReady() }
     clickShell("File");choose("Save")
     check(!scene.dirty && scene.error==null) { "File menu failed to save scene: ${scene.error}" }
     clickShell("File")

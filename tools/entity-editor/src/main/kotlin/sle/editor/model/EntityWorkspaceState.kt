@@ -2,6 +2,8 @@ package sle.editor.model
 
 import sle.editor.bridge.NativeEngine
 import sle.editor.files.PrefabPackages
+import sle.editor.project.OpenedProjectDocument
+import sle.editor.project.ProjectDocumentKind
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,6 +13,28 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition>) {
+    var projectDocument by mutableStateOf<OpenedProjectDocument?>(null)
+        private set
+    // Installed by the project UI; standalone actions retain their existing behavior.
+    var projectFileAction: ((Boolean,Boolean)->Boolean)? = null
+    fun openProject(opened: OpenedProjectDocument) {
+        require(opened.kind==ProjectDocumentKind.Prefab) { "Select a project prefab" }
+        openResolved(opened.source,opened.assets,opened.path)
+        projectDocument=opened
+    }
+    fun openResolved(source: String,imported: Map<Path,String>,path: Path) {
+        val loaded=EntityDocument.parse(source)
+        resetTo(loaded,imported)
+        file=path;message="Opened ${path.fileName}"
+    }
+    fun savedProject(opened: OpenedProjectDocument,source: String=document.serialize(),imported: Map<Path,String> = assets) {
+        savedResolved(opened.path,source,imported);projectDocument=opened
+    }
+    fun savedResolved(path: Path,source: String=document.serialize(),imported: Map<Path,String> = assets) {
+        val baseline=EntityDocument.parse(source)
+        file=path;projectDocument=null;savedDocument=baseline;savedAssets=imported
+        error=null;message="Saved ${path.fileName}"
+    }
     var selectedTarget by mutableStateOf("Entity")
     var selectedComponent by mutableStateOf<String?>(null)
     var snap by mutableStateOf(false)
@@ -92,13 +116,14 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
 
     fun resetTo(value: EntityDocument, imported: Map<Path, String> = emptyMap()) {
         document=value; savedDocument=value; assets=imported; savedAssets=imported
-        file=null; clearDrafts(); resetHistory()
+        file=null; projectDocument=null; clearDrafts(); resetHistory()
     }
 
     fun newDocument() {
         document = freshDocument()
         savedDocument = document
         file = null
+        projectDocument = null
         assets = emptyMap()
         savedAssets = emptyMap()
         clearDrafts()
@@ -112,6 +137,7 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         document = loaded
         savedDocument = loaded
         file = path
+        projectDocument = null
         assets = opened?.assets ?: emptyMap()
         savedAssets = assets
         clearDrafts()
@@ -131,6 +157,7 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         savedDocument = document
         savedAssets = assets
         file = path
+        projectDocument = null
         message = "Saved $path"
         error = null
     }

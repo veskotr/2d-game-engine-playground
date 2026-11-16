@@ -90,13 +90,20 @@ Standalone `init()`/`run()` retain GLFW ownership. The optional Windows editor J
 target and setup are documented in [the editor README](../../tools/entity-editor/README.md).
 
 
-The editor's default hosted sandbox now uses `tickEmbeddedFrame()` to execute the
-same system pipeline as the standalone application. Input is supplied through
-Platform's host event methods, and `setEmbeddedPaused()` freezes gameplay and the
-audio engine. The render-only API remains for paused/stopped presentation. Stop
-recreates the Runtime rather than saving transient simulation state to authored
-assets. Hosted gameplay, UI and pause regressions are covered by
-`integration_runtime_embedded_play_path`.
+Embedded hosts can advance once with `advanceEmbeddedFrame(dt, allowDebugInput)` and draw multiple
+Scene/Game snapshots with `drawSceneView(width, height, gameView, fit)`; drawing
+never updates simulation, audio, chunk gates, event queues or UI interaction.
+UI interactions run once in advance with the gameplay camera, independently of
+Scene panel dimensions and draw order. `tickEmbeddedFrame()` and
+`renderSceneView()` remain single-view compatibility wrappers; the standalone loop
+retains its combined rendering/UI submission order. Input is supplied once through
+Platform's host event methods. `setEmbeddedPaused()` freezes gameplay and audio;
+draws still present cached UI. Stop recreates Runtime without saving transient
+simulation state. Windowed regressions are `integration_runtime_embedded_play_path`
+and `integration_embedded_multiview_path`. The editor's durable session owns the
+runtime independently of visible shared-context presenters. It snapshots camera
+position/viewport/rotation/zoom and letterbox metrics into each published frame;
+`getCameraRotation()` is a read-only native accessor for that snapshot. See [frame contracts](../topics/Runtime.md#embedded-gameplay-and-playback-control).
 
 
 ## Entity authoring
@@ -117,3 +124,21 @@ The desktop inspector generates UUID keys for new documents and exposes only the
 name; legacy keys remain valid and are preserved on open. Preview edits suppress
 scene gameplay lifecycle notifications so paused editing cannot queue an event
 backlog. `integration_entity_preview_path` exercises pixels, edits and isolation.
+
+
+## Project runtime
+
+`ProjectRuntime` owns read-only descriptor/sidecar discovery and resolved launch
+snapshots in Systems. `Runtime::startProject` registers scene key/UUID aliases,
+sets game dimensions/settings and Lua module roots, then loads the startup UUID.
+Both the editor worker/JNI handoff and `engine_app --project` share this resolver.
+Deferred scene loads use the resolved documents; dynamic engine asset operations
+resolve through the runtime-owned project context. Derived prefab JSON lives in
+unique disposable `.sle/runtime` folders. No lower module depends on Systems and
+native launch does not assign metadata or rewrite source files. See
+[projects](../topics/Projects.md#run-the-whole-project).
+
+Scene/Project Play passes `allowDebugInput=false` so Game F3 cannot toggle the
+editor debug HUD. The default remains true for Sandbox/legacy hosted callers;
+standalone input policy is unchanged. Docking and presenter lifetime are editor
+responsibilities; see the [workspace guide](../topics/EditorWorkspace.md).

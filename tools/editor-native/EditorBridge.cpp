@@ -1,6 +1,8 @@
 #include <glad/gl.h>
 #include <jni.h>
 #include <sle/engine/Runtime.hpp>
+#include <sle/engine/ProjectRuntime.hpp>
+#include <map>
 #include <sle/engine/EntityAuthoring.hpp>
 #include <sle/engine/SceneAuthoring.hpp>
 
@@ -39,6 +41,22 @@ void validate(jlong token)
         throw std::runtime_error("Invalid or closed engine session");
     if (owner != std::this_thread::get_id())
         throw std::runtime_error("Engine calls must use the viewport context thread");
+}
+
+void drainInput()
+{
+    sle::input::Input::update();
+    for (const auto& event : pendingInput)
+    {
+        switch (event.type)
+        {
+        case 0: sle::input::Input::setKeyState(event.code, event.x != 0); break;
+        case 1: sle::input::Input::setMouseButtonState(event.code, event.x != 0); break;
+        case 2: sle::input::Input::setCursorPosition(event.x, event.y); break;
+        case 3: sle::input::Input::releaseAll(); break;
+        }
+    }
+    pendingInput.clear();
 }
 
 template<class Action>
@@ -136,18 +154,7 @@ extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_render(
 {
     guarded(env, [&] {
         validate(token);
-        sle::input::Input::update();
-        for (const auto& event : pendingInput)
-        {
-            switch (event.type)
-            {
-            case 0: sle::input::Input::setKeyState(event.code, event.x != 0); break;
-            case 1: sle::input::Input::setMouseButtonState(event.code, event.x != 0); break;
-            case 2: sle::input::Input::setCursorPosition(event.x, event.y); break;
-            case 3: sle::input::Input::releaseAll(); break;
-            }
-        }
-        pendingInput.clear();
+        drainInput();
         const auto rendered = previewMode ? session->renderEntityPreview(width,height,fitRequested)
             : session->tickEmbeddedFrame(width, height, dt);
         fitRequested = false;
@@ -233,6 +240,21 @@ extern "C" JNIEXPORT jfloatArray JNICALL Java_sle_editor_bridge_NativeEngine_pre
     return result;
 }
 
+// Snapshot immediately after a Game draw; presenters must not read mutable globals.
+extern "C" JNIEXPORT jfloatArray JNICALL Java_sle_editor_bridge_NativeEngine_gameCamera(JNIEnv* env, jobject, jlong token)
+{
+    jfloatArray result = nullptr;
+    guarded(env, [&] {
+        validate(token);
+        const auto position = session->getCameraPosition();
+        const auto size = session->getCameraViewportSize();
+        const jfloat values[] = {position.x,position.y,size.x,size.y,session->getCameraRotation(),session->getCameraZoom()};
+        result = env->NewFloatArray(6);
+        if (result) env->SetFloatArrayRegion(result,0,6,values);
+    });
+    return result;
+}
+
 extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_enableAudio(JNIEnv* env, jobject, jlong token)
 {
     guarded(env, [&] {
@@ -290,20 +312,39 @@ extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_startScene
         previewMode=false; scenePlaying=true; pendingInput.clear();
     });
 }
+extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_advanceFrame(
+    JNIEnv* env,jobject,jlong token,jfloat dt) {
+    guarded(env,[&] {
+        validate(token);
+        if (!std::isfinite(dt) || dt<0) throw std::runtime_error("Invalid frame dt");
+        drainInput();
+        const auto advanced=session->advanceEmbeddedFrame(dt, !scenePlaying);
+        if (!advanced.ok()) throw std::runtime_error(advanced.error());
+    });
+}
+extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_drawEmbeddedFrame(
+    JNIEnv* env,jobject,jlong token,jint width,jint height) {
+    guarded(env,[&] {
+        validate(token);
+        const auto rendered=session->renderEmbeddedFrame(width,height);
+        if (!rendered.ok()) throw std::runtime_error(rendered.error());
+    });
+}
+extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_drawSceneView(
+    JNIEnv* env,jobject,jlong token,jint width,jint height,jboolean gameView,jboolean fit) {
+    guarded(env,[&] {
+        validate(token);
+        const bool isGame=gameView!=JNI_FALSE;
+        const auto rendered=session->drawSceneView(width,height,isGame,fit!=JNI_FALSE || (!isGame && fitRequested));
+        if (!rendered.ok()) throw std::runtime_error(rendered.error());
+        if (!isGame) fitRequested=false;
+    });
+}
 extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_renderSceneView(
     JNIEnv* env,jobject,jlong token,jint width,jint height,jfloat dt,jboolean gameView,jboolean playing) {
     guarded(env,[&] {
         validate(token);
-        sle::input::Input::update();
-        for (const auto& event:pendingInput) {
-            switch(event.type) {
-            case 0: sle::input::Input::setKeyState(event.code,event.x!=0); break;
-            case 1: sle::input::Input::setMouseButtonState(event.code,event.x!=0); break;
-            case 2: sle::input::Input::setCursorPosition(event.x,event.y); break;
-            case 3: sle::input::Input::releaseAll(); break;
-            }
-        }
-        pendingInput.clear();
+        drainInput();
         const auto rendered=session->renderSceneView(width,height,dt,gameView!=JNI_FALSE,playing!=JNI_FALSE,fitRequested);
         fitRequested=false;
         if (!rendered.ok()) throw std::runtime_error(rendered.error());
@@ -331,4 +372,50 @@ extern "C" JNIEXPORT jfloatArray JNICALL Java_sle_editor_bridge_NativeEngine_sce
         if(result) env->SetFloatArrayRegion(result,0,6,values.data());
     });
     return result;
+}
+
+// Project discovery/canonicalization runs on the editor IO worker without the
+// graphics-session lock. Handles transfer a validated snapshot to the GL thread.
+namespace {
+std::mutex preparedMutex;
+std::map<jlong,std::shared_ptr<sle::ProjectRuntime>> preparedProjects;
+jlong nextPrepared=1;
+}
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_prepareProject(JNIEnv* env,jobject,jbyteArray source) {
+    jbyteArray result=nullptr;
+    try {
+        if(!source) throw std::runtime_error("Missing project descriptor path");
+        std::string path(static_cast<std::size_t>(env->GetArrayLength(source)),'\0');
+        env->GetByteArrayRegion(source,0,static_cast<jsize>(path.size()),reinterpret_cast<jbyte*>(path.data()));
+        if(env->ExceptionCheck()) return nullptr;
+        auto opened=sle::ProjectRuntime::open(std::filesystem::u8path(path));
+        if(!opened.ok()) throw std::runtime_error(opened.error());
+        auto project=std::make_shared<sle::ProjectRuntime>(std::move(opened.value()));
+        const auto& config=project->engineConfig();
+        std::lock_guard lock(preparedMutex);const auto handle=nextPrepared++;
+        const auto text=nlohmann::json{{"handle",handle},{"source",project->sceneDocument(project->startupScene()).dump()},
+            {"title",config.title},{"width",config.width},{"height",config.height},{"vsync",config.vsync},{"targetFPS",config.targetFPS}}.dump();
+        result=env->NewByteArray(static_cast<jsize>(text.size()));
+        if(result) {
+            env->SetByteArrayRegion(result,0,static_cast<jsize>(text.size()),reinterpret_cast<const jbyte*>(text.data()));
+            if(!env->ExceptionCheck()) preparedProjects.emplace(handle,std::move(project));
+        }
+    } catch(const std::exception& error) { fail(env,error.what()); }
+    return result;
+}
+extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_releaseProject(JNIEnv* env,jobject,jlong handle) {
+    try { std::lock_guard lock(preparedMutex);preparedProjects.erase(handle); }
+    catch(const std::exception& error) { fail(env,error.what()); }
+}
+extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_startProject(JNIEnv* env,jobject,jlong token,jlong handle) {
+    guarded(env,[&] {
+        validate(token);
+        std::shared_ptr<sle::ProjectRuntime> project;
+        { std::lock_guard lock(preparedMutex);const auto found=preparedProjects.find(handle);
+          if(found==preparedProjects.end()) throw std::runtime_error("Project launch snapshot expired");
+          project=std::move(found->second);preparedProjects.erase(found); }
+        const auto loaded=session->startProject(*project);
+        if(!loaded.ok()) throw std::runtime_error(loaded.error());
+        previewMode=false;scenePlaying=true;pendingInput.clear();
+    });
 }

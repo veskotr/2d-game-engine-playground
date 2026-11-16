@@ -56,6 +56,21 @@ bool ScriptEngine::init(ScriptApi* inApi)
     return true;
 }
 
+void ScriptEngine::prependModulePaths(const std::vector<std::string>& roots)
+{
+    if (!L) return;
+    lua_getglobal(L,"package");
+    lua_getfield(L,-1,"path");
+    std::string paths;
+    for (const auto& root : roots) paths += root+"/?.lua;"+root+"/?/init.lua;";
+    const char* previous=lua_tostring(L,-1);
+    if (previous) paths += previous;
+    lua_pop(L,1);
+    lua_pushlstring(L,paths.data(),paths.size());
+    lua_setfield(L,-2,"path");
+    lua_pop(L,1);
+}
+
 void ScriptEngine::clearSceneScripts()
 {
     std::vector<uint32_t> ids;

@@ -513,6 +513,15 @@ sle_add_integration_test(
 set_tests_properties(integration_runtime_embedded_play_path PROPERTIES SKIP_RETURN_CODE 125)
 
 sle_add_integration_test(
+    integration_embedded_multiview_path
+    systems/integration_embedded_multiview_path.cpp
+    "systems;scripting;physics;ui;renderer;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+set_tests_properties(integration_embedded_multiview_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
     integration_entity_authoring_path
     systems/integration_entity_authoring_path.cpp
     "systems;scene"
@@ -562,3 +571,23 @@ sle_add_integration_test(
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 set_tests_properties(integration_standalone_camera_input_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
+    integration_project_runtime_path
+    systems/integration_project_runtime_path.cpp
+    systems
+    LINK_LIBS sle::engine
+)
+sle_add_integration_test(
+    integration_project_play_path
+    systems/integration_project_play_path.cpp
+    "systems;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(NAME integration_distribution_launch_path
+    COMMAND ${CMAKE_COMMAND} -DENGINE_APP=$<TARGET_FILE:engine_app>
+        -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/systems/integration_distribution_launch_path.cmake)
+set_tests_properties(integration_distribution_launch_path PROPERTIES LABELS "integration;systems")

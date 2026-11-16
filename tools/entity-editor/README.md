@@ -14,7 +14,7 @@ Opening component editing stops gameplay. Component handles edit sprites and
 colliders; Scene handles move complete entities. Entity editing operates on the
 live scene copy, and File → Save saves its containing scene.
 
-The **File**, **Edit**, **Create**, **View**, and **Help** menu strip contains
+The **File**, **Edit**, **Create**, **View**, **Help**, and **Windows** menu strip contains
 file operations, separate entity/scene histories, creation/import commands,
 Scene/Game/Prefab navigation, Fit, UI scale and controls/About. Use
 **File → New/Open → Prefab** for independent prefab authoring. File operations
@@ -27,11 +27,11 @@ expanders and entity/camera icons are drawn vectors rather than font glyphs.
 
 Open `assets/scenes/editor_camera_demo.slescene` for the included child-camera,
 WASD and physics example, or `assets/scenes/editor_starter.slescene` for ground
-and crates. Save produces a portable `.slescene` with assets, loadable by the
-engine. See [scene workflow](../../docs/topics/SceneEditor.md).
+and crates. Standalone Save produces a portable `.slescene` with assets, loadable by the
+engine. Project Save uses plain JSON sources; Export Package produces the portable archive. See [scene workflow](../../docs/topics/SceneEditor.md).
 
 The layout defaults to UI 85%; **View → UI Scale** also offers 75% and 100%.
-The hierarchy stays left, viewport center, and selected inspector right. The standard window menu bar uses flat headings, Alt mnemonics, a subtle
+The default layout places hierarchy left, viewport center, and selected inspector right. The standard window menu bar uses flat headings, Alt mnemonics, a subtle
 bottom border, and the editor surface across its full width. Instructional text
 is available in Help instead of beneath toolbars.
 
@@ -51,6 +51,26 @@ Unfocused mouse motion is ignored and focus loss releases held input. The first
 click can be used to acquire focus. Wheel/text input are not exposed by the current
 engine Input API. VS Code remains the intended external Lua editor.
 
+## Project folders
+
+Use **File → New Project…**, **Open Project…**, **Close Project**, and
+**Project Settings…** for an ordinary game folder and readable `.sleproject`
+configuration. New projects create `Assets` subfolders and ignored `.sle` local
+storage. Moving the complete folder preserves its identity. Project switching
+confirms unsaved documents, and failed opens preserve the current workspace.
+
+The asset browser below the workspace reflects real disk contents, including
+unknown file types. Navigate folders through its tree, double-click or breadcrumbs;
+select a file for details. External changes refresh automatically in the background.
+Use **View → Hide/Show Asset Browser** or **Refresh Assets**, and drag the dock's
+top divider to resize it. **Import…** copies files/folders into the selected folder,
+with Rename/Skip/Replace collision choices. UUID `.slemeta` sidecars preserve
+identity through payload edits and moves with sidecars; asset issues report invalid
+or duplicate IDs. Selection details offer Reveal, external open and explicit UUID
+repair. Component Browse reuses project files or copies external assets into the
+project. Plain project scenes/prefabs use UUID references. Choose the startup scene
+in Project Settings and use Run Project for the saved whole game. Existing standalone scene/prefab saves remain available. See [project workflow and current scope](../../docs/topics/Projects.md).
+
 ## Create and save an entity
 
 The editor opens on **Scene**. Use **File → New → Prefab** for a standalone entity. A new entity starts with the engine's
@@ -62,10 +82,11 @@ coordinates, and maps/arrays use JSON fields. Components can also be removed.
 
 Add **SpriteRenderer** from **Add Component → Rendering**, then use **Browse…** beside **Texture** to import an image.
 The entity viewport updates immediately; use **Fit** to frame it. The image is
-copied into editor storage, so its original location is no longer needed. Use the right-click **Import → Assets…** menu to include additional files,
+copied into project storage when a project is open, or temporary editor storage
+in standalone mode, so its original location is no longer needed. Use the right-click **Import → Assets…** menu to include additional files,
 even ones not attached to a component.
 
-Use **File → Save** or **Save As…** to write a self-contained `.sleprefab` package containing
+In standalone mode, use **File → Save** or **Save As…** to write a self-contained `.sleprefab` package containing
 the entity and its assets. Move that one file to share it. The chooser also offers
 plain JSON export with copied sidecar assets; JSON retains path-based references.
 See [package format and dependency rules](../../docs/topics/PrefabPackages.md).
@@ -73,9 +94,8 @@ Save validates with the
 engine's component codecs before atomically replacing the destination. Incomplete
 input stays visible and blocks saving; invalid engine values leave existing files
 untouched. New/Open/Close ask before discarding changes. Switching views preserves
-the entity document and unfinished field input. One native canvas/context survives
-tab changes; switching modes reloads scene data without rebuilding the graphics
-host. Switching Scene/Game keeps the running session. Stop resets that session.
+the entity document and unfinished field input. One durable native session survives
+panel changes; presenters can be replaced without rebuilding its graphics owner. Switching Scene/Game keeps the running session. Stop resets that session.
 
 **Open** accepts single-entity packages and JSON prefab files. Engine normalization exposes omitted
 defaults and adapts legacy aliases/vector arrays while preserving their values.
@@ -155,14 +175,54 @@ into hierarchies. Both provide undo/redo and asset browsing. Scene gameplay uses
 a runtime snapshot and Stop restores authoring. Open
 `assets/scenes/editor_camera_demo.slescene` to try a child camera and WASD script.
 
+## Project source documents
+
+With a project open, new scene/prefab Save defaults to ordinary `.scene.json` /
+`.prefab.json` source files beneath Assets. Double-click sources in the asset dock
+to edit them; Scene Import Prefab accepts project prefabs too. Textures/scripts
+use shared sidecar UUIDs, resolved before native preview and Play. Moving the
+whole project preserves those references. External changes/deletions block stale
+saves and preserve drafts; Reopen or Save As resolves the conflict. File → Export
+Package writes a portable archive while retaining the project source binding.
+See [project workflow and format](../../docs/topics/Projects.md#scene-and-prefab-editing).
+**Run Project** launches the saved startup scene without replacing unsaved drafts;
+ordinary Play still runs the open scene. Logical dimensions, VSync and FPS apply
+in the viewport. Standalone `engine_app --project <file.sleproject>` also applies
+the game window title and mode, and works from an unrelated working directory.
+Lua require searches the project Scripts folder and asset root. Scenes register
+both document keys and UUID aliases for switching. Project prefabs use disposable
+`.sle/runtime` JSON; sources and metadata are never rewritten by native launch.
+
+Run `gradlew.bat run --args=--project-documents-smoke` for Save/browser/Play/
+conflict/export/relocation desktop coverage. Use `--project-runtime-smoke` for
+startup selection, Run Project/Stop/draft preservation, VSync, deferred scenes,
+Lua modules, relocation and the actual standalone project command.
+
 ## Source layout
 
 Kotlin sources use `sle.editor` subpackages: `app` for the desktop entry point,
 `ui` for Compose workspaces and controls, `model` for authoring documents and state,
 `files` for asset/package persistence and sample generation, `viewport` for the
 native canvas, picking and gizmos, `bridge` for JNI, and `smoke` for desktop smoke
-checks. Tests follow the corresponding domain packages. The application entry
+checks, and `project` for project descriptors, storage and project controls. Tests follow the corresponding domain packages. The application entry
 point is `sle.editor.app.MainKt`; JNI exports match `sle.editor.bridge.NativeEngine`.
+
+## Launch from VS Code
+
+Open the repository root in **Windows VS Code**. In **Run and Debug**, select
+**SLE Editor** and press **Ctrl+F5** (or F5). Alternatively use
+**Terminal → Run Task… → SLE: Launch Editor**.
+
+The shared `run-editor.ps1` launcher finds JDK 21, configures the Debug CMake build
+with editor support, builds `sle_editor_native`, and runs the Gradle editor. Build
+or runtime output appears in the terminal. Close the editor window to finish.
+This launch entry runs the app; it does not attach a Kotlin/JVM debugger.
+
+Install the prerequisites below first. If JDK discovery fails, set `JAVA_HOME` to
+64-bit JDK 21 and restart VS Code. Use a Windows workspace rather than Remote WSL,
+since the native editor host and build presets target Windows. You can also run
+`./tools/entity-editor/run-editor.ps1` directly from PowerShell; `-EditorArgs` passes
+editor arguments, for example `-EditorArgs '--project "C:/Games/Game/Game.sleproject"'`.
 
 ## Build and run (Windows x64)
 
@@ -204,6 +264,8 @@ Release optimization; it is a hosting choice, not an `NDEBUG` switch.
 .\gradlew.bat run --args="--smoke-test"
 .\gradlew.bat run --args="--camera-smoke"
 .\gradlew.bat run --args="--context-menu-smoke"
+.\gradlew.bat run --args="--project-smoke"
+.\gradlew.bat run --args="--asset-browser-smoke"
 ```
 
 Entity-authoring checks:
@@ -260,32 +322,126 @@ from the JNI/Compose smoke, which requires an interactive Windows desktop.
 
 ## Ownership
 
-- Compose hosts one AWTGLCanvas directly inside SwingPanel. A Swing timer schedules
-  frames on the AWT event thread; the canvas owns context creation and swaps.
-  The host paints an immediate dark loading surface. Sandbox audio initializes
-  only after its first frame is presented, so device setup does not delay that image.
-- The canvas uses lwjgl3-awt 0.2.5 with LWJGL 3.4.2. The earlier canvas release
-  produced valid framebuffer pixels but failed actual Windows presentation in
-  desktop tests. Its replacement keeps rendering/presentation on the locked native
-  drawing surface and provides a context-current `disposeGL` cleanup callback.
-- JNI creates one opaque engine session, renders and destroys it with that
-  context current. Exceptions become Java errors; stale handles and calls from
-  another thread are rejected. `disposeGL` destroys SLE resources before the canvas
-  releases its context and AWT peer.
-- `Runtime::initEmbedded()` reuses engine initialization without creating a GLFW
-  window. `tickEmbeddedFrame()` advances the same engine systems as the standalone
-  loop; `renderEmbeddedFrame()` draws a stopped/paused scene without gameplay or UI
-  callbacks. `setEmbeddedPaused()` suspends audio as well as simulation. A logical 480x270 camera scales to the physical
-  framebuffer for the sandbox. Entity preview uses an aspect-correct fitted logical
-  viewport without changing authored transforms. `EntityPreviewSystem` submits
-  grid/origin/bounds render commands; scene queries stay in Systems.
-- The embedded path never polls GLFW or swaps its buffers. GLFW remains linked
-  through the existing Platform module, but no GLFW window is created.
-- Only one embedded session is allowed because engine resource/input services
-  currently have process-wide state. Native crashes can terminate the editor.
+- The workspace owns one `EditorEngineSession`. Its never-shown, packed AWT GL
+  owner remains displayable until workspace shutdown. A Swing timer advances once
+  per elapsed-time tick even when every presenter is hidden or disposed.
+- `EngineCanvas` is a replaceable presenter. Each presenter owns only a shared GL
+  context and local read framebuffer; it never creates or destroys the runtime.
+  Use **Windows → Game → Detach** or **Move to** to display Scene and Game together.
+  Scene remains navigable during Play; only focused Game accepts gameplay input.
+  Explicitly opening Entity editing stops playback; focusing its panel during Play
+  preserves the runtime.
+- All peer/context operations, JNI commands, rendering and presentation run on
+  the AWT event thread. The owner draws each requested view into an owned texture,
+  completes producer GL work, then presenters blit/swap and complete consumer work
+  before reuse. There is one latest frame per view, no CPU image transport or queue.
+  Frames carry resize generation, physical/logical sizes and their own camera and
+  Game letterbox metrics. Hidden/zero-size/retired presenters invalidate publication
+  and release held input; presenter recreation uses a fresh generation.
+- Shutdown stops scheduling, releases presenter contexts, then destroys native
+  resources and render targets in the durable owner context before retiring it.
+  Stop retains the established native-runtime reset to restore authoring and
+  project defaults inside the same GL owner; panel disposal never triggers it.
+- Project launch still consumes its prepared native handle once. Native runtime
+  state retains the launch context until Stop/cleanup. Game presenters apply
+  project VSync and the owner scheduler applies its target FPS.
+- JNI uses opaque session tokens with thread validation. The embedded runtime
+  creates no GLFW window, never polls GLFW and never swaps the host buffers.
+  Only one live runtime is allowed because resource/input services have process
+  state. The standalone executable retains its existing loop.
+
+Run `gradlew.bat run --args=--multi-viewport-smoke` for real shared-context Scene/
+Game rendering, update-count, Fit/camera metrics, pause/resume, peer disposal and
+recreation, hidden-view advancement and cleanup checks. Captures/reports are
+`build/reports/multi-*`. `--simultaneous-views` opens the ordinary shell with Scene and Game split beside
+each other and can be combined with `--camera-smoke`.
+`--owner-failure-smoke` checks real owner-error notification and cleanup;
+`--smoke-test` also checks Sandbox collider pixels before/after F3.
 
 Implementation progress and verification are recorded in
 [the viewport plan](../../docs/plans/embedded-editor-viewport.md) and
 [the running sandbox follow-up](../../docs/plans/embedded-sandbox-runtime.md), and
 [entity authoring](../../docs/plans/entity-authoring.md), and
 [live entity preview](../../docs/plans/entity-preview.md).
+
+Managed project assets: the dock offers New Folder and Recover Deleted; selected
+files/folders offer Rename, Move and Delete. Save drafts, stop playback and use New
+in both authoring workspaces before move/delete/recovery. UUID sidecars move with
+payloads; referenced deletion requires confirmation. Retain `.sle/trash` for
+restart-visible recovery. Dynamic Lua/XML/module paths still require manual repair.
+See [managed asset details](../../docs/topics/Projects.md#managed-assets).
+
+Runnable game export: build a prepared runtime with
+`cmake --build build/debug --config Release --target sle_runtime_bundle`, then use
+**File → Export Game…** and choose `build/debug/runtime/Release` plus a new output
+folder. Export uses saved project files, preserves drafts and excludes `.sle`
+state/trash. Start the delivered `engine_app.exe`; its adjacent `game/` directory
+selects the startup project independently of cwd. See
+[distribution details](../../docs/topics/Projects.md#export-a-runnable-game).
+`run --args=--project-distribution-smoke` exercises actual export and relocated
+standalone launch; it requires that Release runtime bundle first.
+
+The opt-in docking graphics experiment runs for about 48 seconds after startup:
+`gradlew.bat run --args=--docking-feasibility-smoke` measures CPU image transport;
+`gradlew.bat run --args="--docking-feasibility-smoke --docking-feasibility-gpu"`
+measures shared-context GPU presentation. It opens two ordinary native decorated
+windows without app menus and retains one hidden GL/runtime owner while closing,
+recreating, resizing and minimizing presenters. Reports and framebuffer captures
+are under `build/reports/docking-*`. It does not change ordinary startup or enable
+production docking. See [session-1 measurements and limits](../../docs/plans/editor-docking-plan.md#session-1-completion--handoff--2026-11-13).
+
+## Workspace windows
+
+See the [workspace operating guide](../../docs/topics/EditorWorkspace.md) for
+arrangement, shared Play, close behavior and layout recovery.
+
+The **Windows** menu manages Hierarchy, Inspector, Assets, Scene, Game and Entity.
+Use Show / Focus to restore a hidden panel, Hide to retain its state, Detach to open
+a native window, or Move to to choose a tab group or edge. Groups can also detach
+or merge through these commands. Restore Default Layout returns panels to the main
+window.
+
+Drag a panel tab to reorder it or merge with another group. Drop near a panel body
+edge to split; drop outside all editor windows to detach. The dotted grip to the
+left of each tab row moves the whole group. Escape cancels a drag. Previews remain
+visible over native viewports. Drag a divider to resize; window and panel minima
+follow the UI scale, and layouts too large for the display fall back to tabs.
+The `_` panel control minimizes to the current window's scrollable restore strip;
+`↗` detaches and `×` hides. Native title-bar minimize affects the entire window.
+Layouts save automatically per project in `.sle/workspace-layout.json`. Standalone
+layouts use `%LOCALAPPDATA%\SLE\EntityEditor\workspace-layout.json` on Windows
+(or `~/.local/share/sle/entity-editor/workspace-layout.json` without LOCALAPPDATA).
+`-Dsle.workspaceData=<directory>` overrides standalone storage. UI scale stays in
+its existing settings file. **Windows → Restore Default Layout** saves only the
+layout; documents, drafts, undo and UI scale remain intact.
+
+Corrupt or unsupported layouts show a recovery notice and use defaults. Unknown
+panels are removed and newly registered panels added once. Windows restore
+unminimized in logical screen coordinates, constrained to connected work areas;
+negative monitor origins are supported. Display/work-area/DPI changes cancel dock
+drags and recover windows during the session. Smaller displays collapse splits to
+tabs. Geometry changes save after a short debounce; project switches and exit queue
+the latest state in order. Failed atomic writes preserve the previous file.
+
+Only the main window owns app menus and project/asset services. Closing an auxiliary
+window hides its panels; Play and document drafts continue. Main exit asks before
+discarding dirty documents and shuts down the shared engine once. The Inspector,
+Hierarchy and File/Edit commands follow the active authoring mode. Editing a scene
+copy and saving still writes the containing scene; standalone prefab Save writes
+its own file. Scene and Game share a simulation. Entity preview is a separate
+editing mode, entered explicitly when playback must stop.
+
+Run `.\gradlew.bat run --args=--docking-workspace-smoke` for panel registration,
+native tool hosts, Robot tab/group dragging across windows, insertion/edge docking,
+Escape cancellation, splitter and native minimum sizing, panel/native minimize and
+restore, Game redocking during Play with held-input release, retained drafts,
+scene-copy Save, exit cancellation and cleanup coverage. Captures are in
+`build/reports/session6-{split,group-detached,restored}.png`; logs and the exact
+validation record are in the [docking plan](../../docs/plans/editor-docking-plan.md).
+Mixed-DPI monitor transitions still require manual validation.
+
+
+Run `.\gradlew.bat build run --args=--layout-persistence-smoke` for fresh-process
+standalone/project isolation, native minimized restore, reset/corruption recovery,
+and simulated display changes. Physical monitor unplug/reconnect and mixed-DPI
+native transitions still require manual checks.

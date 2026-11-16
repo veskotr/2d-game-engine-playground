@@ -22,6 +22,8 @@ struct EngineConfig
 
     ScreenMode screenMode = ScreenMode::Windowed;
 
+    // Engine-owned shaders/UI, separate from a game project asset root.
+    std::string engineAssetRoot = "assets";
     int targetFPS = 0;
     glm::vec4 backgroundColor{0.75f, 0.75f, 0.75f, 1.0f};
     ChunkActivationConfig chunkActivation{};

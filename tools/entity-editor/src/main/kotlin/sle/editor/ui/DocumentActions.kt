@@ -9,6 +9,7 @@ import javax.swing.JOptionPane
 import javax.swing.filechooser.FileNameExtensionFilter
 
 internal fun sceneFileAction(state: SceneWorkspaceState, save: Boolean, saveAs: Boolean=false): Boolean {
+    if(!(save && !saveAs && state.projectDocument==null && state.file!=null)) state.projectFileAction?.let { return it(save,saveAs) }
     return try {
         if(!save && !confirmDiscardScene(state)) return false
         if(save && !saveAs && state.file?.toString()?.endsWith(".slescene",true)==true) { state.save(state.file!!);return true }
@@ -25,6 +26,7 @@ internal fun sceneFileAction(state: SceneWorkspaceState, save: Boolean, saveAs: 
 }
 
 internal fun entityFileAction(state: EntityWorkspaceState, save: Boolean, saveAs: Boolean=false): Boolean {
+    if(!(save && !saveAs && state.projectDocument==null && state.file!=null)) state.projectFileAction?.let { return it(save,saveAs) }
     return try {
         if(!save && !confirmDiscard(state)) return false
         if(save && !saveAs && state.file!=null) { state.save(state.file!!);return true }

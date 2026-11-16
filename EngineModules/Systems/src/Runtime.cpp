@@ -4,6 +4,8 @@
 #include <chrono>
 #include <sle/core/Log.hpp>
 #include <sle/engine/Runtime.hpp>
+#include <sle/engine/ProjectRuntime.hpp>
+#include <thread>
 #include <sle/engine/Context.hpp>
 #include <sle/engine/CameraSystem.hpp>
 #include <sle/scene/components/Transform.hpp>
@@ -21,6 +23,12 @@ namespace sle
 {
     namespace
     {
+        template<class Action>
+        struct ScopeExit {
+            Action action;
+            ~ScopeExit() { action(); }
+        };
+
         std::string resolveAssetPath(const std::string& relativePath)
         {
             namespace fs = std::filesystem;
@@ -64,12 +72,46 @@ namespace sle
 
     bool Runtime::registerSceneFromFile(const std::string& sceneName, const std::string& jsonPath)
     {
+        if (projectContext) {
+            const auto path=resolveProjectAsset(jsonPath);
+            if (path.empty()) return false;
+            if (const auto* document=projectContext->findSceneDocument(path)) return sceneManager.registerSceneFromData(sceneName,*document,path);
+            return sceneManager.registerSceneFromFile(sceneName,path);
+        }
         return sceneManager.registerSceneFromFile(sceneName, jsonPath);
     }
 
     bool Runtime::registerSceneFromData(const std::string& sceneName, const nlohmann::json& data, const std::string& sourcePath)
     {
         return sceneManager.registerSceneFromData(sceneName, data, sourcePath);
+    }
+
+    Result<bool> Runtime::startProject(const ProjectRuntime& project)
+    {
+        if (!initialized) return Result<bool>::error("Runtime is not initialized");
+        try {
+            const auto engineAssets=config.engineAssetRoot;
+            config=project.engineConfig();config.engineAssetRoot=engineAssets;
+            projectContext=std::make_shared<ProjectRuntime>(project);
+            projectContext->registerScenes(*this);
+            scriptEngine.prependModulePaths({(project.assetRoot()/"Scripts").generic_string(),project.assetRoot().generic_string()});
+            camera.setViewport(static_cast<float>(config.width),static_cast<float>(config.height));
+            const auto loaded=loadScene(project.startupScene());
+            if (!loaded.ok()) return loaded;
+            authoredSceneKeys.clear();
+            for (const auto& entity : project.sceneDocument(project.startupScene()).at("entities")) authoredSceneKeys.push_back(entity.at("key").get<std::string>());
+            setPhysicsDebugEnabled(false);setEmbeddedPaused(false);
+            return loaded;
+        } catch (const std::exception& error) { return Result<bool>::error(error.what()); }
+    }
+
+    std::string Runtime::resolveProjectAsset(const std::string& value) const {
+        if (!projectContext) return value;
+        try { return projectContext->resolveAsset(value); }
+        catch (const std::exception& error) { Log::warn("Project asset rejected: {}",error.what());return {}; }
+    }
+    nlohmann::json Runtime::resolveProjectComponents(const nlohmann::json& value) const {
+        return projectContext ? projectContext->resolveComponentAssets(value) : value;
     }
 
     bool Runtime::hasScene(const std::string& sceneName) const
@@ -232,7 +274,6 @@ namespace sle
         Context gameCtx{scene, scene.getRegistry(), scene.getEventBus(), globalBus_, renderer, camera, physicsWorld.get(), 0.0f};
         transformSystem.update(gameCtx);
         componentCameraActive=CameraSystem::update(scene.getRegistry(),camera);
-        chunkRuntimeState.update(scene, camera.getPosition());
         const bool editorView=entityPreview || sceneViewOverride;
         if (editorView && fitPreview) {
             EntityPreviewSystem::frameCamera(scene, editorCamera, static_cast<float>(framebufferWidth)/framebufferHeight);
@@ -330,26 +371,51 @@ namespace sle
     }
 
     Result<bool> Runtime::renderSceneView(int width,int height,float dt,bool gameView,bool playing,bool fit) {
-        if (width<=0 || height<=0 || !std::isfinite(dt) || dt<0) return Result<bool>::error("Invalid scene viewport frame");
-        sceneViewOverride=!gameView;
+        if (width<=0 || height<=0 || !std::isfinite(dt) || dt<0)
+            return Result<bool>::error("Invalid scene viewport frame");
+        // Preserve the legacy Game wrapper's editor-shortcut policy during advance.
+        const bool previousGameView=gameViewOverride;
+        ScopeExit restore{[&] { gameViewOverride=previousGameView; }};
         gameViewOverride=gameView;
-        hostWidth=width; hostHeight=height;
+        if (playing) {
+            const auto advanced=advanceEmbeddedFrame(dt);
+            if (!advanced.ok()) return advanced;
+        }
+        return drawSceneView(width,height,gameView,fit);
+    }
+
+    Result<bool> Runtime::drawSceneView(int width,int height,bool gameView,bool fit) {
+        if (!embedded || !initialized)
+            return Result<bool>::error("Embedded runtime is not initialized");
+        if (width<=0 || height<=0) return Result<bool>::error("Invalid scene viewport dimensions");
+        const bool previousSceneView=sceneViewOverride,previousGameView=gameViewOverride;
+        const bool previousDebug=isPhysicsDebugEnabled(),previousPreview=entityPreview;
+        const int previousWidth=hostWidth,previousHeight=hostHeight;
+        GLint viewport[4]{},drawFramebuffer=0,readFramebuffer=0;
+        glGetIntegerv(GL_VIEWPORT,viewport);
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&drawFramebuffer);
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&readFramebuffer);
+        ScopeExit restore{[&] {
+            entityPreview=previousPreview;
+            setPhysicsDebugEnabled(previousDebug);
+            sceneViewOverride=previousSceneView; gameViewOverride=previousGameView;
+            // Legacy metrics remember the last Game draw, never the Scene size.
+            if (!gameView) { hostWidth=previousWidth; hostHeight=previousHeight; }
+            renderer.setCamera(&camera);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER,drawFramebuffer);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER,readFramebuffer);
+            glViewport(viewport[0],viewport[1],viewport[2],viewport[3]);
+        }};
+        sceneViewOverride=!gameView; gameViewOverride=gameView;
         if (!gameView) {
             const float aspect=static_cast<float>(width)/height;
             fitPreview=fitPreview || fit || std::abs(aspect-previewAspect)>0.001f;
             previewAspect=aspect;
+        } else {
+            entityPreview=false;
+            setPhysicsDebugEnabled(false);
         }
-        // Authoring uses a frozen snapshot; Play uses the normal update/pause path.
-        const bool previousDebug=isPhysicsDebugEnabled();
-        if (gameView) setPhysicsDebugEnabled(false);
-        const bool previousPreview=entityPreview;
-        if (gameView) entityPreview=false;
-        auto result=playing ? tickEmbeddedFrame(width,height,dt) : renderEmbeddedFrame(width,height);
-        entityPreview=previousPreview;
-        setPhysicsDebugEnabled(previousDebug);
-        sceneViewOverride=false; gameViewOverride=false;
-        renderer.setCamera(&camera);
-        return result;
+        return renderEmbeddedFrame(width,height);
     }
 
     std::array<float,6> Runtime::sceneGameViewport() const {
@@ -372,7 +438,11 @@ namespace sle
 
     nlohmann::json Runtime::sceneTransforms() {
         nlohmann::json result=nlohmann::json::object();
-        for (const auto& key : authoredSceneKeys) {
+        auto keys=authoredSceneKeys;
+        if (projectContext) if (const auto* document=projectContext->findSceneDocument(sceneManager.getCurrentSceneName())) {
+            keys.clear();for (const auto& entity : document->at("entities")) keys.push_back(entity.at("key").get<std::string>());
+        }
+        for (const auto& key : keys) {
             const auto* t=scene.getRegistry().getComponent<components::TransformComponent>(scene.findEntityByKey(key));
             if (!t) continue;
             const auto p=t->getPosition(),s=t->getScale();
@@ -381,18 +451,28 @@ namespace sle
         return result;
     }
 
-    Result<bool> Runtime::tickEmbeddedFrame(int framebufferWidth, int framebufferHeight, float dt)
+    Result<bool> Runtime::advanceEmbeddedFrame(float dt, bool allowDebugInput)
     {
         if (!embedded || !initialized)
             return Result<bool>::error("Embedded runtime is not initialized");
-        if (framebufferWidth <= 0 || framebufferHeight <= 0 || !std::isfinite(dt) || dt < 0.0f)
-            return Result<bool>::error("Embedded frame requires positive dimensions and finite nonnegative dt");
-        if (embeddedPaused) return renderEmbeddedFrame(framebufferWidth, framebufferHeight);
+        if (!std::isfinite(dt) || dt < 0.0f)
+            return Result<bool>::error("Embedded advance requires finite nonnegative dt");
+        if (embeddedPaused) return Result<bool>::success(true);
         processPendingSceneSwitch();
-        handleDebugInput();
-        hostWidth=framebufferWidth; hostHeight=framebufferHeight;
-        (void)advanceAndRender(dt);
+        if (allowDebugInput) handleDebugInput();
+        (void)advanceSimulation(dt);
+        sle::ui::UIFrameContext uiCtx{scene, scene.getRegistry(), scene.getEventBus(), globalBus_, renderer, camera, scriptEngine, dt};
+        uiSystem.update(uiCtx, false);
         return Result<bool>::success(true);
+    }
+
+    Result<bool> Runtime::tickEmbeddedFrame(int framebufferWidth, int framebufferHeight, float dt)
+    {
+        if (framebufferWidth <= 0 || framebufferHeight <= 0)
+            return Result<bool>::error("Embedded frame requires positive dimensions");
+        const auto advanced=advanceEmbeddedFrame(dt);
+        if (!advanced.ok()) return advanced;
+        return renderEmbeddedFrame(framebufferWidth,framebufferHeight);
     }
 
     void Runtime::setEmbeddedPaused(bool paused)
@@ -429,7 +509,7 @@ namespace sle
         }
     }
 
-    Runtime::FrameTimings Runtime::advanceAndRender(float dt)
+    Runtime::FrameTimings Runtime::advanceSimulation(float dt)
     {
         using Clock = std::chrono::high_resolution_clock;
         using Ms = std::chrono::duration<double, std::milli>;
@@ -480,12 +560,16 @@ namespace sle
         // clears dirty flags before physics and leaves rendering one frame behind.
         transformSystem.update(ctx);
         componentCameraActive=CameraSystem::update(scene.getRegistry(),camera);
-        if (sceneViewOverride && fitPreview) {
-            EntityPreviewSystem::frameCamera(scene,editorCamera,static_cast<float>(hostWidth)/hostHeight);
-            fitPreview=false;
-        }
         auto tTransform = Clock::now();
+        return {Ms(tTransform - t3).count(), Ms(t2 - t1).count(), Ms(t3 - t2).count(), 0.0, 0.0};
+    }
 
+    Runtime::FrameTimings Runtime::advanceAndRender(float dt)
+    {
+        using Clock = std::chrono::high_resolution_clock;
+        using Ms = std::chrono::duration<double, std::milli>;
+        auto timings=advanceSimulation(dt);
+        const auto tTransform=Clock::now();
         // === RENDER PHASE ===
         auto& displayCamera=sceneViewOverride ? editorCamera : camera;
         renderer.setCamera(&displayCamera);
@@ -502,8 +586,9 @@ namespace sle
 
         renderer.endFrame();
         auto t5 = Clock::now();
-        return {Ms(tTransform - t3).count(), Ms(t2 - t1).count(),
-            Ms(t3 - t2).count(), Ms(t4 - tTransform).count(), Ms(t5 - t4).count()};
+        timings.renderSubmit=Ms(t4 - tTransform).count();
+        timings.renderFlush=Ms(t5 - t4).count();
+        return timings;
     }
 
     Result<bool> Runtime::initServices()
@@ -515,8 +600,8 @@ namespace sle
 
         defaultQuadShader = Resources::create<Shader>(
             "default_quad_shader",
-            "assets/shaders/quad.vert",
-            "assets/shaders/quad.frag");
+            (std::filesystem::path(config.engineAssetRoot)/"shaders/quad.vert").generic_string(),
+            (std::filesystem::path(config.engineAssetRoot)/"shaders/quad.frag").generic_string());
         if (!defaultQuadShader)
         {
             return Result<bool>::error("Failed to load default quad shader resource");
@@ -524,8 +609,8 @@ namespace sle
 
         defaultDebugShader = Resources::create<Shader>(
             "default_debug_shader",
-            "assets/shaders/debug.vert",
-            "assets/shaders/debug.frag");
+            (std::filesystem::path(config.engineAssetRoot)/"shaders/debug.vert").generic_string(),
+            (std::filesystem::path(config.engineAssetRoot)/"shaders/debug.frag").generic_string());
         if (!defaultDebugShader)
         {
             return Result<bool>::error("Failed to load default debug shader resource");
@@ -551,8 +636,8 @@ namespace sle
 
         {
             sle::ui::UIDocumentDescriptor descriptor;
-            descriptor.layoutAsset = resolveAssetPath("assets/ui/fps_hud.xml");
-            descriptor.fontAsset = resolveAssetPath("assets/fonts/Roboto-Regular.ttf");
+            descriptor.layoutAsset = resolveAssetPath((std::filesystem::path(config.engineAssetRoot)/"ui/fps_hud.xml").generic_string());
+            descriptor.fontAsset = resolveAssetPath((std::filesystem::path(config.engineAssetRoot)/"fonts/Roboto-Regular.ttf").generic_string());
             descriptor.spaceMode = sle::components::UISpaceMode::Screen;
             descriptor.visible = false;
             descriptor.layer = 1000;
@@ -608,6 +693,7 @@ namespace sle
 
         while (!window.shouldClose() && (!bounded || executedFrames < maxFrames))
         {
+            const auto frameStarted=std::chrono::steady_clock::now();
             processPendingSceneSwitch();
 
             Input::update();
@@ -668,6 +754,7 @@ namespace sle
                 swapMsAccum = 0.0;
             }
 
+            if (config.targetFPS>0) std::this_thread::sleep_until(frameStarted+std::chrono::duration<double>(1.0/config.targetFPS));
             ++executedFrames;
         }
 

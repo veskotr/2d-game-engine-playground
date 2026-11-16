@@ -6,6 +6,8 @@ Runtime owns the application loop and coordinates all systems.
 
 It now also supports data-driven startup through `Runtime::registerSceneFromFile()`, which the
 root `engine_app` executable uses to boot from `engine.json`.
+`engine_app --project game.sleproject` instead uses `ProjectRuntime` discovery and
+`Runtime::startProject`; see [project launch](Projects.md#run-the-whole-project).
 
 ## Current Frame Flow
 
@@ -91,13 +93,41 @@ Destroy the Runtime before releasing the host context. See
 
 ## Embedded gameplay and playback control
 
-The editor sandbox uses `tickEmbeddedFrame(width, height, dt)`, which calls the
-same `advanceAndRender()` system sequence as the standalone loop, including Lua,
-physics, animation, state machines, audio and XML UI. Host dt must be finite and
-nonnegative; the editor bounds its wall-clock dt to 0.1 seconds after stalls.
-The host clears transient Input state, transfers focused canvas events, makes its
-context current and presents the result. Pending scene switches follow the same
-staging path as standalone execution.
+Embedded hosts call `advanceEmbeddedFrame(dt, allowDebugInput)` once per owner frame, then
+`drawSceneView(width, height, gameView, fit)` zero or more times. Advance validates
+finite nonnegative dt and, when running, processes a pending scene switch and
+debug input, flushes deferred events, updates chunk gates, animation, audio,
+scripts, state machines, physics, world transforms and the gameplay camera, then
+updates UI behaviors/bindings/clicks **once using that gameplay camera**. It does
+not clear a framebuffer or submit geometry. Chunk gates retain their established
+pre-simulation camera focus; drawing never recomputes them.
+
+Drawing accepts positive physical pixel dimensions and renders the current
+snapshot with the independent editor camera (Scene) or active gameplay camera
+(Game). It may resolve derived transforms/camera and prepare cached UI resources;
+it never steps simulation, drains input, flushes events, commits deferred switches,
+or executes UI behaviors/clicks. Game is letterboxed without changing its logical
+camera dimensions. Scene sizing/pan/fit never overwrites Game camera or last-Game
+viewport metrics. View/debug overrides, renderer camera, host framebuffer bindings
+and GL viewport are restored on leaving `drawSceneView`, including exceptions.
+All calls and destruction require the host's current owner context/thread.
+
+`tickEmbeddedFrame(width, height, dt)` remains an advance-plus-draw compatibility
+wrapper; `renderSceneView(..., dt, gameView, playing, fit)` advances only when
+`playing` and then draws. Invalid dimensions/dt are rejected before advancement.
+Standalone retains its combined render/UI submission order via
+`advanceAndRender()` and the shared simulation helper. The host clears transient
+Input state and transfers focused Game events once before advance, makes its
+context current and presents the result. JNI `advanceFrame(session, dt)` drains
+queued input once; JNI `drawSceneView(session, width, height, gameView, fit)` does
+not touch it. JNI `drawEmbeddedFrame(session,width,height)` renders Sandbox
+without Game view/debug overrides or advancement. The existing JNI render
+wrappers remain for single-view callers.
+The editor bounds its wall-clock dt to 0.1 seconds after stalls. Its durable
+`EditorEngineSession` schedules once, then publishes independent Scene/Game textures
+with per-frame camera, letterbox and resize-generation metrics. The legacy
+`sceneGameViewport()` describes the most recent Game draw; presenters use their
+published frame snapshot. See [editor ownership](../../tools/entity-editor/README.md#ownership).
 
 `setEmbeddedPaused(true)` suspends audio and makes hosted ticks draw the current
 scene/UI without running gameplay, events or UI click/behavior callbacks. Stop is
@@ -123,8 +153,21 @@ belong to the editor; scene rendering remains in the engine. Same-entity editor
 updates preserve the view, while explicit Fit requests and viewport aspect changes
 can reframe it.
 
-The editor holds one native canvas across preview/sandbox tab changes. Normal
-sandbox loads restore its configured camera/clear color. `initEmbedded(false)`
-skips device initialization; `enableEmbeddedAudio()` initializes audio once after
-the host has presented a sandbox frame. Standalone `init()` and the default
+The editor holds one hidden GL owner across preview/sandbox tab changes; visible
+shared-context presenters can be recreated independently. Normal sandbox loads
+restore its configured camera/clear color. `initEmbedded(false)` skips device
+initialization; `enableEmbeddedAudio()` initializes audio after the first owner
+frame, including when all presenters are hidden. Standalone `init()` and the default
 `initEmbedded()` keep their existing audio initialization behavior.
+
+
+Standalone frame pacing honors `EngineConfig::targetFPS` after presentation (zero
+adds no explicit cap). Engine-owned shaders/UI/font paths use `engineAssetRoot`,
+separate from project assets; CMake copies these resources beside `engine_app` so
+its project command works from an unrelated directory. Embedded hosts own their
+presentation pacing and VSync. Window title/mode apply to the standalone window.
+
+Scene/Project Play passes `allowDebugInput=false` so Game F3 cannot toggle the
+editor debug HUD. The default remains true for Sandbox/legacy hosted callers;
+standalone input policy is unchanged. Docking and presenter lifetime are editor
+responsibilities; see the [workspace guide](EditorWorkspace.md).

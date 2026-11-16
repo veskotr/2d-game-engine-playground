@@ -5,13 +5,14 @@ import java.io.File
 /** Viewport calls need its current context; catalog/validation are context-independent. */
 internal object NativeEngine {
     init {
-        val library = File(requireNotNull(System.getProperty("sle.nativeLibrary")) {
-            "Set -Dsle.nativeLibrary to the full path of sle_editor_native.dll"
-        })
+        val library = System.getProperty("sle.nativeLibrary")?.let(::File) ?: requireNotNull(PackagedEngine.library) {
+            "Set -Dsle.nativeLibrary to the full path of the sle_editor_native library"
+        }
         check(library.isFile) {
             "Engine library missing: $library. Build the CMake sle_editor_native target first."
         }
         System.load(library.absolutePath)
+        PackagedEngine.enterAssetRoot()
     }
 
     external fun prepareProject(path: ByteArray): ByteArray

@@ -31,6 +31,11 @@ option(SLE_BUILD_EDITOR "Build the editor JNI library (Windows x64, Linux x64)" 
 if(SLE_BUILD_EDITOR)
 	# The JNI shared library links the engine's static libraries and dependencies.
 	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+	if(MSVC)
+		# The JVM loads its own msvcp140.dll, which may predate this toolset. Since VS 17.10
+		# the inline constexpr std::mutex constructor crashes with runtimes older than 14.40.
+		add_compile_definitions(_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
+	endif()
 endif()
 
 # -------------------------

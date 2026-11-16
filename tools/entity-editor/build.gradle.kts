@@ -1,3 +1,5 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+
 plugins {
     kotlin("jvm") version "2.4.21"
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.21"
@@ -42,9 +44,53 @@ tasks.test {
     systemProperty("sle.repoRoot", rootDir.resolve("../..").canonicalPath)
 }
 
+// Packaged editors carry the engine library and shared assets as Compose app resources
+// (read at runtime through compose.application.resources.dir). Package from a Release build.
+val packagedNativeLibrary = providers.gradleProperty("slePackageNativeLibrary").orElse(
+    rootDir.resolve(
+        if (isWindowsHost) "../../build/release/tools/editor-native/Release/sle_editor_native.dll"
+        else "../../build/release/tools/editor-native/libsle_editor_native.so",
+    ).canonicalPath,
+)
+val packagedResources = layout.buildDirectory.dir("packaged-resources")
+val preparePackagedResources by tasks.registering(Sync::class) {
+    into(packagedResources)
+    from(rootDir.resolve("../../assets")) { into("common/assets") }
+    from(packagedNativeLibrary.map { file(it) }) { into(if (isWindowsHost) "windows-x64" else "linux-x64") }
+}
+tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(preparePackagedResources) }
+tasks.matching { it.name == "createDistributable" || it.name.startsWith("package") }.configureEach {
+    // Compose's packaging tasks otherwise stay UP-TO-DATE when only app resources change.
+    inputs.files(preparePackagedResources).withPropertyName("slePackagedResources")
+    doFirst {
+        val library = file(packagedNativeLibrary.get())
+        check(library.isFile) {
+            "Engine library missing: $library. Build sle_editor_native in Release (or pass -PslePackageNativeLibrary)."
+        }
+    }
+}
+
 compose.desktop {
     application {
         mainClass = "sle.editor.app.MainKt"
+        nativeDistributions {
+            targetFormats(
+                *(if (isWindowsHost) arrayOf(TargetFormat.Msi, TargetFormat.Exe) else arrayOf(TargetFormat.Deb)),
+            )
+            packageName = "SLE Editor"
+            packageVersion = "1.0.0"
+            description = "SLE scene and entity editor"
+            vendor = "SLE"
+            appResourcesRootDir.set(packagedResources)
+            modules("java.instrument", "java.management", "jdk.unsupported") // from suggestRuntimeModules
+            windows {
+                menuGroup = "SLE"
+                upgradeUuid = "6f1b3c2e-6a59-4c55-9a1e-6f0f6d1f5e21"
+            }
+            linux {
+                packageName = "sle-editor"
+            }
+        }
     }
 }
 

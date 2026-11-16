@@ -357,6 +357,31 @@ d3d12 driver. `engine_app` runs GPU-accelerated with `GALLIUM_DRIVER=d3d12`. Smo
 that read pixels through `java.awt.Robot` screen capture, such as `--camera-smoke`,
 are unreliable under WSLg.
 
+## Package a standalone editor
+
+`createDistributable` builds a runnable folder that includes its own Java runtime, the
+engine library and the shared `assets/`. Package on each target OS; jpackage cannot
+cross-build. First build `sle_editor_native` in Release:
+
+```powershell
+cmake --preset release -DSLE_BUILD_EDITOR=ON
+cmake --build build/release --config Release --target sle_editor_native
+cd tools/entity-editor
+.\gradlew.bat createDistributable
+```
+
+Run `build/compose/binaries/main/app/SLE Editor/SLE Editor.exe`. On Linux, build
+`libsle_editor_native.so` in Release and pass it with
+`-PslePackageNativeLibrary=<path>` unless it is at `build/release/tools/editor-native/`.
+The launcher is `SLE Editor/bin/SLE Editor`. `packageDistributionForCurrentOS` builds
+installers (MSI/EXE on Windows, which need the WiX download; DEB on Linux).
+
+Packaged editors load the engine library from `compose.application.resources.dir`.
+When the working directory has no `assets/`, they switch the process working directory
+to the bundled assets, because the engine resolves `assets/...` relative to it. On
+MSVC, `SLE_BUILD_EDITOR` defines `_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR`, because the
+JVM's bundled `msvcp140.dll` may predate the compiler's C++ runtime.
+
 ## Validation
 
 ```powershell

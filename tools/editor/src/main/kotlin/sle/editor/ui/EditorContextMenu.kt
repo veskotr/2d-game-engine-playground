@@ -20,14 +20,28 @@ import javax.swing.*
 import sle.editor.model.EntityWorkspaceState
 import sle.editor.model.SceneWorkspaceState
 import sle.editor.viewport.GizmoShape
+import sle.editor.command.menuEntry
 import javax.swing.filechooser.FileNameExtensionFilter
 
 internal data class EditorMenuEntry(
     val label: String,
     val enabled: Boolean = true,
     val children: List<EditorMenuEntry> = emptyList(),
+    /** The registered command this entry runs, if any (see `command/CommandMenus.kt`). */
+    val command: sle.editor.command.CommandId? = null,
+    /** Shown right-aligned; display only. The shortcut dispatcher handles the key. */
+    val shortcut: sle.editor.command.KeyChord? = null,
+    val separator: Boolean = false,
     val action: () -> Unit = {},
-)
+) {
+    companion object { val Separator = EditorMenuEntry("", enabled = false, separator = true) }
+}
+
+/** Removes leading, trailing and doubled separators left by conditional entries. */
+internal fun List<EditorMenuEntry>.tidySeparators(): List<EditorMenuEntry> =
+    fold(mutableListOf<EditorMenuEntry>()) { result, entry ->
+        if(!entry.separator || (result.isNotEmpty() && !result.last().separator)) result.add(entry);result
+    }.dropLastWhile { it.separator }
 
 private val editorPopups=java.util.WeakHashMap<JPopupMenu,MenuAppearance>()
 
@@ -36,6 +50,7 @@ internal fun refreshEditorPopups(value: sle.editor.ui.theme.EditorAppearance) {
     for((popup,previous) in editorPopups.toMap()) {
         val theme=MenuAppearance.of(value.mode,value.density,previous.scale)
         styleEditorPopup(popup,theme)
+        popup.components.filterIsInstance<EditorMenuSeparator>().forEach { it.theme=theme }
         popup.components.filterIsInstance<JMenuItem>().forEach { item ->
             if(item is JMenu) item.setUI(EditorSubmenuUI(theme)) else item.setUI(EditorMenuItemUI(theme))
             item.background=theme.surface;item.foreground=theme.foreground;item.font=theme.font
@@ -59,13 +74,15 @@ internal fun styleEditorPopup(popup: JPopupMenu, appearance: MenuAppearance) {
 }
 
 internal fun buildEditorPopup(entries: List<EditorMenuEntry>, appearance: MenuAppearance = MenuAppearance()): JPopupMenu {
-    fun item(entry: EditorMenuEntry): JMenuItem {
+    fun item(entry: EditorMenuEntry): java.awt.Component {
+        if(entry.separator) return EditorMenuSeparator(appearance)
         val result = if (entry.children.isEmpty()) JMenuItem(entry.label).apply {
             setUI(EditorMenuItemUI(appearance))
+            entry.shortcut?.let { putClientProperty(EditorMenuItemUI.SHORTCUT,it.display()) }
             addActionListener { entry.action() }
         } else JMenu(entry.label).apply {
             setUI(EditorSubmenuUI(appearance))
-            entry.children.forEach { add(item(it)) }
+            entry.children.tidySeparators().forEach { add(item(it)) }
             styleEditorPopup(popupMenu,appearance)
         }
         return result.apply {
@@ -80,7 +97,7 @@ internal fun buildEditorPopup(entries: List<EditorMenuEntry>, appearance: MenuAp
     }
     return JPopupMenu().apply {
         styleEditorPopup(this,appearance)
-        entries.forEach { add(item(it)) }
+        entries.tidySeparators().forEach { add(item(it)) }
     }
 }
 
@@ -195,14 +212,17 @@ internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, on
         if(!editable) return
         try { state.selected?.endGesture(); action() } catch (failure: Exception) { state.error = failure.message ?: "Scene operation failed" }
     }
+    // Entity actions are the registered commands, so labels and shortcuts match the Edit menu.
+    val commands=sle.editor.command.CommandContext(scene=state,editable=editable)
     return listOf(
         // Ordinary entities are edited in the Inspector; components can also be added from here.
         (state.selected?.takeIf { editable }?.let(::addComponentEntries) ?: emptyList()).let { components ->
             EditorMenuEntry("Add Component",components.isNotEmpty(),children=components)
         },
-        EditorMenuEntry("Duplicate",editable && state.selected!=null) { attempt { state.duplicateSelected() } },
-        EditorMenuEntry("Delete",editable && state.selected!=null) { attempt { deleteSceneSelection(state,editable) } },
-        EditorMenuEntry("Apply Changes to Prefab",editable && canApplyToPrefab(state)) { attempt { applySelectionToPrefab(state) } },
+        sle.editor.command.EditCommands.duplicate.menuEntry(commands),
+        sle.editor.command.EditCommands.delete.menuEntry(commands),
+        sle.editor.command.EditCommands.applyToPrefab.menuEntry(commands),
+        EditorMenuEntry.Separator,
         EditorMenuEntry("Create", editable, listOf(
             EditorMenuEntry("Entity", children = listOf(
                 EditorMenuEntry("At Scene Root") { attempt { state.addEntity(position) } },
@@ -229,9 +249,6 @@ internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, on
                 attempt { state.importPrefab(chooser.selectedFile.toPath()) }
             }
         })),
-        EditorMenuEntry("Entity", editable && state.selected != null, listOf(
-            EditorMenuEntry("Duplicate Subtree") { attempt { state.duplicateSelected() } },
-        )),
         EditorMenuEntry("New", editable, listOf(EditorMenuEntry("Scene") {
             if (confirmDiscardScene(state)) state.newScene()
         })),

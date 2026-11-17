@@ -99,8 +99,9 @@ class WorkspaceLifecycleTest {
         scene.projectFileAction={save,_ -> if(save) sceneSaves++;true}
         prefab.projectFileAction={save,_ -> if(save) prefabSaves++;true}
         fun save(linked: Boolean) {
-            editorApplicationMenus(scene,if(linked) scene.selected else prefab,prefab,true,linked,true,
-                {},{},{},{},{}).first { it.first=="File" }.second.first { it.label=="Save" }.action.invoke()
+            val context=sle.editor.command.CommandContext(mode=sle.editor.viewport.ViewportMode.Entity,linked=linked,scene=scene,
+                entity=if(linked) scene.selected else prefab,prefab=prefab)
+            editorApplicationMenus(context,{},{}).first { it.first=="File" }.second.first { it.label=="Save" }.action.invoke()
         }
         save(true);assertEquals(1,sceneSaves);assertEquals(0,prefabSaves)
         save(false);assertEquals(1,sceneSaves);assertEquals(1,prefabSaves)

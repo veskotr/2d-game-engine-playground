@@ -44,11 +44,11 @@ portable `.slescene` workflow.
   retains local-origin placement. New sprite/box components use 64×64 world units;
   circle components use radius 32. Inspector-added shapes still fit an existing sprite.
   These are editor presets; saved documents and native codec defaults are unchanged.
-- **Duplicate Subtree** creates another independent UUID and preserves references to
-  other scene entities. **Edit → Delete Entity** removes the selection. Operations that would
+- **Duplicate** (Ctrl+D) copies the selected subtree with new UUIDs and preserves references to
+  other scene entities. **Edit → Delete** (Delete) removes the selection and its descendants. Operations that would
   invalidate an Animator target are rejected. Save/reopen converts legacy numeric
   targets to stable keys before structural edits that would change their meaning.
-- **Undo / Redo** and viewport Ctrl+Z/Y edit the selected entity. Each entity keeps
+- **Undo / Redo** (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z from any panel) edit the selected entity. Each entity keeps
   its history across selection changes. **Scene Undo / Scene Redo** separately
   restore additions, imports, duplication, deletion and scene-name changes; they
   preserve component edits on surviving entity objects. There is no unified

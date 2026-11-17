@@ -248,9 +248,12 @@ internal fun EditorTextField(value: TextFieldValue, onValueChange: (TextFieldVal
     val hovered by source.collectIsHoveredAsState()
     val shape=RoundedCornerShape(m.controlRadius)
     val style=(if(numeric) t.numeric else t.body).copy(color=if(enabled) c.textPrimary else c.disabledText)
+    // Shortcuts leave plain keys (Delete, arrows, letters) to a focused field.
+    val textFocus=remember { Any() }
+    DisposableEffect(textFocus) { onDispose { sle.editor.workspace.TextInputFocus.report(textFocus,false) } }
     EditorTooltip(help,modifier) {
         BasicTextField(value,onValueChange,Modifier.fillMaxWidth()
-            .onFocusChanged { onFocusChange(it.isFocused) }
+            .onFocusChanged { sle.editor.workspace.TextInputFocus.report(textFocus,it.isFocused);onFocusChange(it.isFocused) }
             .onPreviewKeyEvent {
                 if(it.type!=KeyEventType.KeyDown || !enabled || readOnly) false
                 else when(it.key) { Key.Enter -> {if(singleLine) {onCommit();true} else false};Key.Escape -> {onCancel();true};else -> false }

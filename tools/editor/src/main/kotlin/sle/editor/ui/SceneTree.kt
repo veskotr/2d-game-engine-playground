@@ -62,15 +62,13 @@ internal fun SceneTree(state: SceneWorkspaceState,modifier: Modifier=Modifier,
     val rows=flattenSceneTree(root,expandedNodes)
     val focus=remember { FocusRequester() }
     fun choose(key: String?) { state.select(key);runCatching { focus.requestFocus() } }
-    fun attempt(action: ()->Unit) { try { state.selected?.endGesture();action() } catch(failure: Exception) { state.error=failure.message ?: "Scene operation failed" } }
-    // Delete removes the selected subtree, Ctrl+D duplicates it, arrows move the selection.
+    // Arrows move the selection and Enter edits it. Delete and Ctrl+D are registered commands
+    // (command/EditCommands.kt) that the shortcut dispatcher runs while the Hierarchy has focus.
     val keys=Modifier.focusRequester(focus).focusable().onPreviewKeyEvent { event ->
         if(event.type!=KeyEventType.KeyDown) return@onPreviewKeyEvent false
         val visible=if(expanded) rows.mapNotNull { it.first.entityKey } else emptyList()
         val index=visible.indexOf(state.selectedKey)
         when {
-            editable && state.selected!=null && (event.key==Key.Delete || event.key==Key.Backspace) -> { attempt { deleteSceneSelection(state,editable) };true }
-            editable && state.selected!=null && event.isCtrlPressed && event.key==Key.D -> { attempt { state.duplicateSelected() };true }
             event.key==Key.DirectionDown && visible.isNotEmpty() -> { state.select(visible[(index+1).coerceAtMost(visible.lastIndex)]);true }
             event.key==Key.DirectionUp && visible.isNotEmpty() -> { state.select(if(index<=0) null else visible[index-1]);true }
             event.key==Key.Enter && state.selectedKey!=null && onEditEntity!=null && editable -> { onEditEntity(state.selectedKey!!);true }

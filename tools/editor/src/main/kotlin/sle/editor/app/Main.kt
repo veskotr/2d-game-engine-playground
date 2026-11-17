@@ -519,6 +519,29 @@ private fun launchEditor(args: Array<String>) = application {
                 if(mode==ViewportMode.Scene) scene.getOrNull()?.let { sceneCreationMenu(it,scenePlayback.editing,onEditEntity={ key -> editSceneEntity(key) },position=engineSession.owner.contextPosition) } ?: emptyList()
                 else activeEntity?.let { entityCreationMenu(it,linkedEntity!=null,assetCommands) } ?: emptyList()
             }
+            // One command context for menus, toolbar actions and the keyboard dispatcher.
+            val showSceneView: (Boolean)->Unit=::showScene
+            val editorActions=remember { object: sle.editor.command.EditorActions {
+                var projectCommands: ProjectCommands?=null
+                var run: ()->Unit={}
+                override val project get()=projectCommands
+                override fun showScene(game: Boolean)=showSceneView(game)
+                override fun openPrefabWorkspace() { editingSceneKey=null;switchTab(0) }
+                override fun editEntity(key: String)=editSceneEntity(key)
+                override fun showPanel(panel: PanelId)=manager.showPanel(panel)
+                override fun finishGesture() { canvas?.finishGesture() }
+                override fun fit() { canvas?.fitEntity() }
+                override fun runProject()=run()
+                override fun showKeyboardShortcuts()=sle.editor.ui.showKeyboardShortcuts()
+            } }
+            SideEffect { editorActions.projectCommands=commands;editorActions.run=runProject }
+            val commandContext={ sle.editor.command.CommandContext(
+                mode=mode,linked=linkedEntity!=null,scene=scene.getOrNull(),entity=inspector,prefab=authoring.getOrNull(),
+                playback=scenePlayback,editable=scenePlayback.editing,projectOpen=project.opened!=null,projectBusy=project.busy,
+                viewportFailed=failed,
+                gameRunning=(mode==ViewportMode.Scene && scenePlayback.playback!=Playback.Stopped) || (mode==ViewportMode.Sandbox && playback!=Playback.Stopped),
+                actions=editorActions) }
+            sle.editor.ui.EditorShortcuts(manager,sle.editor.command.standardKeymap,commandContext)
             val desiredProject=scenePlayback.project
             val desiredPlayback=if(mode==ViewportMode.Scene) scenePlayback.playback else playback
             val desiredSource=if(mode==ViewportMode.Scene) scenePlayback.source ?: scene.getOrNull()?.serialize() ?: "{\"entities\":[]}"
@@ -595,10 +618,10 @@ private fun launchEditor(args: Array<String>) = application {
                     } else {
                         sle.editor.ui.controls.EditorToolbar {
                             if(project.opened!=null && !entity) EditorButton("Run Project",runProject,enabled=!project.busy && scenePlayback.editing && !failed,
+                                help=sle.editor.command.standardKeymap.hint(sle.editor.command.PlayCommands.runProject.id),
                                 modifier=Modifier.onGloballyPositioned { if(documentSmoke || runtimeSmoke) assetBounds["RunProject"]=it.boundsInWindow() })
                             if(mode==ViewportMode.Scene) SceneViewControls(scenePlayback,!failed,onPlay={
-                                try { canvas?.finishGesture();scenePlayback.play(scene.getOrThrow());scene.getOrNull()?.error=null;manager.showPanel(PanelId("game")) }
-                                catch(failure: Exception) { scene.getOrNull()?.error=failure.message }
+                                sle.editor.command.PlayCommands.play.run(commandContext())
                             },onStop={scenePlayback.stop()})
                             if(mode==ViewportMode.Sandbox) SandboxControls(playback,!failed) { playback=it }
                             if(!game) Row(horizontalArrangement=Arrangement.spacedBy(m.borderWidth)) {
@@ -631,7 +654,11 @@ private fun launchEditor(args: Array<String>) = application {
                             onDispose { sle.editor.ui.AssetDrag.unregister(key) }
                         }
                         androidx.compose.ui.awt.SwingPanel(modifier=Modifier.weight(1f).fillMaxWidth(),
-                            factory={EngineCanvas(engineSession,if(entity) ViewId.Entity else if(game || mode==ViewportMode.Sandbox) ViewId.Game else ViewId.Scene).also { panelCanvas=it;canvas=it }},
+                            factory={EngineCanvas(engineSession,if(entity) ViewId.Entity else if(game || mode==ViewportMode.Sandbox) ViewId.Game else ViewId.Scene).also {
+                                panelCanvas=it;canvas=it
+                                // The heavyweight canvas owns AWT focus; scoped shortcuts need its panel.
+                                manager.focus.register(it,PanelId(if(entity) "entity" else if(game) "game" else "scene"))
+                            }},
                             update={ view -> if((entity && mode==ViewportMode.Entity) || (!entity && game==scenePlayback.gameView)) canvas=view },
                         )
                     }
@@ -639,20 +666,17 @@ private fun launchEditor(args: Array<String>) = application {
             }
             Surface(Modifier.fillMaxSize(),color=sle.editor.ui.theme.LocalEditorColors.current.background) {
                 Column {
-                    val applicationMenus=editorApplicationMenus(
-                        scene.getOrNull(),inspector,authoring.getOrNull(),mode==ViewportMode.Entity,linkedEntity!=null,scenePlayback.editing,
-                        onScene={showScene(it)},onEntity={key -> if(key==null) { editingSceneKey=null;switchTab(0) } else editSceneEntity(key) },
-                        onFit={canvas?.fitEntity()},onScale={uiScale=it},
+                    val applicationMenus=editorApplicationMenus(commandContext(),onScale={uiScale=it},
                         onTheme={ workspace.appearance.update(appearance.copy(mode=it)) },
                         onDensity={ workspace.appearance.update(appearance.copy(density=it)) },
                         onExit={if(manager.requestExit { !project.busy && confirmDiscard(authoring.getOrNull()) && confirmDiscardScene(scene.getOrNull()) && workspace.saveProjectEditorState() }) exitApplication()},
                         projectEntries=projectFileMenu(project,commands,scenePlayback.editing)+listOf(
                             sle.editor.ui.EditorMenuEntry("Export Game…",project.opened!=null && !project.busy,action=distribution.exportGame)),
-                        projectAssets=assetCommands,projectDocuments=documents,projectCommands=commands,projectBusy=project.busy,
+                        projectAssets=assetCommands,projectDocuments=documents,
                         assetEntries=assetBrowserMenu(assets,assetBrowserVisible) { if(assetBrowserVisible) manager.hidePanel(PanelId("assets")) else manager.showPanel(PanelId("assets")) },
                     ) + windowsMenu(manager) { workspace.prefabSession }
                     SideEffect { saveActive=applicationMenus.first { it.first=="File" }.second.first { it.label=="Save" }.action }
-                    EditorMenuStrip(applicationMenus,window=window,shortcutWindows={manager.boundWindows().values},onMenuBounds={label,bounds -> if(menuSmoke) shellBounds[label]=bounds},title=(if(project.busy) "Project busy… — " else project.opened?.let { "${it.document.name} — " } ?: "")+
+                    EditorMenuStrip(applicationMenus,window=window,onMenuBounds={label,bounds -> if(menuSmoke) shellBounds[label]=bounds},title=(if(project.busy) "Project busy… — " else project.opened?.let { "${it.document.name} — " } ?: "")+
                         if(mode==ViewportMode.Entity) (activeEntity?.document?.name ?: "Prefab")+(if(activeEntity?.dirty==true) " *" else "")
                         else (scene.getOrNull()?.name ?: "Scene")+(if(scene.getOrNull()?.dirty==true) " *" else ""))
                     val notice=Modifier.padding(horizontal=LocalEditorMetrics.current.panelPadding,vertical=LocalEditorMetrics.current.gap/2)

@@ -12,8 +12,8 @@ Selecting an entity in the Scene shows all of its components in the Inspector, w
 **Add Component**, **Remove**, and for colliders/sprites/zones **Edit** (resize handles in the
 Scene view) and **Fit** (match the sprite). Sprite colors show as RGBA with a color picker;
 textures show a thumbnail and **Use image size**. The Hierarchy toolbar adds, duplicates and
-deletes entities; **Delete** and **Ctrl+D** work in the Hierarchy and Scene view, and arrow
-keys move the selection. Drag a prefab or image from Assets onto the Scene view (placed at
+deletes entities; **Delete** (or Backspace) and **Ctrl+D** work while the Hierarchy or Scene
+view has focus, and arrow keys move the selection. Drag a prefab or image from Assets onto the Scene view (placed at
 the cursor) or the Hierarchy. Saving a project scene copies textures from opened/imported
 packages into `Assets/Textures` instead of failing. Double-clicking a scene or prefab in Assets
 opens it; in a project, open scenes/prefabs that already have a file are saved automatically
@@ -58,7 +58,26 @@ expanders are drawn vectors; entity/component/asset icons use the bundled editor
 Open `assets/scenes/editor_camera_demo.slescene` for the included child-camera,
 WASD and physics example, or `assets/scenes/editor_starter.slescene` for ground
 and crates. Standalone Save produces a portable `.slescene` with assets, loadable by the
-engine. **Ctrl+S** invokes File → Save for the active scene or prefab, including from detached windows and the native viewport. Project Save uses plain JSON sources; Export Package produces the portable archive. See [scene workflow](../../docs/topics/SceneEditor.md).
+engine. Project Save uses plain JSON sources; Export Package produces the portable archive. See [scene workflow](../../docs/topics/SceneEditor.md).
+
+### Keyboard shortcuts
+
+**Help → Keyboard Shortcuts** lists every shortcut, generated from the command registry,
+and menus show each command's shortcut. They work from any editor window, including
+detached windows and the native viewport:
+
+| Command | Shortcut | Where |
+|---|---|---|
+| Save / Save As | Ctrl+S / Ctrl+Shift+S | anywhere |
+| Undo / Redo | Ctrl+Z / Ctrl+Y or Ctrl+Shift+Z | anywhere (active entity's history) |
+| Delete / Duplicate | Delete or Backspace / Ctrl+D | Hierarchy or Scene view focused |
+| Play (Resume) / Pause / Stop | F5 / F6 / Shift+F5 | anywhere |
+| Run Project | Ctrl+F5 | anywhere |
+
+Shortcuts never fire while a modal dialog or menu is open. In a text field, plain keys,
+Delete, arrows and the field's own Ctrl+Z/Y/A/C/X/V edit text; other Ctrl/Alt and
+function-key shortcuts still work. While the Game view has focus and the game runs or
+is paused, every key except the play controls goes to the game.
 
 UI work follows the design system in [UI_DESIGN.md](UI_DESIGN.md); see
 [HOW_TO_ADD_UI_FEATURES.md](HOW_TO_ADD_UI_FEATURES.md) before adding panels, inspector
@@ -242,8 +261,8 @@ picking, but can still be selected from the menu.
   handles edit its own size. These edits leave Transform and colliders unchanged.
 - **Shift** while dragging or **Snap 0.1** snaps authored values to 0.1 units.
   Arrow keys nudge by 0.1 world units; Shift+arrows use 1 world unit.
-- **Escape** cancels the current drag. **Undo / Redo**, or **Ctrl+Z / Ctrl+Y** while
-  the viewport is focused, restore complete edits. Ctrl+Shift+Z also redoes.
+- **Escape** cancels the current drag. **Undo / Redo** (**Ctrl+Z / Ctrl+Y**, or
+  Ctrl+Shift+Z) restore complete edits; pressed during a drag, they cancel it.
 
 Each drag is one undo step. Inspector, component and imported-asset changes also
 enter history; New/Open reset it. Handles account for rotation, mirrored scale

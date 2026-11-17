@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -122,7 +123,10 @@ internal fun DockHost(
                         DockPanelButton(EditorGlyph.Close,"Hide panel") { manager.hidePanel(node.active) }
                     }
                 }
-                Box(Modifier.weight(1f).fillMaxWidth().background(colors.surface)) { key(node.active) { content(node.active) } }
+                // Focus-within reports the active panel for scoped shortcuts (Hierarchy, Scene view…).
+                val active=node.active
+                Box(Modifier.weight(1f).fillMaxWidth().background(colors.surface)
+                    .onFocusChanged { manager.focus.report(host,active,it.hasFocus) }) { key(node.active) { content(node.active) } }
             }
         }
     }

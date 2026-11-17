@@ -85,6 +85,8 @@ internal class WorkspaceWindowManager(
     private val listeners = mutableMapOf<HostId, ComponentAdapter>()
     private val desktop by lazy { DockDesktopDrag(this) }
     internal val drag = DockDragController()
+    /** Focused panel per window, for scoped keyboard shortcuts. */
+    internal val focus = WorkspaceFocus()
     private val measurements = mutableMapOf<Pair<HostId, GroupId>, GroupMeasurement>()
     private data class GroupMeasurement(var bounds: Rect? = null, var handle: Rect? = null, var strip: Rect? = null,
         val tabs: MutableMap<PanelId, Rect> = mutableMapOf())
@@ -107,7 +109,7 @@ internal class WorkspaceWindowManager(
     fun unbind(id: HostId, window: Window) {
         if(windows[id]!==window) return
         desktop.cancel();listeners.remove(id)?.let(window::removeComponentListener)
-        windows.remove(id);stacking.remove(id);surfaces.remove(id);measurements.keys.removeAll { it.first==id }
+        windows.remove(id);stacking.remove(id);surfaces.remove(id);measurements.keys.removeAll { it.first==id };focus.forgetHost(id)
         if(windows.isEmpty()) desktop.close()
     }
     private fun recordBounds(id: HostId, window: Window) {

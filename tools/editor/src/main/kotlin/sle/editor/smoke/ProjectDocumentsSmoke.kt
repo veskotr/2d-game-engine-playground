@@ -101,8 +101,11 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     scene.addCamera()
     val scenePath=first.assets.resolve("Scenes/shared.scene.json")
     // Real Ctrl+S from native viewport focus uses the project JSON Save chooser.
-    canvas().requestFocusInWindow()
-    delay(250)
+    // Click empty canvas space as a user would: requestFocusInWindow alone does not activate the
+    // window, and an inactive editor would send Ctrl+S to whichever app owns the keyboard.
+    canvas().let { view -> val at=view.locationOnScreen;robot.mouseMove(at.x+view.width-12,at.y+view.height-12) }
+    robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+    await("Native canvas did not gain focus for Ctrl+S") { canvas().isFocusOwner }
     choose(scenePath)
     robot.keyPress(java.awt.event.KeyEvent.VK_CONTROL);robot.keyPress(java.awt.event.KeyEvent.VK_S)
     robot.keyRelease(java.awt.event.KeyEvent.VK_S);robot.keyRelease(java.awt.event.KeyEvent.VK_CONTROL)

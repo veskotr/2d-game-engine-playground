@@ -73,12 +73,7 @@ internal class ViewportGizmos(val state: EntityWorkspaceState, val entityOnly: B
             if (drag != null) cancel() else state.redo()
             return
         }
-        if (drag == null && entityOnly && scene != null && (event.keyCode == KeyEvent.VK_DELETE ||
-                (event.isControlDown && event.keyCode == KeyEvent.VK_D))) {
-            try { if (event.keyCode == KeyEvent.VK_DELETE) sle.editor.ui.deleteSceneSelection(scene) else scene.duplicateSelected() }
-            catch (failure: IllegalArgumentException) { scene.error = failure.message }
-            return
-        }
+        // Delete and Ctrl+D are registered commands; the shortcut dispatcher runs them before this listener.
         if (drag != null || state.fieldErrors.isNotEmpty()) return
         val amount=if (event.isShiftDown) 1.0 else 0.1
         val delta=when(event.keyCode) {

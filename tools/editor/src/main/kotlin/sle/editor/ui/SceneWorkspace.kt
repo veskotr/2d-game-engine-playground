@@ -35,7 +35,7 @@ internal fun SceneWorkspace(state: SceneWorkspaceState, onEditEntity: (String)->
             EditorButton("Delete",{attempt { deleteSceneSelection(state,editable) }},enabled=editable && state.selected!=null,help="Delete the selection and its children (Delete)",style=EditorButtonStyle.Ghost)
         }
         EditorSeparator()
-        state.error?.let { Text(it,Modifier.padding(horizontal=LocalEditorMetrics.current.panelPadding,vertical=LocalEditorMetrics.current.gap),color=MaterialTheme.colors.error) }
+        // Scene results and failures are reported in the status bar (EditorNotices).
         SceneTree(state,Modifier.weight(1f).fillMaxWidth(),onEntityBounds,editable,onEditEntity)
     }
 }
@@ -92,7 +92,6 @@ internal fun SceneEntityInspector(state: SceneWorkspaceState,editable: Boolean=t
                 if(selected.fieldErrors.isNotEmpty()) Text("Finish the highlighted fields before saving.",color=MaterialTheme.colors.error)
             }
             Column(verticalArrangement=Arrangement.spacedBy(m.borderWidth)) {
-                selected.error?.let { Text(it,Modifier.padding(horizontal=m.panelPadding),color=MaterialTheme.colors.error) }
                 ComponentSections(selected,readOnly=!editable,scene=true) { component ->
                     if(component=="Camera2D") EditorButton("Make Active",{attempt { state.setActiveCamera(selected.document.key) }},enabled=editable,style=EditorButtonStyle.Ghost)
                 }

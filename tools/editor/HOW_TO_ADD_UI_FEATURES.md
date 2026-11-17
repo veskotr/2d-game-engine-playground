@@ -109,6 +109,30 @@ if (EditorDialogs.showConfirmDialog(null, "Delete $name?", "Delete project asset
 Use `EditorFileChooser(folder)` instead of `JFileChooser`. Empty panels use
 `EditorEmptyState(title, message) { optional action }`.
 
+## Example 3: report a result
+
+Results and failures go to the status bar through `EditorNotices`; never add a red `Text`
+line to a panel. Field validation stays inline next to the field.
+
+```kotlin
+// A composable outside Main: the service is provided to every editor window.
+LocalEditorNotices.current?.warning("Select a single entity to save it as a prefab")
+
+// Work that has the workspace: info/success clear after ~6 s, warnings/errors are sticky.
+notices.success("Saved ${path.fileName}")
+notices.post(NoticeLevel.Success, "Exported to $folder", ttlMillis = 15_000)  // longer to read a path
+notices.error(failure.message ?: "Export failed")
+
+// An action button: hide it once it no longer applies.
+notices.info("Deleted $subject", NoticeAction("Undo", available = { stillLatest() }) { undo() })
+```
+
+Model and project code keeps reporting through its existing fields (`scene.error`,
+`scene.message`, `entity.error`, `project.error`); `ReportNotices` in `Main.kt` posts and clears
+them, so a model never depends on UI. A new long-lived owner of a notice (like the appearance
+store) adds a watched `NoticeSource` there. Test the result with an `EditorNotices` whose
+`clock` you control (see `EditorNoticesTest`).
+
 ## Keyboard and accessibility
 
 - Every clickable must be focusable through the shared components (they set roles,
@@ -126,6 +150,7 @@ Use `EditorFileChooser(folder)` instead of `JFileChooser`. Empty panels use
   are registered commands, not widget key handlers.
 - [ ] Undo/redo and file integrity unchanged; no document dirty flag from presentation.
 - [ ] New reusable pattern? Add it to `ui/theme/EditorThemeGallery.kt` and UI_DESIGN.md.
+- [ ] Results and failures are posted to `EditorNotices`, not shown as panel text.
 
 ## Testing commands (from `tools/editor`)
 

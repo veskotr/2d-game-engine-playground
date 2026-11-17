@@ -1,6 +1,6 @@
 # L1 — Editor core: commands, history, selection, status bar, viewport tools
 
-**Status:** Planned 2026-11-17. Sessions 1–3 implemented and validated (see Progress); sessions 4–7 not started.
+**Status:** Planned 2026-11-17. Sessions 1–4 implemented and validated (see Progress); sessions 5–7 not started.
 **Parent:** [editor-game-workflows.md](editor-game-workflows.md) §5, base layer
 **L1** (roadmap items 0.1, 0.2, 0.4, 1.1, 1.2 and rule R3).
 **Request:** Plan L1 only. Tilemaps and the other layers come later.
@@ -244,11 +244,11 @@ is shippable alone.
 
 ### Session 4: Status bar and notices (R8)
 
-- [ ] Add a `ui/EditorNotices` service: `post(level, text, ttl?, action?)`.
+- [x] Add a `ui/EditorNotices` service: `post(level, text, ttl?, action?)`.
   - Info and success clear after ~6 s.
   - Warnings and errors stay until dismissed or replaced.
   - Keep a short recent list, until the Console arrives with layer L4.
-- [ ] Add an `EditorStatusBar` control: new `statusBar` metric (Compact 24 /
+- [x] Add an `EditorStatusBar` control: new `statusBar` metric (Compact 24 /
   Comfortable 28 dp), tokens only, added to the theme gallery. It shows:
   - left: tool or context hint
   - centre: the latest notice, with a level icon and colour, an optional action
@@ -256,17 +256,17 @@ is shippable alone.
   - right: background task progress, selection count, play state and a dirty
     marker
   - Main window only.
-- [ ] Migrate document, project, distribution, appearance and layout notices to
+- [x] Migrate document, project, distribution, appearance and layout notices to
   `EditorNotices`. Field validation stays inline in the Inspector.
   `viewportPanel` failure text stays in the viewport, since it explains an empty
   panel.
-- [ ] Delete and other destructive-but-undoable actions post "Deleted N
+- [x] Delete and other destructive-but-undoable actions post "Deleted N
   entities · Undo" (R9).
-- [ ] Tests:
+- [x] Tests:
   - service: ttl, sticky errors, replacement, action invocation
   - contrast tests cover the new pairs
   - `--editor-appearance-smoke` captures the status bar in both themes
-- [ ] Docs: UI_DESIGN.md (status bar, notices rule) and HOW_TO_ADD_UI_FEATURES
+- [x] Docs: UI_DESIGN.md (status bar, notices rule) and HOW_TO_ADD_UI_FEATURES
   ("report a result").
 
 ### Session 5: Viewport tool framework, Select/Move tools, snapping, Frame Selected
@@ -754,3 +754,165 @@ Desktop smokes need an unlocked interactive Windows session.
   - Marquee selection is S5.
   - No editor version bump (planned for S7).
 - Next: Session 4 (status bar and notices), only when requested.
+
+### Session 4 handoff — 2026-11-17
+
+- Start state: `feat/project-foundation` at e946acd (Session 3). Only the untracked
+  starter-assets zip and `docs/plans/editor-game-workflows.md` were present; both were left
+  alone. Nothing was committed.
+- Evidence check ("Current code"). Red notice `Text` was in these places:
+  - `app/Main.kt` ~682–686, not 614–658. That earlier range is the `viewportPanel` failure text
+    and the field-validation hint, which both stay. Those lines showed the appearance notice, the
+    layout notice and `project.error` in red, and the distribution message as a caption.
+  - `ui/SceneWorkspace.kt`: the scene error under the Hierarchy toolbar, and the selected
+    entity's error in the Inspector.
+  - `ui/EntityWorkspace.kt`: the prefab error.
+  - "Project controls" render nothing themselves; their `project.error` showed in `Main.kt`.
+  - `scene.message` and `entity.message` were never rendered, so "Saved …", "Opened …", "Applied
+    instance changes …" and S2's `HISTORY_CLEARED_NOTICE` were invisible until now.
+  - The Assets panel's own operation caption (`ProjectAssetControls.message`) is not red and stays.
+- Implemented:
+  - `ui/EditorNotices.kt`:
+    - `EditorNotices` with `post(level, text, ttlMillis?, action?)` and `info`/`success`/
+      `warning`/`error`. Info and success clear after 6 s; warnings and errors are sticky; a newer
+      notice replaces the current one.
+    - `recent` (20, newest first) and `clearRecent`; `dismiss`, `expire` and `remainingMillis`
+      with an injectable `clock`.
+    - `invoke(notice)` runs an available `NoticeAction` after dismissing the notice, so the
+      action's own result stays.
+    - `hint`, the context-hint API for S5's tools; null shows the window's default hint.
+    - `LocalEditorNotices`, `postedAfter` for smokes, and `documentMessageLevel`.
+    - `NoticeSource`/`NoticeBridge`/`ReportNotices`: the bridge from model fields to notices.
+  - One service per editor: `EditorWorkspace.notices`, provided to the main and detached windows.
+  - Migration. Model and project code still sets its fields, so `model/` gains no UI dependency.
+    `ReportNotices` in `Main.kt` posts each field and then clears it:
+    - scene, every scene entity and the prefab workspace: `error` → Error. `message` → Success,
+      or a sticky Warning when it ends with `HISTORY_CLEARED_NOTICE`. This covers S2's
+      `replaceLinkedScene` and the Apply Changes text.
+    - `ProjectWorkspaceState.error` → Error.
+    - The appearance and layout notices are watched rather than cleared, and posted once per new
+      text. The layout timer re-sets the same failure every second.
+  - Distribution: `projectDistributionControls(project, notices)` posts the "Exporting…" info and
+    a 15 s success. A failure still goes through `project.error`. It exposes `exporting` for
+    progress.
+  - S3's Hierarchy multi-drag refusal is a Warning through `LocalEditorNotices`; it falls back to
+    `scene.error` without the service.
+  - The red lines in `Main.kt`, `SceneWorkspace.kt` (two) and `EntityWorkspace.kt` were removed.
+    Field validation and the `viewportPanel` failure text stay where they were.
+  - Delete:
+    - `SceneWorkspaceState.onDeleted(subject)` runs after `removeSelected` records its step, so
+      every delete path reports it: the command, the toolbar, the Inspector, context menus and
+      the keys.
+    - `ui/SceneCommands.reportDeletion` posts "Deleted <name | N entities>" (Info) with Undo. The
+      button runs the registered `EditCommands.undo` with the live command context. It shows
+      only while the scene is the active document, no gesture is open, and the deletion is still
+      `History.latestStep`, which is new.
+  - `ui/EditorStatusBar.kt`, main window only:
+    - left: the hint
+    - centre: the notice on its level background, with a drawn level glyph, the level colour,
+      the action, Dismiss for sticky levels, and a recent-messages button. That button opens a
+      Swing popup like the other menus, so it stays above the native canvas; clicking a row
+      copies it, and the popup has Clear Messages.
+    - right: progress ("Exporting game…"/"Working…"), "N selected", Editing/Playing/Paused and
+      "Unsaved"
+  - Default hints:
+    - Scene: "Click to select; Ctrl+click adds; drag to move; middle-drag pans; right-click for
+      actions"
+    - Game view: Play
+    - Play mode: Stop
+    - Prefab workspace and Sandbox each have one.
+    S5 replaces these through `notices.hint`.
+  - Tokens:
+    - `EditorMetrics.statusBar`: Compact 24 dp, Comfortable 28 dp.
+    - Glyphs `ChevronUp`, `Info`, `Success`, `Warning` and `Error`.
+    - `EditorButton(minHeight=)`, so the action fits the bar.
+    - Four status-bar specimens in the theme gallery.
+- Deliberate choices (correct them if wrong):
+  - Document `error` fields are consumed (posted, then cleared) rather than mirrored. Code sets
+    the same text again for each new failure, and only consuming reports a repeat. As a result,
+    smokes that waited for `scene.error`/`project.error` now look at `notices.postedAfter(…)`:
+    prefab-workflow stale drag, project-documents external conflict, project-smoke rejected
+    open, and project-runtime missing startup.
+  - A cleared error field does not clear its sticky notice. The plan's rule is "until dismissed
+    or replaced".
+  - Single deletions name the entity ("Deleted Player"); several say "Deleted N entities", where
+    N counts the removed subtrees.
+  - Only entity Delete posts an Undo notice. Remove Component and Unlist are also undoable but
+    have no notice yet.
+  - The status bar has no cancel for long work (R8 mentions one); no task supports cancelling.
+  - Drop and drag refusals in `Main.kt` ("Stop the game before …") still use `scene.error`, so
+    they arrive as Errors.
+- Tests:
+  - `ui/EditorNoticesTest` (7 tests):
+    - ttl and sticky levels, including an explicit ttl on an error
+    - replacement, the recent list, `postedAfter` and `clearRecent`
+    - action invocation, a stale action, and an action's own result staying
+    - the bridge: consume versus watch, repeats and capacity
+    - `reportDeletion`: Undo through `EditCommands.undo` with the live context; hidden when the
+      prefab is the active document; stale after a later step; selection restored
+    - `documentMessageLevel`
+    - the `statusBar` metric
+  - `EditorAppearanceTest.requiredContrastPairs` adds:
+    - each level colour on `surfaceRaised` and `surface`
+    - `textPrimary`/`textSecondary` and `focusRing` on each level background
+  - `ui/EditorStatusBarRenderTest` renders the bar offscreen (`ImageComposeScene`) in Dark/Light ×
+    Compact/Comfortable. It checks every bar is `statusBar` + 1 hairline high with a notice, an
+    action and all right-hand facts, and writes `build/reports/status-bar/*.png`. The images were
+    reviewed: they show the level colours, Undo, Dismiss on sticky levels, the spinner and the
+    right-hand facts.
+- Smoke changes:
+  - `--editor-appearance-smoke`, in each theme:
+    - adds an entity and deletes it
+    - waits for "Deleted New Entity" with Undo available, captures `status-bar-undo-<theme>`,
+      invokes Undo and checks the entity is back, then undoes the create
+    - sets a sticky scene error, checks the bridge consumed it, captures
+      `status-bar-error-<theme>` and dismisses it
+  - `--scene-smoke` checks that the Robot Delete key posts "Deleted 2 entities" with Undo, and
+    that Ctrl+Z hides the button.
+- Commands run, from `tools/editor` through `gradle.ps1` (JDK 21), started from Git Bash:
+  - `compileKotlin`: failed twice and then passed. The first failure was a duplicate
+    `--console` argument (`gradle.ps1` already passes it). The second was a missing
+    `postedAfter` import in four smokes.
+  - `test --tests sle.editor.ui.EditorNoticesTest --tests sle.editor.ui.theme.EditorAppearanceTest`:
+    the first attempt failed to compile (a qualified function reference in `Main.kt`). After the
+    fix: 7/7 and 2/2.
+  - `build`: passed, 303 tests, 0 failures, 2 existing skips.
+  - `test --tests sle.editor.ui.EditorStatusBarRenderTest`: passed (run twice; the second run
+    renders a later spinner frame).
+  - `build` again after the render test and docs: passed, 304 tests, 0 failures, 2 existing skips.
+  - `run --args=--editor-appearance-smoke`: printed `EDITOR_APPEARANCE_SMOKE_PASS`, and every
+    state check passed (Delete notice, Undo, consumed error, theme switch). **The Windows session
+    was locked**, however (LockApp/LogonUI running), so every capture, including the new
+    status-bar ones, shows the lock screen. The captures are not visual evidence.
+  - Later the same day, with the desktop unlocked, each smoke ran once and passed on the first run:
+    - `run --args=--editor-appearance-smoke`: `EDITOR_APPEARANCE_SMOKE_PASS`. The captures are
+      real now. `status-bar-undo-dark/light` show "Deleted New Entity" with Undo in the info
+      colours, and `status-bar-error-dark/light` show the sticky error with Dismiss and
+      "1 selected | Editing | Unsaved".
+    - `run --args=--scene-smoke`: `SCENE_MULTI_SELECT_SMOKE_PASS …/delete-notice/…`,
+      `SCENE_EDITOR_SMOKE_PASS`, `EDITOR_UI_SCALE_PASS`, `SCENE_TREE_COMPONENT_HANDOFF_PASS`,
+      `SANDBOX_DESKTOP_PASS`, `SCENE_ENTITY_SANDBOX_SWITCH_PASS`.
+    - `run --args=--context-menu-smoke`: `CONTEXT_MENU_SMOKE_PASS`,
+      `DETACHED_DELETE_PLAYBACK_SMOKE_PASS`, `MENU_KEYBOARD_SMOKE_PASS`,
+      `AUXILIARY_APPEARANCE_SMOKE_PASS`.
+    - `run --args=--project-documents-smoke`: `PROJECT_DOCUMENTS_SMOKE_PASS` (external conflict
+      seen as a notice) and `PREFAB_WORKFLOW_SMOKE_PASS` (stale drag refused as a notice).
+    - `run --args=--project-smoke`: `PROJECT_FOUNDATION_SMOKE_PASS` (failed open reported as a
+      notice).
+    - `run --args=--project-runtime-smoke`: `PROJECT_RUNTIME_SMOKE_PASS` (missing startup
+      reported as a notice).
+    - `run --args=--project-distribution-smoke`: `PROJECT_DISTRIBUTION_SMOKE_PASS` and
+      `PROJECT_RUNTIME_SMOKE_PASS`.
+    - The S3 flaky stages (the first Hierarchy click, and View → Prefab Workspace) did not recur.
+- Docs:
+  - UI_DESIGN: the `statusBar` metric, the component row, the contrast rule, and a new "Status
+    bar and notices" section with the rule and the slot table.
+  - HOW_TO_ADD_UI_FEATURES: "Example 3: report a result", plus a checklist line.
+  - Editor README: the status bar, and the Delete Undo notice.
+- Not done:
+  - A manual walk, and the `--gizmo-smoke` and `--docking-workspace-smoke` runs (neither was
+    in the S4 list).
+  - Hover does not pause an info notice's 6 s timer.
+  - No editor version bump (planned for S7).
+- Next: Session 5 (viewport tools and snapping), only when requested. Tool hints go to
+  `workspace.notices.hint`.

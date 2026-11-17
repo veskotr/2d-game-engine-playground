@@ -29,7 +29,8 @@ Paths are relative to `src/main/kotlin/sle/editor/`.
 **Contrast** is enforced by `EditorAppearanceTest.requiredContrastPairs`: every text
 token ≥ 4.5:1 on every surface, hover, pressed, selected and disabled background;
 `border` and `focusRing` ≥ 3:1; `accent`/`accentOnPrimary` and each status pair ≥
-4.5:1. `borderSubtle` and `separator` are deliberately low contrast and never the
+4.5:1; for the status bar, each level colour on `surfaceRaised` and `surface`, and
+`textPrimary`/`textSecondary` (≥ 4.5:1) and `focusRing` (≥ 3:1) on each level background. `borderSubtle` and `separator` are deliberately low contrast and never the
 only identifier of a control. Starting hex values from the brief were adjusted at the
 token source: surfaces are more neutral, `textSecondary`, `border` and disabled text
 are stronger.
@@ -48,6 +49,7 @@ are stronger.
 | `icon` / `iconSmall` | 16 / 14 dp | 18 / 14 dp |
 | Body / secondary / heading text | 13 / 12 / 13 sp | 14 / 13 / 14 sp |
 | `controlRadius`, `borderWidth`, `focusBorderWidth`, `tabUnderline` | 3, 1, 2, 2 dp | same |
+| Main-window `statusBar` | 24 dp | 28 dp |
 
 Heights are minima: controls grow with OS font scaling. UI scale (75/85/**100%**
 default) multiplies density once; OS DPI is applied by Compose/Java2D, never again
@@ -74,6 +76,7 @@ share one baseline. Feature code never sets `fontSize`.
 | `EditorPropertyRow` | Label column (`propertyLabelFraction`, 36%) + editor column that fills; stacks below `propertyStackThreshold`. |
 | `EditorInspectorSection` | Collapsible section; the whole header toggles; trailing action slot. |
 | `EditorPanelHeader`, `EditorTreeRow`, `EditorTooltip`, `EditorEmptyState` | Sub-panel headings, tree/list rows, tooltips, centered empty panels. |
+| `ui/EditorStatusBar.kt` → `EditorStatusBar(notices, EditorStatus(…))` | The main window's bottom bar; see [Status bar and notices](#status-bar-and-notices). |
 
 Every interactive control renders **normal, hover, pressed, focused (independent 2 dp
 ring), selected, disabled and invalid** from tokens. Dock chrome (`workspace/DockHost.kt`)
@@ -134,6 +137,40 @@ document, dirty flag, render context and game pixels unchanged.
 - System/OS-preference theme detection is not implemented (Dark/Light only).
 - At very small logical screens (for example 1080p at 200%, 960×540) docks that cannot
   meet their minimum sizes collapse into tabs by design; that layout is then saved.
+
+## Status bar and notices
+
+**Rule: a result goes to the status bar, never to a red line in a panel.** `ui/EditorNotices`
+(`EditorWorkspace.notices`, one per editor) is the single channel for results and failures:
+`post(level, text, ttlMillis?, action?)`, or `info`/`success`/`warning`/`error`.
+
+- Info and success clear after about 6 s (`DEFAULT_TTL_MILLIS`); warnings and errors stay until
+  dismissed or replaced. A newer notice always replaces the current one.
+- `recent` keeps the last 20 (newest first) for the recent-messages popup, until the Console
+  (layer L4) takes them over.
+- A `NoticeAction(label, available) { … }` adds a Ghost button; it hides when `available()` turns
+  false, and running it dismisses the notice first so its own result stays. Delete uses this:
+  `reportDeletion` posts "Deleted N entities" with Undo, which runs the registered
+  `EditCommands.undo` while the deletion is still the active document's latest step.
+- Document `error`/`message` fields (scene, its entities, the prefab workspace) and
+  `ProjectWorkspaceState.error` stay the model's way to report. `ReportNotices` in `Main.kt`
+  posts each one (errors as Error, messages as Success, a history-cleared message as Warning)
+  and clears the field. Appearance and layout notices are watched, not cleared.
+- Stays in place: field validation in the Inspector and its viewport hint, and the
+  `viewportPanel` failure text, which explains an empty panel. The Assets panel keeps its
+  own operation caption.
+
+`EditorStatusBar` (main window only, `surfaceRaised`, `statusBar` high, a `separator` above):
+
+| Slot | Shows |
+|---|---|
+| Left | `EditorNotices.hint` while a tool sets it (Session 5), else the window's hint for the current view, in `textSecondary`. |
+| Centre | The current notice on its level background: a drawn level glyph (`EditorGlyph.Info/Success/Warning/Error`) and the text in the level colour, an optional action, Dismiss for sticky levels; then the recent-messages button (`ChevronUp`, a Swing popup like other menus; clicking a row copies it). |
+| Right | Background progress (spinner and label), "N selected", Editing/Playing/Paused and "Unsaved", divided by vertical separators. |
+
+Detached windows have no status bar; their panels post to the same service. The theme gallery
+shows one bar per level, and `--editor-appearance-smoke` captures `status-bar-undo-*` and
+`status-bar-error-*` in both themes.
 
 ## Scene creation and deletion
 

@@ -1,5 +1,6 @@
 package sle.editor.smoke
 
+import sle.editor.ui.postedAfter
 import androidx.compose.ui.geometry.Rect
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
@@ -96,11 +97,12 @@ internal suspend fun runPrefabWorkflowSmoke(window: JFrame,canvas: ()->EngineCan
     check(EntityDrag.dragging==null) { "Escape did not cancel the entity drag" }
     robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);delay(300)
     check(!project.busy && Files.list(prefabs).use { it.count() }==count && scene.document().prefabInstances.none { it.key==loose }) { "Cancelled drag wrote a prefab" }
+    // Refusals are reported as status-bar notices (the scene's error field is consumed by them).
+    val beforeStale=workspace.notices.recent.firstOrNull()
     EntityDrag.move(EntityDragPayload("stale-scene",scene.file,loose,"Stale"),folder)
     check(EntityDrag.release(folder))
-    await("Stale payload was not refused") { scene.error?.contains("changed during the drag")==true }
+    await("Stale payload was not refused") { workspace.notices.postedAfter(beforeStale).any { it.level==sle.editor.ui.NoticeLevel.Error && "changed during the drag" in it.text } }
     check(Files.list(prefabs).use { it.count() }==count)
-    scene.error=null
     println("PREFAB_WORKFLOW_STAGE cancel-stale")
     // --- Viewport: drag a picked sprite out of the canvas onto the folder; its pose is unchanged.
     val view=canvas()

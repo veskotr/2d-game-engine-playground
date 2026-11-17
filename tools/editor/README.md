@@ -27,7 +27,15 @@ or the folder you last used.
 Delete removes the selected subtrees as one undo step and clears selection,
 so a held key cannot delete the next entity. Delete in Inspector text inputs edits text;
 modal dialogs, Play and Pause block scene deletion. The same command works in detached
-Hierarchy and Scene windows.
+Hierarchy and Scene windows. The status bar then shows "Deleted N entities" with an **Undo**
+button for a few seconds; the button disappears once another edit becomes the latest step.
+
+The **status bar** at the bottom of the main window shows a hint for the current view, the
+latest result or failure (saves, opens, project and export results, layout and appearance
+problems), background progress, the selection count, the play state and an "Unsaved" marker.
+Info and success messages clear after about six seconds; warnings and errors stay until you
+dismiss them or a newer message replaces them. The arrow button lists recent messages; click
+one to copy it. Field validation stays beside the field in the Inspector.
 
 Right-click empty Scene space to create an Entity, Sprite, Camera, collider or zone at
 that world position. Right-click an entity to select it and use the same creation menu;

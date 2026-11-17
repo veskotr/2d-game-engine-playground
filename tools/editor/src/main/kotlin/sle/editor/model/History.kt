@@ -50,6 +50,8 @@ internal class History(private val capacity: Int = CAPACITY) {
     val canRedo get() = future.isNotEmpty()
     val undoLabel: String? get() = past.lastOrNull()?.label
     val redoLabel: String? get() = future.lastOrNull()?.label
+    /** The step Undo would revert, compared by identity: a notice's Undo button applies only while it is unchanged. */
+    val latestStep: Entry? get() = past.lastOrNull()
     /** Labels of the undoable steps, oldest first. */
     val undoLabels: List<String> get() = past.map { it.label }
 

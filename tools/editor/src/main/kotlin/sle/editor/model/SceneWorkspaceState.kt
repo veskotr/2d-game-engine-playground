@@ -28,6 +28,8 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     /** Project-only: save an entity subtree as a prefab in an Assets folder and link it. */
     var projectCreatePrefab: ((String,Path)->Unit)? = null
     var projectFileAction: ((Boolean,Boolean)->Boolean)? = null
+    /** Editor-only: called after a deletion was recorded, with what it removed ("Player", "3 entities"). */
+    var onDeleted: ((String)->Unit)? = null
     fun openProject(opened: OpenedProjectDocument) {
         require(opened.kind==ProjectDocumentKind.Scene) { "Select a project scene" }
         openResolved(opened.source,opened.assets,opened.path)
@@ -327,7 +329,9 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         val removed=LinkedHashSet<String>().apply { selectionRoots().forEach { addAll(subtree(it)) } }.ifEmpty { return }
         require(prefabInstances.none { link -> link.entityKeys.any { it in removed } && link.key !in removed }) { "Delete the linked prefab root, or unpack first" }
         val remaining=entities.filterNot { it.document.key in removed };requireReferences(remaining)
-        change("Delete ${subjects(removed)}") { entities=remaining;parents=parents.filterKeys { it !in removed };prefabInstances=prefabInstances.filterNot { it.key in removed };selection.clear() }
+        val subject=subjects(removed)
+        change("Delete $subject") { entities=remaining;parents=parents.filterKeys { it !in removed };prefabInstances=prefabInstances.filterNot { it.key in removed };selection.clear() }
+        onDeleted?.invoke(subject)
     }
     private fun restoreOperation(target: Structure) {
         for(state in target.entities) {

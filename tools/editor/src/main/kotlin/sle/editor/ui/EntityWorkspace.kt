@@ -25,7 +25,6 @@ internal fun EntityWorkspace(state: EntityWorkspaceState, embedded: Boolean = fa
     Column(Modifier.fillMaxSize().editorContextMenu { entityCreationMenu(state,embedded,projectAssets) }) {
         sle.editor.ui.controls.EditorPanelHeader("Prefab")
         Column(Modifier.padding(horizontal=m.panelPadding,vertical=m.gap),verticalArrangement=Arrangement.spacedBy(m.gap/2)) {
-            state.error?.let { Text(it, color = MaterialTheme.colors.error) }
             key(state,state.document.key) {
                 sle.editor.ui.controls.EditorPropertyRow("Name",help="Entity name") {
                     sle.editor.ui.inspector.InspectorTextInput(state.document.name,"Name",{state.rename(it)})

@@ -1,5 +1,6 @@
 package sle.editor.smoke
 
+import sle.editor.ui.postedAfter
 import androidx.compose.ui.geometry.Rect
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
@@ -16,14 +17,14 @@ import javax.swing.*
 
 internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineCanvas,project: ProjectWorkspaceState,
     projects: ProjectCommands,documents: ()->ProjectDocumentCommands?,browser: ()->AssetBrowserState?,bounds: Map<String,Rect>,
-    scene: SceneWorkspaceState,prefab: EntityWorkspaceState,playback: ScenePlaybackState,
+    scene: SceneWorkspaceState,prefab: EntityWorkspaceState,playback: ScenePlaybackState,notices: sle.editor.ui.EditorNotices,
 ) {
     val robot=Robot().apply { autoDelay=12 }
     suspend fun await(message: String,condition: ()->Boolean) {
         repeat(240) { if(condition()) { delay(100);return };delay(25) }
         runCatching { ImageIO.write(robot.createScreenCapture(Rectangle(Toolkit.getDefaultToolkit().screenSize)),"png",
             Path.of(System.getProperty("sle.smokeReport")).parent.resolve("project-documents-failure.png").toFile()) }
-        error("$message; scene=${scene.error}; prefab=${prefab.error}; project=${project.error}")
+        error("$message; scene=${scene.error}; prefab=${prefab.error}; project=${project.error}; notice=${notices.current?.text}")
     }
     suspend fun click(id: String,double: Boolean=false) {
         await("Missing browser control $id") { id in bounds }
@@ -141,8 +142,9 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     answer(JOptionPane.NO_OPTION);click("AssetFile:Scenes/shared.scene.json",true)
     check(scene.name=="Retain dirty draft" && scene.dirty)
     withContext(Dispatchers.IO) { Files.writeString(scenePath,source.replace("Shared Scene","External Scene")) }
+    val beforeConflict=notices.recent.firstOrNull()
     menu("Save")
-    await("External conflict not surfaced") { !project.busy && scene.error?.contains("changed")==true }
+    await("External conflict not surfaced") { !project.busy && notices.postedAfter(beforeConflict).any { it.level==sle.editor.ui.NoticeLevel.Error && "changed" in it.text } }
     check(scene.name=="Retain dirty draft" && scene.dirty)
     check(withContext(Dispatchers.IO) { Files.readString(scenePath) }.contains("External Scene"))
     answer(JOptionPane.YES_OPTION);click("AssetFile:Scenes/shared.scene.json",true)

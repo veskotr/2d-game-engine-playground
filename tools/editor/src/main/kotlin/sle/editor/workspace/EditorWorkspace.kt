@@ -14,6 +14,8 @@ internal class EditorWorkspace(
     val scenePlayback: ScenePlaybackState = ScenePlaybackState(),
     val appearance: sle.editor.ui.theme.EditorAppearanceState = sle.editor.ui.theme.EditorAppearanceState(),
 ) : AutoCloseable {
+    /** Results and failures for the status bar; one per editor, shared by every window. */
+    val notices = sle.editor.ui.EditorNotices()
     val project = ProjectWorkspaceState { root -> windows.switchStorage(root?.let(WorkspaceLayoutKey::project) ?: WorkspaceLayoutKey.standalone()) }
     fun startLayoutPersistence() = windows.startPersistence(project.opened?.root?.let(WorkspaceLayoutKey::project) ?: WorkspaceLayoutKey.standalone())
     private val engine = lazy { EditorEngineSession(smoke, previewSmoke = previewSmoke) }

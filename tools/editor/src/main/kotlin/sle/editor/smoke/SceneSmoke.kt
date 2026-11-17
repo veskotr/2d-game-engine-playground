@@ -18,7 +18,7 @@ import javax.imageio.ImageIO
 import kotlin.math.roundToInt
 
 internal suspend fun runSceneSmoke(canvas: EngineCanvas,scene: SceneWorkspaceState,
-    selectTreeNode: (suspend (String)->Unit)? = null) {
+    notices: sle.editor.ui.EditorNotices? = null,selectTreeNode: (suspend (String)->Unit)? = null) {
     val robot=Robot()
     val folder=Path.of(System.getProperty("sle.smokeReport")).parent
     suspend fun ready() {
@@ -85,8 +85,12 @@ internal suspend fun runSceneSmoke(canvas: EngineCanvas,scene: SceneWorkspaceSta
     val beforeDelete=scene.entities.size
     key(KeyEvent.VK_DELETE);ready()
     check(scene.entities.size==beforeDelete-2 && scene.selection.isEmpty) { "Delete did not remove the selection: ${scene.entities.size}" }
+    // The Delete key reports "Deleted 2 entities" with an Undo button in the status bar.
+    val deleted=notices?.current
+    if(notices!=null) check(deleted?.text=="Deleted 2 entities" && deleted.action?.available()==true) { "Delete notice missing: ${deleted?.text}" }
     key(KeyEvent.VK_Z,ctrl=true);ready()
     check(scene.entities.size==beforeDelete && scene.selection.keys.toSet()==pair && scene.selectedKey==other.document.key) { "Multi-delete undo did not restore the set" }
+    check(deleted?.action?.available()!=true) { "The delete notice still offers Undo after Ctrl+Z" }
     if(selectTreeNode!=null) {
         // Hierarchy: Ctrl-click adds a row, Ctrl+A selects everything and Esc clears.
         robot.keyPress(KeyEvent.VK_CONTROL);selectTreeNode(floor.document.key);robot.keyRelease(KeyEvent.VK_CONTROL);delay(120)
@@ -96,7 +100,7 @@ internal suspend fun runSceneSmoke(canvas: EngineCanvas,scene: SceneWorkspaceSta
         key(KeyEvent.VK_ESCAPE)
         check(scene.selection.isEmpty) { "Esc did not clear the Hierarchy selection" }
     }
-    println("SCENE_MULTI_SELECT_SMOKE_PASS ctrl-click/multi-move/multi-delete/undo"+(if(selectTreeNode!=null) "/hierarchy-ctrl-click/ctrl-a/escape" else ""))
+    println("SCENE_MULTI_SELECT_SMOKE_PASS ctrl-click/multi-move/multi-delete/undo"+(if(notices!=null) "/delete-notice" else "")+(if(selectTreeNode!=null) "/hierarchy-ctrl-click/ctrl-a/escape" else ""))
     click(GizmoShape.from(other.document,"SpriteRenderer")!!.center)
     check(scene.selectedKey==other.document.key && scene.selection.size==1) { "Plain click did not reduce the selection: ${scene.selection.keys}" }
     val count=scene.entities.size

@@ -1,5 +1,6 @@
 package sle.editor.smoke
 
+import sle.editor.ui.postedAfter
 import androidx.compose.ui.geometry.Rect
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
@@ -17,7 +18,7 @@ import javax.swing.*
 
 internal suspend fun runProjectRuntimeSmoke(window: JFrame,canvas: ()->EngineCanvas,project: ProjectWorkspaceState,
     projects: ProjectCommands,browser: ()->AssetBrowserState?,bounds: Map<String,Rect>,fields: Map<String,Rect>,
-    scene: SceneWorkspaceState,playback: ScenePlaybackState,distribution: Boolean=false,
+    scene: SceneWorkspaceState,playback: ScenePlaybackState,notices: sle.editor.ui.EditorNotices,distribution: Boolean=false,
 ) {
     val robot=Robot().apply { autoDelay=15 }
     suspend fun await(message: String,condition: ()->Boolean) {
@@ -129,8 +130,9 @@ internal suspend fun runProjectRuntimeSmoke(window: JFrame,canvas: ()->EngineCan
     val active=project.opened!!
     project.refreshSettings(withContext(Dispatchers.IO) { ProjectFiles.save(active,active.document.copy(startupScene=null)) })
     scene.addEntity();val before=scene.serialize()
+    val beforeMissing=notices.recent.firstOrNull()
     control("RunProject")
-    await("Missing startup was not reported") { !project.busy && project.error!=null }
+    await("Missing startup was not reported") { !project.busy && notices.postedAfter(beforeMissing).any { it.level==sle.editor.ui.NoticeLevel.Error } }
     check(scene.serialize()==before && playback.editing && canvas().scenePlayback()==Playback.Stopped)
     println("PROJECT_RUNTIME_SMOKE_PASS startup-selector/settings/dirty-draft/RunProject/deferred-scene/Lua-module/resolution/pause/resume/Stop/relocation/standalone-unrelated-cwd/missing-startup")
 }

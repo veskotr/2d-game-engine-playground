@@ -78,6 +78,9 @@ internal fun SceneWorkspaceState.treeSelect(key: String?,click: TreeClick,visibl
 internal fun SceneTree(state: SceneWorkspaceState,modifier: Modifier=Modifier,
     onEntityBounds: (String,Rect)->Unit={_,_->},editable: Boolean=true,onEditEntity: ((String)->Unit)?=null) {
     val root=sceneTree(state.document())
+    // A tooltip cannot show during a drag, so the refusal goes to the status bar.
+    val notices=LocalEditorNotices.current
+    fun refuseMultiDrag() { val text="Select a single entity to save it as a prefab";notices?.warning(text) ?: run { state.error=text } }
     var expanded by remember(state.key) { mutableStateOf(true) }
     var expandedNodes by remember(state.key) { mutableStateOf<Set<String>>(emptySet()) }
     LaunchedEffect(state.selection.keys,state.parents) {
@@ -137,7 +140,7 @@ internal fun SceneTree(state: SceneWorkspaceState,modifier: Modifier=Modifier,
                             detectDragGestures(
                                 onDragStart={
                                     // Saving as a prefab works on one entity; dragging a multi-selection does nothing.
-                                    if(state.selection.size>1 && node.entityKey in state.selection) state.error="Select a single entity to save it as a prefab"
+                                    if(state.selection.size>1 && node.entityKey in state.selection) refuseMultiDrag()
                                     else { press.click=TreeClick.Replace;choose(node.entityKey);EntityDrag.move(payload,pointer()) }
                                 },
                                 onDragEnd={ EntityDrag.release(pointer()) },

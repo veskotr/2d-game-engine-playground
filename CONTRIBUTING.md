@@ -86,12 +86,18 @@ cmake --build build/debug --config Debug --target integration_scene_loader_round
 ctest --test-dir build/debug -C Debug -R '^integration_scene_loader_roundtrip_path$' --output-on-failure
 ```
 
-CI runs smoke and integration tests excluding the `windowed` label:
+CI uses `windows-2022` to match the Visual Studio 2022 presets and runs smoke
+and integration tests excluding the `windowed` label:
 
 ```powershell
 ctest --test-dir build/debug -C Debug -L smoke --output-on-failure
 ctest --test-dir build/debug -C Debug -L integration -LE windowed --output-on-failure
 ```
+
+A separate CI job uses JDK 21 and runs the editor JUnit suite with
+`.\gradlew.bat test --no-daemon --console=plain` from `tools/entity-editor/`. It uploads HTML and XML test reports
+even on failure. These unit tests do not require the native editor bridge;
+interactive and JNI smoke checks still require a graphics environment.
 
 With a working graphics environment, run the complete suite:
 

@@ -59,8 +59,46 @@ internal suspend fun runSceneSmoke(canvas: EngineCanvas,scene: SceneWorkspaceSta
     robot.keyPress(KeyEvent.VK_CONTROL);robot.keyPress(KeyEvent.VK_Z);robot.keyRelease(KeyEvent.VK_Z);robot.keyRelease(KeyEvent.VK_CONTROL);delay(160);ready()
     check(crate.document==before) { "Selected scene entity drag did not undo" }
     crate.redo();ready()
+    // L1 S3 multi-select: Ctrl-click in the viewport, a multi-move and a multi-delete, each one undo step.
+    suspend fun key(code: Int,ctrl: Boolean=false) {
+        if(ctrl) robot.keyPress(KeyEvent.VK_CONTROL)
+        robot.keyPress(code);robot.keyRelease(code)
+        if(ctrl) robot.keyRelease(KeyEvent.VK_CONTROL)
+        delay(160)
+    }
+    fun spriteCenter(state: sle.editor.model.EntityWorkspaceState)=GizmoShape.from(state.document,"SpriteRenderer")!!.center
+    fun worldPosition(state: sle.editor.model.EntityWorkspaceState)=sle.editor.model.ScenePose.from(state.document).position
+    val pair=setOf(crate.document.key,other.document.key)
+    click(spriteCenter(crate))
+    check(scene.selection.keys==listOf(crate.document.key)) { "Viewport click did not select Crate A alone" }
+    robot.keyPress(KeyEvent.VK_CONTROL);click(spriteCenter(other));robot.keyRelease(KeyEvent.VK_CONTROL);delay(120)
+    check(scene.selection.keys.toSet()==pair && scene.selectedKey==other.document.key) { "Ctrl-click did not add Crate B: ${scene.selection.keys}" }
+    ImageIO.write(robot.createScreenCapture(Rectangle(canvas.locationOnScreen,canvas.size)),"png",folder.resolve("scene-multi-select.png").toFile())
+    val crateStart=worldPosition(crate);val otherStart=worldPosition(other);val movedSteps=scene.history.undoLabels.size
+    drag(spriteCenter(other),spriteCenter(other)+Vec2(20.0,10.0))
+    val crateDelta=worldPosition(crate)-crateStart;val otherDelta=worldPosition(other)-otherStart
+    check(otherDelta.length()>5 && (crateDelta-otherDelta).length()<1e-6) { "Multi-move did not move both: crate=$crateDelta other=$otherDelta" }
+    check(floor.document==floorBefore) { "Multi-move edited an unselected entity" }
+    check(scene.history.undoLabels.size==movedSteps+1 && scene.history.undoLabel=="Move 2 entities") { "Multi-move was not one step: ${scene.history.undoLabels.takeLast(3)}" }
+    key(KeyEvent.VK_Z,ctrl=true);ready()
+    check(worldPosition(crate)==crateStart && worldPosition(other)==otherStart && scene.selection.keys.toSet()==pair) { "Multi-move undo did not restore both entities and the selection" }
+    val beforeDelete=scene.entities.size
+    key(KeyEvent.VK_DELETE);ready()
+    check(scene.entities.size==beforeDelete-2 && scene.selection.isEmpty) { "Delete did not remove the selection: ${scene.entities.size}" }
+    key(KeyEvent.VK_Z,ctrl=true);ready()
+    check(scene.entities.size==beforeDelete && scene.selection.keys.toSet()==pair && scene.selectedKey==other.document.key) { "Multi-delete undo did not restore the set" }
+    if(selectTreeNode!=null) {
+        // Hierarchy: Ctrl-click adds a row, Ctrl+A selects everything and Esc clears.
+        robot.keyPress(KeyEvent.VK_CONTROL);selectTreeNode(floor.document.key);robot.keyRelease(KeyEvent.VK_CONTROL);delay(120)
+        check(scene.selection.keys.toSet()==pair+floor.document.key && scene.selectedKey==floor.document.key) { "Hierarchy Ctrl-click did not add Ground: ${scene.selection.keys}" }
+        key(KeyEvent.VK_A,ctrl=true)
+        check(scene.selection.size==scene.entities.size) { "Ctrl+A did not select every entity: ${scene.selection.size}/${scene.entities.size}" }
+        key(KeyEvent.VK_ESCAPE)
+        check(scene.selection.isEmpty) { "Esc did not clear the Hierarchy selection" }
+    }
+    println("SCENE_MULTI_SELECT_SMOKE_PASS ctrl-click/multi-move/multi-delete/undo"+(if(selectTreeNode!=null) "/hierarchy-ctrl-click/ctrl-a/escape" else ""))
     click(GizmoShape.from(other.document,"SpriteRenderer")!!.center)
-    check(scene.selectedKey==other.document.key)
+    check(scene.selectedKey==other.document.key && scene.selection.size==1) { "Plain click did not reduce the selection: ${scene.selection.keys}" }
     val count=scene.entities.size
     scene.duplicateSelected();val duplicate=scene.selected!!.document.key
     check(scene.entities.size==count+1 && duplicate!=other.document.key)

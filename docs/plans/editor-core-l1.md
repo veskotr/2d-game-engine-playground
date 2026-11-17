@@ -1,6 +1,6 @@
 # L1 — Editor core: commands, history, selection, status bar, viewport tools
 
-**Status:** Planned 2026-11-17. Sessions 1–2 implemented and validated (see Progress); sessions 3–7 not started.
+**Status:** Planned 2026-11-17. Sessions 1–3 implemented and validated (see Progress); sessions 4–7 not started.
 **Parent:** [editor-game-workflows.md](editor-game-workflows.md) §5, base layer
 **L1** (roadmap items 0.1, 0.2, 0.4, 1.1, 1.2 and rule R3).
 **Request:** Plan L1 only. Tilemaps and the other layers come later.
@@ -215,31 +215,31 @@ is shippable alone.
 
 ### Session 3: Selection service and multi-select
 
-- [ ] Add `model/SceneSelection`: an ordered key set plus an active key.
+- [x] Add `model/SceneSelection`: an ordered key set plus an active key.
   Operations: `select`, `toggle`, `extendTo` (visible-order range), `set`,
   `clear`, and prune on structural change. Keep `selectedKey`/`selected` as the
   *active* aliases to limit churn, and migrate readers gradually. History
   entries store the full selection.
-- [ ] Hierarchy: Ctrl-click toggles, Shift-click selects a range, Ctrl+A is a
+- [x] Hierarchy: Ctrl-click toggles, Shift-click selects a range, Ctrl+A is a
   registered command, and Escape clears. All selected rows use
   `selectedBackground`, and the active row adds the accent marker.
-- [ ] Viewport: Shift/Ctrl-click toggles, every selected entity gets an outline,
+- [x] Viewport: Shift/Ctrl-click toggles, every selected entity gets an outline,
   and handles appear on the active entity. Moving any selected entity moves the
   whole set as one `History.group`. Arrow nudges also act on the set.
-- [ ] Set-aware commands:
+- [x] Set-aware commands:
   - Delete removes the union of subtrees as one step.
   - Duplicate copies only top-most roots, skipping entities whose ancestor is
     also selected, and selects the copies.
   - Commands that need one entity (Edit Entity, Apply to Prefab, entity drag to
     Assets, Inspector Parent) are disabled with a tooltip reason when N≠1.
-- [ ] Inspector with N>1: a header "N entities selected" and the common actions
+- [x] Inspector with N>1: a header "N entities selected" and the common actions
   only. Multi-object editing is roadmap item 1.6.
-- [ ] Tests:
+- [x] Tests:
   - selection model: toggle, range, prune, undo restore
   - delete/duplicate with nested selections
   - multi-move is one undo step
   - linked prefab instances in a multi-selection
-- [ ] Smokes: extend `--scene-smoke` with Ctrl-click, multi-move and multi-delete
+- [x] Smokes: extend `--scene-smoke` with Ctrl-click, multi-move and multi-delete
   with undo.
 
 ### Session 4: Status bar and notices (R8)
@@ -619,3 +619,138 @@ Desktop smokes need an unlocked interactive Windows session.
   - No editor version bump (planned for S7).
 - Next: Session 3 (selection service and multi-select), only when requested.
   `HistorySelection` is the place to store the full selection.
+
+### Session 3 handoff — 2026-11-17
+
+- Start state: `feat/project-foundation` at 45c8c79 (Session 2). Only the untracked
+  starter-assets zip and `docs/plans/editor-game-workflows.md` were present; both were left
+  alone. The "Current code" evidence matched. Nothing was committed.
+- Implemented:
+  - `model/SceneSelection` holds ordered keys, the active key and a Shift anchor. It is Compose
+    state. Operations: `select`, `toggle`, `activate`, `extendTo` (range in visible order,
+    optionally additive), `set`, `clear`, `prune`, `snapshot` and `restore`.
+  - `SceneWorkspaceState`:
+    - `selection` replaces the stored `selectedKey`. `selectedKey`/`selected` remain as aliases
+      of the active entity, so most readers did not change.
+    - The `entities` setter prunes the selection after every structural change.
+    - New members: `toggleSelection`, `extendSelection`, `activate`, `selectAll`,
+      `selectedEntities`, `selectionRoots()` (top-most selected keys in scene order), and
+      `subjects()`, now public.
+    - `removeSelected` deletes the union of the selected subtrees as one step.
+    - `duplicateSelected` copies the top-most roots as one step and refuses a linked non-root.
+      It selects the copies, and the active copy is the one whose source held the active entity.
+  - History:
+    - `HistorySelection(keys, active)` stores the full selection; the old one-key constructor
+      remains. Structural steps record the full selection.
+    - Entity edits ask the scene through `EntityHistoryOwner.historySelection(key)`. It returns
+      the whole selection when that contains the edited entity, otherwise the entity alone, so
+      undo still selects the entity it changed.
+    - `History.group(label, mergeKey)` gained an optional merge key, so grouped nudge bursts
+      merge.
+  - Viewport:
+    - `ViewportGizmos`: a move drag of the active entity also moves the other selected roots,
+      inside one `History.group` ("Move N entities"). Cancel cancels them all. A selected entity
+      whose ancestor is selected follows that ancestor and is not moved twice.
+    - Arrow nudges on a multi-selection run in a group keyed by
+      `NudgeMergeKey(entities: Set, target)`. A failure rolls the group back.
+    - `NativeViewportOwner`:
+      - Shift/Ctrl-click toggles and starts no drag.
+      - A plain press on a member of a multi-selection keeps the set so it can be dragged;
+        releasing without a drag selects that entity alone.
+      - Right-clicking a selected entity keeps the set.
+    - `GizmoOverlay.outline` draws every other selected entity's bounds in `selectionOutline`.
+      Only the active entity gets handles.
+  - Hierarchy (`SceneTree`):
+    - Ctrl-click toggles, Shift-click selects a range, and Ctrl+Shift-click adds a range.
+      Press modifiers are read with `onPointerEvent(Initial)`. `treeClick` and `treeSelect`
+      are testable.
+    - Esc clears the selection, after first cancelling an entity drag. Enter edits only a
+      single selection. The ancestors of every selected entity expand.
+    - `EditorTreeRow(active=…)` paints a leading `accent` marker, `tabUnderline` wide.
+  - Commands:
+    - `edit.selectAll` is Ctrl+A in the Hierarchy and Scene view, and is in the Edit menu.
+    - `EditorCommand.disabledReason` becomes `EditorMenuEntry.help`, the menu item tooltip.
+    - Edit Entity, Apply Changes to Prefab and `canApplyToPrefab` need exactly one entity, and
+      give `SINGLE_ENTITY_REASON` otherwise.
+    - Delete and Duplicate act on the set.
+  - Inspector, when N>1:
+    - "N entities selected" with Duplicate and Delete.
+    - A disabled Parent row with the reason. It shows the common parent, "Mixed" or "Scene
+      root".
+    - The selected names.
+- Deliberate choices (correct them if wrong):
+  - Shift-click in the Scene view toggles like Ctrl-click, as the plan's "Shift/Ctrl-click"
+    says. Shift snapping now applies only when Shift is pressed after a drag starts. S5
+    changes Shift semantics anyway.
+  - A Ctrl-click that removes a row still becomes the range anchor, as in desktop file lists.
+  - The active marker also shows for a single selection, so the rule is simply "the active row
+    has the marker".
+  - With N>1, Add Component in the context menu is disabled with the reason. **+ Child** and
+    **As Child** still create under the active entity.
+  - Dragging a Hierarchy row of a multi-selection to Assets reports "Select a single entity to
+    save it as a prefab" in the scene notice line, because a tooltip cannot show during a drag.
+    In the viewport, dragging a multi-selection moves it, and drag-out to Assets is off.
+  - Snapping during a multi-move snaps the active entity; the others move by the same delta.
+  - Esc in the Scene view still only cancels a drag. Clearing the selection is a Hierarchy key.
+  - The selection tests are in a new `model/SceneSelectionTest`, not spread over
+    `SceneAuthoringUxTest`.
+- Tests: `SceneSelectionTest` adds 12 tests:
+  - selection model: toggle and order; ranges and the anchor; prune and restore
+  - selection alone is not a step, and undo/redo restore the recorded set
+  - Hierarchy click rules
+  - delete with a nested selection; duplicate with a nested selection, which selects the copies
+  - a multi-move drag is one step and restores the selection
+  - a child whose selected parent moves
+  - a nudge burst on a set merges
+  - linked prefab instances in a multi-selection: a partial delete or duplicate is refused,
+    whole instances are duplicated and deleted with their links, and Apply is disabled for N>1
+  - single-entity commands are disabled with the reason
+
+  `HistoryTest` was updated for `HistorySelection.active`.
+- Smoke changes:
+  - `--scene-smoke` gained the `SCENE_MULTI_SELECT_SMOKE_PASS` stage, using Robot:
+    1. Ctrl-click Crate B in the viewport, saving `scene-multi-select.png`.
+    2. Drag the pair and check it is one step, "Move 2 entities"; then Ctrl+Z.
+    3. Delete the pair, then Ctrl+Z.
+    4. Ctrl-click Ground in the Hierarchy, then Ctrl+A, then Esc.
+  - The existing plain click on Crate B now also checks that the selection drops to one entity.
+- Commands run from `tools/editor` through `gradle.ps1` (JDK 21) on an interactive Windows
+  desktop. Smokes were started from Git Bash with
+  `powershell -File gradle.ps1 run --args=--<smoke>`.
+  - `compileKotlin`: failed once on a missing `isPrimaryPressed` import, then passed.
+  - `test --tests sle.editor.model.SceneSelectionTest`:
+    - First, `HistoryTest` did not compile (it used the old `.key`); fixed.
+    - Then one failure, the Ctrl+Shift range expectation; toggle now sets the anchor.
+    - Then `SceneSelectionTest` 12/12 and `HistoryTest` 10/10.
+  - `build`: passed, 296 tests, 0 failures, 2 existing skips.
+  - `run --args=--scene-smoke`:
+    - Run 1 failed at the existing first stage ("Tree node did not select its entity"),
+      before any multi-select step. The cause is unexplained.
+    - Runs 2 and 3 passed: `SCENE_MULTI_SELECT_SMOKE_PASS`, `SCENE_EDITOR_SMOKE_PASS`,
+      `EDITOR_UI_SCALE_PASS`, `SCENE_TREE_COMPONENT_HANDOFF_PASS`, `SANDBOX_DESKTOP_PASS`,
+      `SCENE_ENTITY_SANDBOX_SWITCH_PASS`.
+    - The screenshot shows both crates outlined in the same `selectionOutline` colour, and
+      handles only on the active one.
+    - Treat the first Hierarchy click as possibly flaky.
+  - `run --args=--context-menu-smoke`:
+    - Run 1 passed the tree, Hierarchy-shortcut, duplicate and inspector stages. It then
+      failed: "View → Prefab Workspace" was not in the open popup. That menu is unchanged.
+    - Run 2 passed: `CONTEXT_MENU_SMOKE_PASS`, `DETACHED_DELETE_PLAYBACK_SMOKE_PASS`.
+  - `run --args=--gizmo-smoke`: `VIEWPORT_GIZMO_SMOKE_PASS` (handles=176).
+  - `run --args=--project-documents-smoke`, which covers Hierarchy drag-to-Assets:
+    `PROJECT_DOCUMENTS_SMOKE_PASS`, `PREFAB_WORKFLOW_SMOKE_PASS`.
+- Docs:
+  - SceneEditor: a Multi-select bullet; Delete/Duplicate act on the set; the stale "Duplicate
+    Subtree"/"Delete Entity" names are fixed.
+  - Editor README: selection text, the Select All row and multi-move undo.
+  - UI_DESIGN: a new Selection section.
+  - Help → Keyboard Shortcuts lists Select All from the registry, and its mouse section lists
+    the selection gestures.
+- Not done:
+  - No manual walk.
+  - The Light theme look of the active marker and outlines was not checked; the screenshots
+    are Dark.
+  - The disabled-reason menu tooltip is covered by unit tests, not by a screenshot.
+  - Marquee selection is S5.
+  - No editor version bump (planned for S7).
+- Next: Session 4 (status bar and notices), only when requested.

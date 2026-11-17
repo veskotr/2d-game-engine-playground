@@ -21,6 +21,19 @@ portable `.slescene` workflow.
   change Transform position; the outline encloses its visible geometry. Components
   cannot be selected or resized from Scene. Use the tree to choose
   coincident entities. Selecting the root shows scene properties.
+- **Multi-select:** Ctrl-click a Hierarchy row to add or remove it, Shift-click to select
+  the visible rows between the last clicked row and this one (Ctrl+Shift adds the range),
+  **Ctrl+A** (Edit → Select All) selects every entity and **Esc** in the Hierarchy clears
+  the selection. In the Scene view, Shift- or Ctrl-click toggles an entity. The selection
+  is ordered and has one *active* entity (the latest one clicked): its Hierarchy row has
+  an accent marker, the Inspector edits it and only it gets handles; every selected entity
+  is outlined. Dragging any selected entity moves the whole selection, and arrow nudges
+  move it too; each drag, and each nudge burst, is one undo step ("Move 3 entities"). A
+  selected entity whose ancestor is also selected follows that ancestor. A plain click on
+  a selected entity without dragging selects it alone. With several entities selected the
+  Inspector shows "N entities selected" with Duplicate and Delete only (editing several
+  entities at once is a later roadmap item); Edit Entity, Apply Changes to Prefab, Add
+  Component, Parent and dragging to Assets work on one entity and say so when disabled.
 - The default layout places the tree on the left, viewport in the center, and selected
   entity inspector on the right. Entity properties contain name, parent, Transform
   and Camera2D when present. **Fit** frames all entities;
@@ -32,10 +45,10 @@ portable `.slescene` workflow.
   back. See [Prefabs](Prefabs.md#creating-editing-and-applying-prefabs).
 - **Create → Entity → As Child** creates a child of the right-clicked selection. **Parent** reparents while
   preserving world pose; cycles and non-invertible parent transforms are rejected.
-  **Entity → Duplicate Subtree** copies the complete selected subtree with independent UUIDs;
-  **Edit → Delete Entity** or Delete in the Hierarchy/Scene viewport removes that subtree
+  **Edit → Duplicate** copies the selected subtrees with independent UUIDs;
+  **Edit → Delete** or Delete in the Hierarchy/Scene viewport removes them
   and clears selection, preventing a held Delete from deleting unrelated survivors.
-  **Undo** restores the subtree and selection. Inspector text fields keep Delete
+  **Undo** restores the subtrees and selection. Inspector text fields keep Delete
   for text editing; modal dialogs and running/paused playback block scene deletion.
   This also applies to detached windows.
 - Right-click empty Scene space to create at the clicked world position. The shared
@@ -44,15 +57,17 @@ portable `.slescene` workflow.
   retains local-origin placement. New sprite/box components use 64×64 world units;
   circle components use radius 32. Inspector-added shapes still fit an existing sprite.
   These are editor presets; saved documents and native codec defaults are unchanged.
-- **Duplicate** (Ctrl+D) copies the selected subtree with new UUIDs and preserves references to
-  other scene entities. **Edit → Delete** (Delete) removes the selection and its descendants. Operations that would
+- **Duplicate** (Ctrl+D) copies the selected subtrees with new UUIDs, preserves references to
+  other scene entities and selects the copies. A selected entity whose ancestor is also
+  selected is copied once, with that ancestor. **Edit → Delete** (Delete) removes every
+  selected entity and its descendants. Each is one undo step. Operations that would
   invalidate an Animator target are rejected. Save/reopen converts legacy numeric
   targets to stable keys before structural edits that would change their meaning.
 - **Undo / Redo** (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z from any panel) walk one timeline per
   document. In a scene it holds structure (create, import, duplicate, delete, reparent,
   active camera, scene rename) and every entity's component and transform edits, in the
   order they happened. **Edit → Undo** names the step, for example "Undo Move Player".
-  Undo restores the selection from before the step and selects the entity it changed;
+  Undo restores the whole selection from before the step and selects the entity it changed;
   selecting alone is never a step. A drag, a committed numeric edit and a burst of arrow
   nudges (within 0.75 s) are one step each. Pressed during a drag or numeric edit, Undo
   and Redo cancel that edit first. The history keeps the latest 100 steps. A step that

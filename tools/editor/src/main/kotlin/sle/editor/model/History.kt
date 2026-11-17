@@ -4,8 +4,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
-/** The selection an undo step restores. L1 S3 extends it to the full multi-selection. */
-internal data class HistorySelection(val key: String?)
+/** The selection an undo step restores: every selected key in selection order, and the active one. */
+internal data class HistorySelection(val keys: List<String>, val active: String?) {
+    /** A single selected entity, or none. */
+    constructor(key: String?) : this(listOfNotNull(key), key)
+}
 
 /**
  * One undo timeline for a document: the scene (structure and every scene entity's component
@@ -63,7 +66,8 @@ internal class History(private val capacity: Int = CAPACITY) {
         past = kept.takeLast(capacity); future = emptyList(); mergeable = next ?: entry
     }
 
-    fun <T> group(label: String, block: () -> T): T {
+    /** [mergeKey] lets consecutive groups merge like single steps (a nudge burst on a selection). */
+    fun <T> group(label: String, mergeKey: Any? = null, block: () -> T): T {
         if (collecting != null) return block()
         val steps = mutableListOf<Entry>()
         collecting = steps
@@ -74,7 +78,7 @@ internal class History(private val capacity: Int = CAPACITY) {
             throw failure
         }
         collecting = null
-        if (steps.isNotEmpty()) record(Entry(label, null, steps.first().undoSelection, steps.last().redoSelection,
+        if (steps.isNotEmpty()) record(Entry(label, mergeKey, steps.first().undoSelection, steps.last().redoSelection,
             undo = { runAll(steps.asReversed(), Entry::undo, Entry::redo) },
             redo = { runAll(steps, Entry::redo, Entry::undo) }))
         return result
@@ -131,6 +135,9 @@ internal interface UndoableDocument {
 /** The scene side of a scene-owned entity: its timeline, and entity lookup by key at undo time. */
 internal interface EntityHistoryOwner : UndoableDocument {
     fun entity(key: String): EntityWorkspaceState?
+    /** The selection an edit of [key] records: the whole selection when it includes [key]
+     * (a multi-move), otherwise [key] alone, so undo selects the entity it changed. */
+    fun historySelection(key: String): HistorySelection = HistorySelection(key)
 }
 
 /** Display name used in undo labels. */

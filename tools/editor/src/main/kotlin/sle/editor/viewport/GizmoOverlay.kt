@@ -29,7 +29,41 @@ internal class GizmoOverlay {
         check(GL20.glGetProgrami(program,GL20.GL_LINK_STATUS) != 0) { GL20.glGetProgramInfoLog(program) }
         vao=GL30.glGenVertexArrays(); buffer=GL15.glGenBuffers()
     }
-    fun draw(shape: GizmoShape, camera: PreviewCamera, entity: EntityDocument? = null, color: Color) {
+    /** Selection bounds only, no handles: the other entities of a multi-selection. */
+    fun outline(entities: List<EntityDocument>, camera: PreviewCamera, color: Color) {
+        if (entities.isEmpty()) return
+        render(camera, color) { draw ->
+            val lines=mutableListOf<Vec2>()
+            entities.forEach { entity -> entitySelectionBounds(entity,camera).zipWithNext().forEach { (a,b) -> lines.add(a);lines.add(b) } }
+            draw(GL11.GL_LINES,lines)
+        }
+    }
+    /** The active entity: its outline (or edited shape) plus handles. */
+    fun draw(shape: GizmoShape, camera: PreviewCamera, entity: EntityDocument? = null, color: Color) = render(camera, color) { draw ->
+        val lines=mutableListOf<Vec2>()
+        if (shape.target == "Entity") {
+            val p=camera.screen(shape.position)
+            lines.addAll(listOf(p-Vec2(24.0,0.0),p+Vec2(24.0,0.0),p-Vec2(0.0,24.0),p+Vec2(0.0,24.0)))
+            if(entity!=null) {
+                val bounds=entitySelectionBounds(entity,camera)
+                bounds.zipWithNext().forEach { (a,b) -> lines.add(a);lines.add(b) }
+            }
+        } else if (shape.editable) {
+            val outline=if (shape.circle) (0..64).map { i -> camera.screen(shape.center + Vec2(cos(i*PI/32),sin(i*PI/32))*shape.worldRadius) }
+            else listOf(-1 to -1,1 to -1,1 to 1,-1 to 1,-1 to -1).map { (x,y) -> camera.screen(shape.world(shape.offset+Vec2(shape.size.x*x/2,shape.size.y*y/2))) }
+            outline.zipWithNext().forEach { (a,b) -> lines.add(a); lines.add(b) }
+        }
+        draw(GL11.GL_LINES,lines)
+        val squares=mutableListOf<Vec2>()
+        GizmoMath.handles(shape).forEach { handle ->
+            val p=camera.screen(GizmoMath.handleWorld(shape,handle))
+            val r=if (handle.kind=="move") 5.0 else 4.0
+            val a=p+Vec2(-r,-r); val b=p+Vec2(r,-r); val c=p+Vec2(r,r); val d=p+Vec2(-r,r)
+            squares.addAll(listOf(a,b,c,a,c,d))
+        }
+        draw(GL11.GL_TRIANGLES,squares)
+    }
+    private fun render(camera: PreviewCamera, color: Color, body: (draw: (Int, List<Vec2>) -> Unit) -> Unit) {
         val previousProgram=GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM)
         val previousVao=GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING)
         val previousBuffer=GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING)
@@ -48,28 +82,7 @@ internal class GizmoOverlay {
                 GL15.glBufferData(GL15.GL_ARRAY_BUFFER,data,GL15.GL_STREAM_DRAW)
                 GL11.glDrawArrays(mode,0,points.size)
             }
-            val lines=mutableListOf<Vec2>()
-            if (shape.target == "Entity") {
-                val p=camera.screen(shape.position)
-                lines.addAll(listOf(p-Vec2(24.0,0.0),p+Vec2(24.0,0.0),p-Vec2(0.0,24.0),p+Vec2(0.0,24.0)))
-                if(entity!=null) {
-                    val bounds=entitySelectionBounds(entity,camera)
-                    bounds.zipWithNext().forEach { (a,b) -> lines.add(a);lines.add(b) }
-                }
-            } else if (shape.editable) {
-                val outline=if (shape.circle) (0..64).map { i -> camera.screen(shape.center + Vec2(cos(i*PI/32),sin(i*PI/32))*shape.worldRadius) }
-                else listOf(-1 to -1,1 to -1,1 to 1,-1 to 1,-1 to -1).map { (x,y) -> camera.screen(shape.world(shape.offset+Vec2(shape.size.x*x/2,shape.size.y*y/2))) }
-                outline.zipWithNext().forEach { (a,b) -> lines.add(a); lines.add(b) }
-            }
-            draw(GL11.GL_LINES,lines)
-            val squares=mutableListOf<Vec2>()
-            GizmoMath.handles(shape).forEach { handle ->
-                val p=camera.screen(GizmoMath.handleWorld(shape,handle))
-                val r=if (handle.kind=="move") 5.0 else 4.0
-                val a=p+Vec2(-r,-r); val b=p+Vec2(r,-r); val c=p+Vec2(r,r); val d=p+Vec2(-r,r)
-                squares.addAll(listOf(a,b,c,a,c,d))
-            }
-            draw(GL11.GL_TRIANGLES,squares)
+            body(::draw)
         } finally {
             GL20.glUseProgram(previousProgram); GL30.glBindVertexArray(previousVao); GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER,previousBuffer)
             disabled.forEach { (cap,enabled) -> if (enabled) GL11.glEnable(cap) else GL11.glDisable(cap) }

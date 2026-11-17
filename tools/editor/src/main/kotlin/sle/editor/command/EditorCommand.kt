@@ -39,7 +39,10 @@ internal data class CommandContext(
 ) {
     val documentKind get() = if(mode != ViewportMode.Entity || linked) DocumentKind.Scene else DocumentKind.Prefab
     val sceneDocument get() = documentKind == DocumentKind.Scene
+    /** The active selected scene entity. */
     val selection get() = scene?.selected
+    /** How many scene entities are selected. */
+    val selectionCount get() = scene?.selection?.size ?: 0
     /** The active document's undo timeline: the scene (also while one of its entities is open in
      * the Entity tab) or the standalone prefab workspace. */
     val document: UndoableDocument? get() = if(sceneDocument) scene else prefab
@@ -77,6 +80,8 @@ internal class EditorCommand(
     /** Play controls still work while the focused Game view receives the game's keys. */
     val playControl: Boolean = false,
     val enabled: (CommandContext) -> Boolean = { true },
+    /** Why the command is disabled, shown as the menu item's tooltip; null when there is no useful reason. */
+    val disabledReason: (CommandContext) -> String? = { null },
     val run: (CommandContext) -> Unit,
 ) {
     init { require(scopes.isNotEmpty()) { "${id.value} needs a scope" } }

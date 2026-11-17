@@ -4,6 +4,9 @@ import sle.editor.model.SceneWorkspaceState
 import java.awt.Dialog
 import java.awt.Window
 
+/** Tooltip of actions that work on one entity while several are selected. */
+internal const val SINGLE_ENTITY_REASON="Select a single entity to use this"
+
 /** Local hierarchy/canvas handlers call this; Inspector text fields keep their own Delete keys. */
 internal fun deleteSceneSelection(state: SceneWorkspaceState, editable: Boolean=true,
     modal: Boolean=Window.getWindows().any { it is Dialog && it.isModal && it.isVisible }): Boolean {

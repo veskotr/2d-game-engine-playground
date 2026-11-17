@@ -13,14 +13,18 @@ Selecting an entity in the Scene shows all of its components in the Inspector, w
 Scene view) and **Fit** (match the sprite). Sprite colors show as RGBA with a color picker;
 textures show a thumbnail and **Use image size**. The Hierarchy toolbar adds, duplicates and
 deletes entities; **Delete** (or Backspace) and **Ctrl+D** work while the Hierarchy or Scene
-view has focus, and arrow keys move the selection. Drag a prefab or image from Assets onto the Scene view (placed at
+view has focus, and arrow keys move the selection. Ctrl-click and Shift-click select several
+entities in the Hierarchy (Shift selects a range), Shift/Ctrl-click toggles entities in the
+Scene view, **Ctrl+A** selects all and **Esc** in the Hierarchy clears the selection.
+Dragging or nudging any selected entity moves them all as one undo step; the Inspector
+shows "N entities selected" with Duplicate and Delete. Drag a prefab or image from Assets onto the Scene view (placed at
 the cursor) or the Hierarchy. Saving a project scene copies textures from opened/imported
 packages into `Assets/Textures` instead of failing. Double-clicking a scene or prefab in Assets
 opens it; in a project, open scenes/prefabs that already have a file are saved automatically
 when you switch documents. File dialogs open in the project's Scenes/Prefabs/Textures folder,
 or the folder you last used.
 
-Delete removes the selected subtree as one undo step and clears selection,
+Delete removes the selected subtrees as one undo step and clears selection,
 so a held key cannot delete the next entity. Delete in Inspector text inputs edits text;
 modal dialogs, Play and Pause block scene deletion. The same command works in detached
 Hierarchy and Scene windows.
@@ -71,6 +75,7 @@ detached windows and the native viewport:
 | Save / Save As | Ctrl+S / Ctrl+Shift+S | anywhere |
 | Undo / Redo | Ctrl+Z / Ctrl+Y or Ctrl+Shift+Z | anywhere (the active document's one timeline) |
 | Delete / Duplicate | Delete or Backspace / Ctrl+D | Hierarchy or Scene view focused |
+| Select All | Ctrl+A | Hierarchy or Scene view focused |
 | Play (Resume) / Pause / Stop | F5 / F6 / Shift+F5 | anywhere |
 | Run Project | Ctrl+F5 | anywhere |
 
@@ -265,7 +270,8 @@ picking, but can still be selected from the menu.
   Ctrl+Shift+Z) restore complete edits; pressed during a drag, they cancel it.
 
 Each drag is one undo step, and so is a burst of arrow nudges on one shape (keys
-pressed within 0.75 s of each other). Inspector, component and imported-asset changes
+pressed within 0.75 s of each other). With several entities selected, a drag or nudge
+burst moves them all as one step. Inspector, component and imported-asset changes
 also enter history; New/Open reset it. In a scene, the toolbar Undo/Redo buttons and
 Ctrl+Z walk the scene's single timeline, structure included; the prefab workspace
 keeps its own. Handles account for rotation, mirrored scale

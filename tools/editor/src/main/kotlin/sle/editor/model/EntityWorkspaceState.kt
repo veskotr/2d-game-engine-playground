@@ -109,7 +109,7 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         if (scene != null && scene.entity(key) !== this) return
         // Linear history means the entity is back by the time its edit is undone; if not, skip.
         fun target() = if (scene == null) this else scene.entity(key)
-        val selection = scene?.let { HistorySelection(key) }
+        val selection = scene?.historySelection(key)
         history.record(History.Entry(label ?: describeEntityEdit(before.document, after.document), mergeKey, selection, selection,
             undo = { target()?.restore(before) }, redo = { target()?.restore(after) }))
     }

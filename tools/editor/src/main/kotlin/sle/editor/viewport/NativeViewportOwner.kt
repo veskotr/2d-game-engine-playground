@@ -114,6 +114,11 @@ internal class NativeViewportOwner(
     var entityDragCancel: (()->Unit)? = null
     private var draggedEntity: String? = null
     private var entityDragShown = false
+    /** A plain press on one entity of a multi-selection keeps the set so it can be dragged; a release
+     * without a drag then selects that entity alone. */
+    private var pendingSingle: String? = null
+    private var pressPoint: java.awt.Point? = null
+    private var pressMoved = false
     private fun cancelEntityDrag() {
         draggedEntity=null
         if(entityDragShown) { entityDragShown=false;entityDragCancel?.invoke() }
@@ -174,7 +179,9 @@ internal class NativeViewportOwner(
                     finishGesture()
                     contextPosition=camera?.world(Vec2(event.x.toDouble(),event.y.toDouble()))
                     if(desiredMode==ViewportMode.Scene) camera?.let { view -> scene?.let { state ->
-                        state.select(ScenePicking.pick(state,view,Vec2(event.x.toDouble(),event.y.toDouble()))?.key)
+                        // Right-clicking a selected entity keeps the selection, so the menu acts on the set.
+                        val pick=ScenePicking.pick(state,view,Vec2(event.x.toDouble(),event.y.toDouble()))?.key
+                        if(pick!=null && pick in state.selection) state.activate(pick) else state.select(pick)
                         setAuthoring(state.selected)
                     } }
                     onContextMenu?.invoke(event.xOnScreen,event.yOnScreen)
@@ -189,9 +196,19 @@ internal class NativeViewportOwner(
                         if (desiredMode == ViewportMode.Scene && event.button == MouseEvent.BUTTON1) {
                             scene?.let { scene ->
                                 val pick=ScenePicking.pick(scene,view,Vec2(event.x.toDouble(),event.y.toDouble()))
-                                scene.select(pick?.key)
+                                cancelEntityDrag();pendingSingle=null;pressPoint=event.point;pressMoved=false
+                                if(event.isShiftDown || event.isControlDown || event.isMetaDown) {
+                                    // Shift/Ctrl-click toggles the picked entity and starts no drag.
+                                    pick?.let { scene.toggleSelection(it.key) }
+                                    setAuthoring(scene.selected)
+                                    return
+                                }
+                                if(pick!=null && pick.key in scene.selection && scene.selection.size>1) {
+                                    scene.activate(pick.key);pendingSingle=pick.key
+                                } else scene.select(pick?.key)
                                 setAuthoring(scene.selected)
-                                cancelEntityDrag();draggedEntity=pick?.key
+                                // Saving as a prefab by dragging out works on one entity only.
+                                draggedEntity=pick?.key?.takeIf { scene.selection.size==1 }
                             }
                         }
                         gizmos?.press(event,view)
@@ -204,11 +221,15 @@ internal class NativeViewportOwner(
             }
             override fun mouseReleased(event: MouseEvent) {
                 if (event.button == MouseEvent.BUTTON1) {
+                    val single=pendingSingle;pendingSingle=null
                     val dragged=draggedEntity.takeIf { entityDragShown }
                     if(dragged!=null && entityDragOver?.invoke(event.locationOnScreen)==true) {
                         gizmos?.cancel();draggedEntity=null;entityDragShown=false
                         entityDrop?.invoke(dragged,event.locationOnScreen)
-                    } else { gizmos?.finish();cancelEntityDrag() }
+                    } else {
+                        gizmos?.finish();cancelEntityDrag()
+                        if(single!=null && !pressMoved) scene?.let { it.select(single);setAuthoring(it.selected) }
+                    }
                 }
                 if(event.button==MouseEvent.BUTTON2 || event.button==MouseEvent.BUTTON1) panAnchor=null
                 sendButton(event,false)
@@ -221,6 +242,7 @@ internal class NativeViewportOwner(
                     camera?.let { pendingPan += Vec2(-(next.x-previous.x)*it.size.x/logicalWidth,(next.y-previous.y)*it.size.y/logicalHeight) }
                     panAnchor=next
                 } else if (editingAllowed()) {
+                    if(pressPoint?.let { it.distance(event.point)>3 }==true) pressMoved=true
                     gizmos?.move(event)
                     val dragged=draggedEntity
                     if(dragged!=null && entityDragMove!=null) {
@@ -435,9 +457,15 @@ internal class NativeViewportOwner(
             val view=if(game) NativeEngine.gameCamera(session) else NativeEngine.previewView(session)
             frameCamera=PreviewCamera(Vec2(view[0].toDouble(),view[1].toDouble()),Vec2(view[2].toDouble(),view[3].toDouble()),request.logicalWidth,request.logicalHeight)
             if(!game) gizmos?.resize(request.logicalWidth,request.logicalHeight)
-            if (!game && (desiredMode!=ViewportMode.Scene || desiredPlayback==Playback.Stopped) && desiredDocument == lastGoodPreview) gizmos?.selected()?.let {
-                val document=if(desiredMode==ViewportMode.Scene) scene?.selectedKey?.let { key -> scene?.worldDocument(key) } else null
-                overlay.draw(it,frameCamera!!,document,editorSelectionColor)
+            if (!game && (desiredMode!=ViewportMode.Scene || desiredPlayback==Playback.Stopped) && desiredDocument == lastGoodPreview) {
+                // Every selected entity is outlined; only the active one gets handles.
+                if(desiredMode==ViewportMode.Scene) scene?.let { state ->
+                    overlay.outline(state.selection.keys.filter { it!=state.selectedKey && state.entity(it)!=null }.map(state::worldDocument),frameCamera!!,editorSelectionColor)
+                }
+                gizmos?.selected()?.let {
+                    val document=if(desiredMode==ViewportMode.Scene) scene?.selectedKey?.let { key -> scene?.worldDocument(key) } else null
+                    overlay.draw(it,frameCamera!!,document,editorSelectionColor)
+                }
             }
         }
         if(game) gameMetrics=NativeEngine.sceneGameViewport(session).toList()

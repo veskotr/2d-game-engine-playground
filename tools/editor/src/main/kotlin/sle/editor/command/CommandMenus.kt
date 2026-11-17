@@ -8,7 +8,9 @@ import sle.editor.ui.EditorMenuEntry
  * never triggers both a menu accelerator and a shortcut.
  */
 internal fun EditorCommand.menuEntry(ctx: CommandContext, keymap: Keymap = standardKeymap, label: String = menuLabel ?: this.label) =
-    EditorMenuEntry(label, enabled(ctx), command = id, shortcut = keymap.primary(id)) { if(enabled(ctx)) run(ctx) }
+    enabled(ctx).let { on ->
+        EditorMenuEntry(label, on, command = id, shortcut = keymap.primary(id), help = if(on) null else disabledReason(ctx)) { if(enabled(ctx)) run(ctx) }
+    }
 
 internal data class ShortcutRow(val label: String, val chords: List<KeyChord>)
 internal data class ShortcutSection(val title: String, val rows: List<ShortcutRow>)
@@ -28,6 +30,10 @@ internal val mouseGestureHelp: List<Pair<String, String>> = listOf(
     "Pan the Scene view" to "Middle-drag, or Alt+left-drag",
     "Zoom" to "Mouse wheel",
     "Select" to "Click an entity in the Scene view or Hierarchy",
+    "Add to or remove from the selection" to "Ctrl+click or Shift+click in the Scene view; Ctrl+click in the Hierarchy",
+    "Select a range" to "Shift+click in the Hierarchy (Ctrl+Shift adds the range)",
+    "Clear the selection" to "Esc in the Hierarchy",
+    "Move the selection" to "Drag any selected entity; arrows nudge the selection",
     "Context actions" to "Right-click",
     "Edit with handles" to "Drag a handle; Shift snaps; Esc cancels the drag",
     "Save as a linked prefab" to "Drag an entity onto an Assets folder",

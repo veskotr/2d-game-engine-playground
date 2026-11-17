@@ -122,7 +122,7 @@ internal fun editorApplicationMenus(
         "Edit" to listOf(
             EditCommands.undo.menuEntry(ctx,keymap,EditCommands.undoLabel(ctx)),EditCommands.redo.menuEntry(ctx,keymap,EditCommands.redoLabel(ctx)),
             EditorMenuEntry.Separator,
-            entry(EditCommands.editEntity),entry(EditCommands.duplicate),entry(EditCommands.delete),entry(EditCommands.applyToPrefab),
+            entry(EditCommands.selectAll),entry(EditCommands.editEntity),entry(EditCommands.duplicate),entry(EditCommands.delete),entry(EditCommands.applyToPrefab),
             EditorMenuEntry.Separator,
             entry(PlayCommands.play),entry(PlayCommands.pause),entry(PlayCommands.stop),entry(PlayCommands.runProject),
         ),

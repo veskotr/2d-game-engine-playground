@@ -32,6 +32,8 @@ internal data class EditorMenuEntry(
     /** Shown right-aligned; display only. The shortcut dispatcher handles the key. */
     val shortcut: sle.editor.command.KeyChord? = null,
     val separator: Boolean = false,
+    /** Tooltip, e.g. why a command is disabled. */
+    val help: String? = null,
     val action: () -> Unit = {},
 ) {
     companion object { val Separator = EditorMenuEntry("", enabled = false, separator = true) }
@@ -88,6 +90,7 @@ internal fun buildEditorPopup(entries: List<EditorMenuEntry>, appearance: MenuAp
         return result.apply {
             isOpaque=true
             isEnabled=entry.enabled
+            toolTipText=entry.help
             background=appearance.surface;foreground=appearance.foreground;font=appearance.font
             icon=EditorIcons.commandFallback(entry.label,appearance)
             disabledIcon=icon
@@ -204,7 +207,7 @@ internal fun entityCreationMenu(state: EntityWorkspaceState, embedded: Boolean =
 }
 
 /** Apply needs a project scene and a selected entity inside a linked prefab instance. */
-internal fun canApplyToPrefab(state: SceneWorkspaceState) = state.projectApplyPrefab!=null && state.linkedInstance(state.selectedKey)!=null
+internal fun canApplyToPrefab(state: SceneWorkspaceState) = state.projectApplyPrefab!=null && state.selection.size==1 && state.linkedInstance(state.selectedKey)!=null
 internal fun applySelectionToPrefab(state: SceneWorkspaceState) { state.selectedKey?.let { key -> state.projectApplyPrefab?.invoke(key) } }
 
 internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, onEditEntity: ((String)->Unit)? = null, position: sle.editor.viewport.Vec2?=null): List<EditorMenuEntry> {
@@ -216,8 +219,10 @@ internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, on
     val commands=sle.editor.command.CommandContext(scene=state,editable=editable)
     return listOf(
         // Ordinary entities are edited in the Inspector; components can also be added from here.
-        (state.selected?.takeIf { editable }?.let(::addComponentEntries) ?: emptyList()).let { components ->
-            EditorMenuEntry("Add Component",components.isNotEmpty(),children=components)
+        // Components are added to one entity; multi-object editing is a later roadmap item.
+        (state.selected?.takeIf { editable && state.selection.size==1 }?.let(::addComponentEntries) ?: emptyList()).let { components ->
+            EditorMenuEntry("Add Component",components.isNotEmpty(),children=components,
+                help=if(state.selection.size>1) SINGLE_ENTITY_REASON else null)
         },
         sle.editor.command.EditCommands.duplicate.menuEntry(commands),
         sle.editor.command.EditCommands.delete.menuEntry(commands),

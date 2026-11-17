@@ -441,6 +441,8 @@ internal fun EditorInspectorSection(title: String, expanded: Boolean, onExpanded
 @Composable
 internal fun EditorTreeRow(label: String, selected: Boolean, onClick: () -> Unit,
     modifier: Modifier = Modifier, depth: Int = 0, enabled: Boolean = true, help: String? = null,
+    /** The active row of a multi-selection: an accent marker on its leading edge. */
+    active: Boolean = false,
     leading: @Composable () -> Unit = {}) {
     val source=remember { MutableInteractionSource() }
     val c=LocalEditorColors.current
@@ -450,6 +452,7 @@ internal fun EditorTreeRow(label: String, selected: Boolean, onClick: () -> Unit
     EditorTooltip(help,modifier) {
         Row(Modifier.fillMaxWidth()
             .background(when { selected -> c.selectedBackground;hovered && enabled -> c.hoverBackground;else -> Color.Transparent })
+            .then(if(active) Modifier.drawBehind { drawRect(c.accent,size=size.copy(width=m.tabUnderline.toPx())) } else Modifier)
             .then(if(focused) Modifier.border(m.borderWidth,c.focusRing) else Modifier)
             .semantics { this.selected=selected }
             .clickable(source,null,enabled,role=Role.Button,onClick=onClick)

@@ -3,7 +3,9 @@ package sle.editor.ui
 import sle.editor.model.SceneWorkspaceState
 import sle.editor.ui.controls.*
 import sle.editor.ui.inspector.InspectorTextInput
+import sle.editor.ui.theme.LocalEditorColors
 import sle.editor.ui.theme.LocalEditorMetrics
+import sle.editor.ui.theme.LocalEditorTypography
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -45,7 +47,25 @@ internal fun SceneEntityInspector(state: SceneWorkspaceState,editable: Boolean=t
     val m=LocalEditorMetrics.current
     val fields=Modifier.padding(horizontal=m.panelPadding,vertical=m.gap)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        if(selected==null) {
+        if(state.selection.size>1) {
+            // Common actions only; editing several entities at once is roadmap item 1.6.
+            EditorPanelHeader("${state.selection.size} entities selected") {
+                EditorButton("Duplicate",{attempt { selected?.endGesture();state.duplicateSelected() }},enabled=editable,help="Duplicate the selected entities (Ctrl+D)",style=EditorButtonStyle.Ghost)
+                EditorButton("Delete",{attempt { deleteSceneSelection(state,editable) }},enabled=editable,help="Delete the selected entities and their children (Delete)",style=EditorButtonStyle.Ghost)
+            }
+            Column(fields,verticalArrangement=Arrangement.spacedBy(m.gap/2)) {
+                // Reparenting is a single-entity action: shown disabled with the reason.
+                val common=state.selection.keys.map { state.parents[it] }.distinct().singleOrNull()
+                val parent=if(state.selection.keys.map { state.parents[it] }.distinct().size>1) "Mixed"
+                    else common?.let { key -> state.entity(key)?.let { "${it.document.name} (${it.document.key})" } } ?: "Scene root"
+                EditorPropertyRow("Parent",help=SINGLE_ENTITY_REASON) {
+                    EditorSelect("Parent",parent,listOf(parent),{},Modifier.weight(1f),enabled=false,help=SINGLE_ENTITY_REASON,showLabel=false)
+                }
+                Text(state.selectedEntities.joinToString(", ") { it.document.name.ifBlank { "(Unnamed entity)" } },
+                    color=LocalEditorColors.current.textSecondary,style=LocalEditorTypography.current.secondary)
+                Text("Select a single entity to edit its components.",color=LocalEditorColors.current.textSecondary,style=LocalEditorTypography.current.secondary)
+            }
+        } else if(selected==null) {
             EditorPanelHeader("Scene")
             Column(fields) {
                 key(state) { EditorPropertyRow("Name",help="Scene name") {

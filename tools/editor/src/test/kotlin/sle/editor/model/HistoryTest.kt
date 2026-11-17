@@ -115,7 +115,7 @@ class HistoryTest {
 
     @Test fun stepsRecordedWhileApplyingAreIgnoredAndSelectionIsRestored() {
         val history = History(); val selections = mutableListOf<String?>()
-        history.restoreSelection = { selections += it.key }
+        history.restoreSelection = { selections += it.active }
         history.record(History.Entry("Create B", null, HistorySelection("a"), HistorySelection("b"),
             undo = { history.record(History.Entry("Nested", undo = {}, redo = {})) }, redo = {}))
         history.undo(); history.redo()

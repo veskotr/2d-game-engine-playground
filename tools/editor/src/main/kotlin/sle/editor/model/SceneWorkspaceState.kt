@@ -55,11 +55,13 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     /** Every entity held here posts its edits to this scene's [history]. */
     var entities: List<EntityWorkspaceState>
         get()=entityStates
-        private set(value) { value.forEach { it.attachHistory(this) };entityStates=value }
+        private set(value) { value.forEach { it.attachHistory(this) };entityStates=value;selection.prune(value.map { it.document.key }.toSet()) }
     var parents by mutableStateOf<Map<String,String>>(emptyMap())
         private set
-    var selectedKey by mutableStateOf<String?>(null)
-        private set
+    /** Ordered multi-selection plus the active entity. Selection changes are never undo steps. */
+    val selection=SceneSelection()
+    /** The active selected entity's key (the one the Inspector edits and the viewport gives handles). */
+    val selectedKey: String? get()=selection.active
     var file by mutableStateOf<Path?>(null)
         private set
     var error by mutableStateOf<String?>(null)
@@ -72,11 +74,26 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     private data class Structure(val entities: List<EntityWorkspaceState>,val name: String,val parents: Map<String,String>,val poses: Map<String,JsonElement?>,val cameraFlags: Map<String,JsonElement?>,val poseChanges: Set<String> = emptySet(),val cameraChanges: Set<String> = emptySet(),val links: List<PrefabInstance> = emptyList())
     /** One timeline for structure and every entity's component edits, in the order they happened. */
     override val history=History().apply {
-        restoreSelection={ selection -> selectedKey=selection.key?.takeIf { key -> entities.any { it.document.key==key } } }
+        restoreSelection={ recorded -> selection.restore(recorded,entities.map { it.document.key }.toSet()) }
     }
     override val gestureActive get()=entities.any { it.gestureActive }
     override fun entity(key: String)=entities.firstOrNull { it.document.key==key }
+    override fun historySelection(key: String)=if(key in selection) selection.snapshot() else HistorySelection(key)
+    /** The active selected entity; see [selection] for the whole set. */
     val selected get() = entities.firstOrNull { it.document.key==selectedKey }
+    /** Selected entities in scene order. */
+    val selectedEntities get() = entities.filter { it.document.key in selection.keys }
+    /** Selected keys whose ancestors are not selected, in scene order: the subtrees a set
+     * operation (move, delete, duplicate) acts on, so no entity is handled twice. */
+    fun selectionRoots(): List<String> {
+        val chosen=selection.keys.toSet()
+        fun ancestorSelected(key: String): Boolean {
+            var parent=parents[key];val seen=mutableSetOf<String>()
+            while(parent!=null && seen.add(parent)) { if(parent in chosen) return true;parent=parents[parent] }
+            return false
+        }
+        return entities.map { it.document.key }.filter { it in chosen && !ancestorSelected(it) }
+    }
     val dirty get() = snapshot()!=saved || entities.any { it.fieldErrors.isNotEmpty() }
     val canUndo get()=history.canUndo
     val canRedo get()=history.canRedo
@@ -103,21 +120,22 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
      * flags the operation itself changed are restored, so other component edits are untouched. */
     private fun change(label: String,action: () -> Unit) {
         selected?.endGesture()
-        val selectionBefore=selectedKey
+        val selectionBefore=selection.snapshot()
         val before=structure();action()
         val after=structure()
         if (before!=after) {
             val common=before.entities.map { it.document.key }.toSet().intersect(after.entities.map { it.document.key }.toSet())
             val poses=common.filter { before.poses[it]!=after.poses[it] }.toSet();val cameras=common.filter { before.cameraFlags[it]!=after.cameraFlags[it] }.toSet()
             val undoTarget=before.copy(poseChanges=poses,cameraChanges=cameras);val redoTarget=after.copy(poseChanges=poses,cameraChanges=cameras)
-            history.record(History.Entry(label,null,HistorySelection(selectionBefore),HistorySelection(selectedKey),
+            history.record(History.Entry(label,null,selectionBefore,selection.snapshot(),
                 undo={ requireReferences(undoTarget.entities);restoreOperation(undoTarget) },
                 redo={ requireReferences(redoTarget.entities);restoreOperation(redoTarget) }))
         }
         error=null
     }
     private fun named(key: String?)=entity(key ?: "")?.document?.let(::historyName) ?: "Entity"
-    private fun subjects(keys: Collection<String>)=if(keys.size==1) named(keys.single()) else "${keys.size} entities"
+    /** "Player" for one entity, "3 entities" for several: undo labels for set operations. */
+    fun subjects(keys: Collection<String>)=if(keys.size==1) named(keys.single()) else "${keys.size} entities"
     /** Ctrl+Z: cancels an open drag or numeric edit first, otherwise undoes the latest step. */
     override fun undo() { if(!cancelOpenGesture()) history.undo() }
     override fun redo() { if(!cancelOpenGesture()) history.redo() }
@@ -132,7 +150,19 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         extras=extras.entries.associate { (path,label) -> (moved[path.toAbsolutePath().normalize()] ?: path) to label }
     }
     fun rename(value: String) = change("Rename Scene") { name=value }
-    fun select(value: String?) { selected?.endGesture();selectedKey=value?.takeIf { key -> entities.any { it.document.key==key } } }
+    private fun exists(key: String?)=key!=null && entities.any { it.document.key==key }
+    /** Selects [value] alone; null or an unknown key clears the selection. */
+    fun select(value: String?) { selected?.endGesture();selection.select(value?.takeIf(::exists)) }
+    /** Ctrl-click: adds or removes [key]. */
+    fun toggleSelection(key: String) { if(!exists(key)) return;selected?.endGesture();selection.toggle(key) }
+    /** Shift-click: the range from the anchor to [key] in the Hierarchy's [visible] order. */
+    fun extendSelection(key: String,visible: List<String>,additive: Boolean=false) {
+        if(!exists(key)) return;selected?.endGesture();selection.extendTo(key,visible.filter(::exists),additive)
+    }
+    /** A plain press on an entity that is already selected keeps the set and makes it active. */
+    fun activate(key: String) { if(key in selection && key!=selectedKey) { selected?.endGesture();selection.activate(key) } }
+    /** Ctrl+A: every entity, keeping the active one when there is one. */
+    fun selectAll() { selected?.endGesture();selection.set(entities.map { it.document.key },selectedKey ?: entities.firstOrNull()?.document?.key) }
     fun addEntity(position: Vec2?=null) = createEntity(position=position)
     /** [position] places the instance at a world point (e.g. where it was dropped); null keeps the prefab's own. */
     fun importPrefab(path: Path,position: Vec2?=null) {
@@ -149,7 +179,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         })
         require(entities.size+expanded.entities.size<=MAX_SCENE_ENTITIES) { "Scene entity limit reached" }
         val states=expanded.entities.map { entity -> EntityWorkspaceState(catalog).apply { resetTo(entity,imported) } }
-        change("Create ${historyName(expanded.entities.first { it.key==instanceKey })}") { entities=entities+states;parents=parents+expanded.parents;selectedKey=instanceKey }
+        change("Create ${historyName(expanded.entities.first { it.key==instanceKey })}") { entities=entities+states;parents=parents+expanded.parents;selection.select(instanceKey) }
     }
     fun insertLinkedPrefab(prefab: PrefabDocument,assetId: String,imported: Map<Path,String>,position: Vec2?=null) {
         val instanceKey=UUID.randomUUID().toString()
@@ -160,7 +190,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         require(entities.size+expanded.entities.size<=MAX_SCENE_ENTITIES) { "Scene entity limit reached" }
         val link=PrefabInstance(assetId,instanceKey,prefab).capture(expanded)
         val states=expanded.entities.map { entity -> EntityWorkspaceState(catalog).apply { resetTo(entity,imported) } }
-        change("Create ${historyName(expanded.entities.first { it.key==instanceKey })}") { entities=entities+states;parents=parents+expanded.parents;prefabInstances=prefabInstances+link;selectedKey=instanceKey }
+        change("Create ${historyName(expanded.entities.first { it.key==instanceKey })}") { entities=entities+states;parents=parents+expanded.parents;prefabInstances=prefabInstances+link;selection.select(instanceKey) }
     }
     /** Replacement is staged and validated before any live state/history changes. Entities whose
      * document is unchanged keep their live state, including field drafts. The scene's undo
@@ -176,7 +206,6 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         }
         if(selected!==states.firstOrNull { it.document.key==selectedKey }) selected?.cancelGesture()
         entities=states;parents=next.parents;prefabInstances=next.prefabInstances
-        selectedKey=selectedKey?.takeIf { it in keys }
         val cleared=history.canUndo || history.canRedo
         history.clear()
         if(cleared) message=HISTORY_CLEARED_NOTICE
@@ -198,14 +227,14 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
             val previous=live[created.renamed[entity.key] ?: entity.key]
             previous?.takeIf { it.document==entity } ?: EntityWorkspaceState(catalog).apply { resetTo(entity,previous?.assets ?: emptyMap()) }
         }
-        change("Create Prefab ${historyName(created.scene.entities.first { it.key==root })}") { entities=states;parents=created.scene.parents;prefabInstances=prefabInstances+link;selectedKey=root }
+        change("Create Prefab ${historyName(created.scene.entities.first { it.key==root })}") { entities=states;parents=created.scene.parents;prefabInstances=prefabInstances+link;selection.select(root) }
     }
     fun insertPrefab(document: EntityDocument,imported: Map<Path,String>,position: Vec2?=null) {
         require(entities.size<MAX_SCENE_ENTITIES) { "Scene editor supports at most $MAX_SCENE_ENTITIES entities" }
         val placed=if(position==null) document else document.withPose(ScenePose.from(document).copy(position=position))
         val copy=copySceneEntity(placed,listOf(document.key))
         val state=EntityWorkspaceState(catalog).apply { resetTo(copy,imported) }
-        change("Create ${historyName(copy)}") { entities=entities+state;selectedKey=copy.key }
+        change("Create ${historyName(copy)}") { entities=entities+state;selection.select(copy.key) }
     }
     /** New root entity showing [texture] at its native size, e.g. an image dropped from Assets. */
     fun addSprite(texture: String,name: String,size: Vec2,position: Vec2?) {
@@ -215,7 +244,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
             "size" to buildJsonObject { put("x",size.x);put("y",size.y) })
         state.document=state.document.copy(name=name,components=JsonObject(state.document.components+("SpriteRenderer" to JsonObject(sprite))))
             .withPose(ScenePose(position=position ?: Vec2(0.0,0.0)))
-        change("Create ${historyName(state.document)}") { entities=entities+state;selectedKey=state.document.key }
+        change("Create ${historyName(state.document)}") { entities=entities+state;selection.select(state.document.key) }
     }
     private fun subtree(root: String): Set<String> {
         val children=parents.entries.groupBy({it.value},{it.key});val result=mutableSetOf<String>();val queue=java.util.ArrayDeque<String>();queue.add(root)
@@ -261,16 +290,18 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
             if(parent==null) point else ScenePose(position=point).relativeTo(ScenePose.from(worldDocument(parent))).position
         } ?: if(type=="Camera2D" && parent==null) Vec2(240.0,135.0) else null
         if(local!=null) state.document=state.document.withPose(ScenePose.from(state.document).copy(position=local))
-        change("Create ${historyName(state.document)}") { entities=entities+state;selectedKey=state.document.key;if(parent!=null) parents=parents+(state.document.key to parent) }
+        change("Create ${historyName(state.document)}") { entities=entities+state;selection.select(state.document.key);if(parent!=null) parents=parents+(state.document.key to parent) }
     }
     val activeCamera get()=entities.firstOrNull { val fields=it.document.components["Camera2D"] as? JsonObject;fields!=null && fields["enabled"]?.jsonPrimitive?.booleanOrNull!=false && fields["primary"]?.jsonPrimitive?.booleanOrNull!=false }
     fun setActiveCamera(key: String) {
         require(entities.any { it.document.key==key && "Camera2D" in it.document.components }) { "Entity has no camera" }
         change("Set Active Camera ${named(key)}") { entities.forEach { state -> (state.document.components["Camera2D"] as? JsonObject)?.let { camera -> state.applyStructure(state.document.copy(components=JsonObject(state.document.components+("Camera2D" to JsonObject(camera+("primary" to JsonPrimitive(state.document.key==key)))))) ) } } }
     }
+    /** Duplicates the top-most selected subtrees (a selected entity whose ancestor is also
+     * selected is copied once, with its ancestor) as one step, and selects the copies. */
     fun duplicateSelected() {
-        val root=selectedKey ?: return;val copied=subtree(root)
-        require(prefabInstances.none { root in it.entityKeys && root!=it.key }) { "Duplicate the linked prefab root, or unpack first" }
+        val roots=selectionRoots().ifEmpty { return };val copied=LinkedHashSet<String>().apply { roots.forEach { addAll(subtree(it)) } }
+        require(roots.none { root -> prefabInstances.any { root in it.entityKeys && root!=it.key } }) { "Duplicate the linked prefab root, or unpack first" }
         require(entities.size+copied.size<=MAX_SCENE_ENTITIES) { "Scene entity limit reached" }
         val remap=copied.associateWith { UUID.randomUUID().toString() }.toMutableMap();val ordinalKeys=entities.map { it.document.key }
         val duplicateLinks=prefabInstances.filter { it.key in copied }.map { link ->
@@ -287,13 +318,16 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
             }))))))
             EntityWorkspaceState(catalog).apply { resetTo(document,source.assets) }
         }
-        change("Duplicate ${subjects(copied)}") { prefabInstances=prefabInstances+duplicateLinks;entities=entities+copies;parents=parents+copied.mapNotNull { child -> parents[child]?.let { remap.getValue(child) to (remap[it] ?: it) } };selectedKey=remap[root] }
+        change("Duplicate ${subjects(copied)}") { prefabInstances=prefabInstances+duplicateLinks;entities=entities+copies;parents=parents+copied.mapNotNull { child -> parents[child]?.let { remap.getValue(child) to (remap[it] ?: it) } }
+            val focus=roots.firstOrNull { selectedKey in subtree(it) } ?: roots.last()
+            selection.set(roots.map(remap::getValue),remap.getValue(focus)) }
     }
+    /** Deletes the union of the selected subtrees as one step. */
     fun removeSelected() {
-        val removed=selectedKey?.let(::subtree) ?: return
+        val removed=LinkedHashSet<String>().apply { selectionRoots().forEach { addAll(subtree(it)) } }.ifEmpty { return }
         require(prefabInstances.none { link -> link.entityKeys.any { it in removed } && link.key !in removed }) { "Delete the linked prefab root, or unpack first" }
         val remaining=entities.filterNot { it.document.key in removed };requireReferences(remaining)
-        change("Delete ${subjects(removed)}") { entities=remaining;parents=parents.filterKeys { it !in removed };prefabInstances=prefabInstances.filterNot { it.key in removed };selectedKey=null }
+        change("Delete ${subjects(removed)}") { entities=remaining;parents=parents.filterKeys { it !in removed };prefabInstances=prefabInstances.filterNot { it.key in removed };selection.clear() }
     }
     private fun restoreOperation(target: Structure) {
         for(state in target.entities) {
@@ -308,7 +342,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         restore(target)
     }
     fun newScene() {
-        selected?.cancelGesture();key=UUID.randomUUID().toString();name="New Scene";entities=emptyList();parents=emptyMap();selectedKey=null
+        selected?.cancelGesture();key=UUID.randomUUID().toString();name="New Scene";entities=emptyList();parents=emptyMap();selection.clear()
         extras=emptyMap();prefabInstances=emptyList();file=null;projectDocument=null;history.clear();error=null;message=null;saved=snapshot()
     }
     fun open(path: Path) {
@@ -325,7 +359,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
             EntityWorkspaceState(catalog).apply { resetTo(entity,own) }
         }
         prefabInstances=loaded.prefabInstances
-        selected?.cancelGesture();key=loaded.key;name=loaded.name;entities=states;parents=loaded.parents;selectedKey=states.firstOrNull()?.document?.key
+        selected?.cancelGesture();key=loaded.key;name=loaded.name;entities=states;parents=loaded.parents;selection.select(states.firstOrNull()?.document?.key)
         extras=assets.filterKeys { it !in used };file=path;history.clear();error=null;message="Opened ${path.fileName}";saved=snapshot()
     }
     fun save(path: Path) {

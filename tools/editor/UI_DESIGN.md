@@ -140,7 +140,16 @@ document, dirty flag, render context and game pixels unchanged.
 Hierarchy, viewport context menus and Inspector Delete actions share
 `ui/SceneCommands.kt`'s guarded deletion command. Keep key handlers local to the
 Hierarchy or native canvas so text fields retain Delete. Deletion clears selection;
-Undo restores the subtree. Native input remains gated by stopped Scene authoring.
+Undo restores the subtrees and the selection.
+
+## Selection
+
+`model/SceneSelection` holds the scene's ordered selection and its active entity.
+Every selected Hierarchy row uses `selectedBackground`; the active row adds a leading
+`accent` marker `tabUnderline` wide (`EditorTreeRow(active=…)`). In the Scene view every
+selected entity is outlined in `selectionOutline` and only the active one gets handles.
+Actions that need one entity stay visible but disabled while several are selected, with
+`SINGLE_ENTITY_REASON` as their tooltip (`EditorCommand.disabledReason`, `EditorMenuEntry.help`). Native input remains gated by stopped Scene authoring.
 Viewport creation captures a world point before opening `sceneCreationMenu`; child
 placement is converted in `SceneWorkspaceState`. `model/EditorCreationDefaults.kt`
 provides authoring sizes when adding components, never when parsing documents.

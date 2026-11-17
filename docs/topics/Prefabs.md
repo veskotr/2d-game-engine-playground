@@ -41,7 +41,9 @@ references keep their positions. Use keyed references for new content.
 
 Overrides map local entity keys to component patches. Objects merge recursively;
 arrays replace whole values. A null component removes it, for example
-`{"weapon":{"Audio":null}}`. Overrides cannot change identity or hierarchy.
+`{"weapon":{"Audio":null}}`; a null field removes that field, for example
+`{"root":{"Animator":{"targetEntities":{"aim":null}}}}`. Overrides cannot change
+identity or hierarchy.
 Unknown entity keys and malformed patches fail with source context.
 
 `PrefabLoader::instantiate(path, scene, key, overrides, parent)` validates a staged
@@ -97,15 +99,70 @@ A prefab can carry multiple [script behaviours](Behaviours.md), and an override 
 
 ## Desktop entity authoring
 
-The [entity editor](../../tools/entity-editor/README.md) creates and edits the
-single-entity subset of this format, adds components from engine defaults and
-saves `.prefab.json` files after native validation. These exports load through
-`PrefabLoader::instantiate`, Lua `Engine.instantiatePrefab`, and scene prefab
-inclusions. The editor currently rejects multi-entity/nested prefab documents
-rather than dropping content; those formats remain supported by the engine.
+The [desktop editor](../../tools/editor/README.md) preserves self-contained
+subtree prefab documents, their parent links and internal Animator references.
+The temporary Prefab tab's Inspector edits the root. Single-entity documents
+remain compatible.
+Nested prefab declarations inside an editable prefab are still rejected explicitly.
+JSON exports and `.sleprefab` packages retain the entire subtree and its assets.
+Native scene codecs validate subtree component data and references before saving.
 
+Importing a project prefab into a project scene creates a linked instance.
+Project scenes persist the standard `prefabs` declarations, with
+`file: "project-asset://<UUID>"`, a stable instance key and local-key component
+overrides. Expanded entity keys are the instance key for the root and
+`<instance-key>/<local-key>` for descendants. Moving/renaming an asset together
+with its `.slemeta` retains links. Missing or ambiguous assets fail opening;
+legacy expanded scenes remain independent. Standalone imports are independent,
+and portable scene package exports contain expanded snapshots.
 
-New desktop-authored prefabs receive UUID keys automatically; the user edits the
-name. Renaming preserves identity, and opening older named-key files preserves
-those keys. The editor visualizes the single entity through the engine renderer
-without running its scripts/physics. The full document JSON is kept out of the UI.
+Saving a project prefab reconciles its instances in the current scene after
+validating the complete result. Closed scenes resolve the latest saved prefab
+when next opened or launched; their files are never silently rewritten. Shared
+component changes and removals propagate. Explicit field overrides (including
+component and field removals, persisted as `null`) survive; arrays replace whole
+values. When switching documents autosaves both a dirty scene and a dirty prefab,
+the scene is saved first and the prefab save still refreshes it. The root Transform
+stays local, including position, rotation and scale. Internal reference remapping
+keeps repeated instances isolated. Invalid updates retain the asset and scene.
+The refreshed scene becomes dirty; replacement clears structural undo history,
+retains selection only for surviving keys, and keeps the live state (field drafts,
+component history) of entities whose content did not change.
+
+Instance overrides cannot change entity identity, names or internal hierarchy.
+Currently root Inspector rename and descendant reparent commands can be attempted,
+but saving rejects those changes; undo/revert them or edit the prefab source.
+Removing an overridden descendant from a source prefab likewise fails the staged
+update rather than dropping the override. Root deletion/duplication operates on
+the complete subtree and retains link metadata through undo/redo.
+
+### Creating, editing and applying prefabs
+
+- **Create:** drag a scene entity from the Hierarchy, or out of the Scene viewport,
+  onto an Assets folder. Folders outline while a drag is active, and the one under
+  the pointer is highlighted; Escape cancels. A viewport drop cancels the move in
+  progress, so the entity keeps its pose. The subtree is saved as
+  `<entity name>.prefab.json` (numbered when the name exists), then linked: the
+  root keeps its key as the instance key, descendants become `<root>/<key>`, and
+  parent and keyed Animator references elsewhere in the scene follow. Linking is
+  one undoable change; undo restores the original keys but leaves the saved asset.
+  The drag carries the scene identity and entity key, resolved only at drop time;
+  if the scene changed the drop is refused, and if it changes while saving the
+  prefab is kept unlinked. Subtrees containing linked instances, Animator targets
+  outside the subtree, and numeric targets into it are refused.
+- **Edit:** double-click a prefab in Assets to open it in a temporary **Prefab**
+  tab. There is no permanent Entity tab; ordinary scene entities are edited in the
+  Inspector. Closing the tab asks before discarding unsaved changes (including
+  closing a detached window that holds it) and returns to the scene. Saved layouts
+  that still show the old tab hide it until a prefab is opened.
+- **Apply Changes to Prefab** (scene context menu or **Edit** menu) on any entity
+  of a linked instance writes that instance's component edits into the prefab
+  through the same validated update as a prefab Save. The instance's placement
+  stays local and its link is rebased, so the applied values are not kept as
+  overrides. Other instances in the open scene refresh, keeping their explicit
+  overrides; the scene becomes dirty. Apply is refused while the open Prefab tab
+  has unsaved edits to the same asset; a clean open tab reloads.
+
+New desktop-authored prefabs receive UUID entity keys automatically; asset UUIDs
+live separately in `.slemeta`. Renaming preserves identity, and opening older
+named-key files preserves those keys. The full document JSON stays out of the UI.

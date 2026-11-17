@@ -6,10 +6,19 @@ accessible to VS Code and other tools.
 
 ## Foundation workflow
 
-- **File → New Project…** selects a parent folder and a new project name. The
-  editor creates a new directory; it never replaces an existing directory.
-- **File → Open Project…** opens the descriptor. Moving the whole folder preserves
-  the project identity and relative asset-root location.
+- **File → New → Project…** selects a parent folder and a new project name. The
+  editor creates a new directory; it never replaces an existing directory. It saves
+  an empty `Assets/Scenes/Main.scene.json`, assigns its asset UUID as the startup
+  scene, and opens it immediately. The editor camera works without authored entities.
+- **File → Open → Project…** opens the descriptor. Moving the whole folder preserves
+  the project identity and relative asset-root location. The last successfully
+  opened/saved project scene is restored; otherwise the startup scene opens.
+  Missing, corrupt or escaping remembered paths show a notice and try the startup
+  scene. If neither opens, the workspace stays empty; saved scenes are never replaced.
+- **File → Open Recent** lists up to ten normalized project paths, most recent first.
+  History persists in user-local `recent-projects.json` beside the standalone layout
+  (including `sle.workspaceData`). Missing projects report an error and retain the
+  current workspace. Project settings refresh preserves the current scene and draft.
 - **File → Project Settings…** edits the project name, startup scene and game/window
   settings. Save validates and atomically replaces the descriptor. Invalid values
   remain in the dialog; externally changed descriptors require reopening before
@@ -26,6 +35,8 @@ My Game/
   My Game.sleproject
   Assets/
     Scenes/
+      Main.scene.json
+      Main.scene.json.slemeta
     Prefabs/
     Scripts/
     Textures/
@@ -36,13 +47,16 @@ My Game/
   .gitignore             # excludes .sle/
   .sle/
     cache/
-    editor-state.json    # local UI scale, when switching/closing projects
+    editor-state.json    # local UI scale and project-relative last scene
 ```
 
 The initial folders are organizational defaults. Project sources contain no
 absolute machine paths. `.sle` contains local data; retain `.sle/trash` while deleted assets may need
 recovery. Other caches are disposable; invalid local
-state falls back to defaults without invalidating the project.
+state falls back to defaults without invalidating the project. Scale-only saves,
+including project close/switch and normal editor exit, preserve the remembered scene.
+Older scale-only local files remain supported. Opening existing projects does not
+rewrite their descriptor or scene files.
 
 The descriptor has format `sle-project`, version 1, a UUID `id`, a display `name`,
 a relative `assetRoot`, a nullable UUID `startupScene`, and `game` settings.
@@ -53,7 +67,7 @@ versions/fields, escaping asset roots and invalid identities are rejected.
 Launch the editor with a project from the repository root:
 
 ```powershell
-cd tools/entity-editor
+cd tools/editor
 ./gradlew.bat run --args='--project "C:/Games/My Game/My Game.sleproject"'
 ```
 
@@ -119,14 +133,20 @@ With a project open, **File → New → Scene/Prefab** creates a draft. **Save**
 **Save As** default to `.scene.json` and `.prefab.json` beneath Assets. The initial
 Scenes/Prefabs folders are suggestions; other existing asset folders work too.
 Double-click either source file in the asset dock to open its workspace. Scene
-**Import → Prefab…** inserts an independent editable copy of a project prefab,
-retaining shared assets and the existing scene undo history.
+**Import → Prefab…** inserts a linked subtree instance for a project prefab,
+retaining shared assets and scene undo history. Legacy/package imports remain
+independent. Saving the prefab refreshes linked instances in the open scene;
+reopening other scenes resolves the latest saved prefab without rewriting them.
+Placement and explicit component overrides remain local. See
+[linked prefab semantics and current editing limits](Prefabs.md#desktop-entity-authoring).
 
 Project sources are readable JSON envelopes with `format: sle-project-scene` or
 `sle-project-prefab`, `version: 1`, `document` (the ordinary scene/prefab schema),
 and `assets` (UUIDs for explicit extra imports). Recognized component asset fields
 store `project-asset://<UUID>`, resolved through adjacent `.slemeta` identities.
-Names, entity keys and script variables are preserved as data. The descriptor
+Scene `prefabs[].file` also stores a project asset UUID, and override component
+asset fields use the same asset resolver. Names, entity keys and script variables
+are preserved as data. The descriptor
 still has no inventory. Saving multiple documents referencing the same texture
 writes no additional texture copies. Assets must already be beneath Assets;
 use Browse/Import for external resources before saving a project source.
@@ -248,11 +268,13 @@ The bundle appears at `build/debug/runtime/Release`. The same target works in a
 separately configured Release build tree. Export does not compile or download
 anything. Debug runtimes cannot be distributed through this workflow.
 
-Choose **File → Export Game…**, select that prepared runtime folder, then choose a
-**new** delivery folder outside the source project and runtime bundle. A packaged
-Windows editor ships this runtime and skips the first chooser. The output
-chooser states that export uses saved files: unsaved scene/prefab drafts are kept
-in the editor and excluded from the game. Select a startup scene in Project
+Choose **File → Export Game…**, select that prepared runtime folder. The editor
+automatically creates an `Exports` folder inside your project and places the game
+in a subfolder named after the project folder. Repeated exports use `-2`, `-3`,
+and so on, preserving previous exports. The configured asset root must be separate
+from `Exports`; overlapping custom asset roots are rejected. A packaged Windows editor ships the
+runtime and skips the runtime chooser. Export uses saved files: unsaved
+scene/prefab drafts are kept in the editor and excluded from the game. Select a startup scene in Project
 Settings and save your intended changes before exporting. Export runs on a worker
 and reports completion or an error without replacing the current workspace.
 
@@ -306,9 +328,8 @@ independence are tested locally; a separate clean-machine deployment test remain
 necessary for any wider platform support claim. Installers, encrypted archives,
 asset pruning and content streaming are future formats.
 
-**File → Build Game…** produces the packaged alternative: the same runtime with
-`config.json` and a `game.slepkg` holding the assets, scenes and main scene. See
-[game packages](GamePackages.md).
+**Export Game…** is the editor's game delivery action. Internal package tooling and
+the runtime still support `config.json` and `.slepkg`; see [game packages](GamePackages.md).
 
 ## Validation
 

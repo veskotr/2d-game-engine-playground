@@ -1,8 +1,9 @@
 # Game packages and built games
 
-**File → Build Game…** turns a saved project into a runnable folder where the
-game content lives in `.slepkg` packages and the engine reads a small
-`config.json`:
+The runtime and internal `GameBuild` tooling support runnable folders where game
+content lives in `.slepkg` packages and the engine reads a small `config.json`.
+The editor exposes **File → Export Game…** as its single game delivery action;
+see [runnable export](Projects.md#export-a-runnable-game). Package tooling can produce:
 
 ```text
 My Build/
@@ -15,7 +16,7 @@ My Build/
   sle-distribution.json   # delivery file hashes
 ```
 
-Double-click `My Game.exe`. Build Game copies the prebuilt engine executable
+Double-click `My Game.exe`. Internal package tooling copies the prebuilt engine executable
 (`engine_app.exe`) and renames it after the project. Characters that Windows forbids
 in filenames become `_`, and device names such as `CON` get a trailing `_`. A name
 that would replace another runtime file is refused. The executable icon is still the
@@ -31,7 +32,7 @@ Use `--frames N` for a bounded diagnostic run.
 ## Building
 
 The packaged editor ships the prebuilt Windows x64 Release runtime in its resources
-(`runtime/`), so Build Game and Export Game use it without asking. Editors run from
+(`runtime/`), so Export Game uses it without asking. Editors run from
 the repository (`gradlew run`) have no bundled runtime. They ask for a prepared one,
 built once with ([runnable export](Projects.md#export-a-runnable-game) describes it):
 
@@ -39,10 +40,9 @@ built once with ([runnable export](Projects.md#export-a-runnable-game) describes
 cmake --build build/debug --config Release --target sle_runtime_bundle --parallel 4
 ```
 
-Select a startup scene in Project Settings and save your work. Then choose
-**File → Build Game…** and a **new** output folder outside the project and the
-runtime bundle. Build uses saved files only:
-unsaved scene/prefab drafts stay in the editor and are excluded.
+Internal callers of `GameBuild.build` supply a saved project, prepared runtime and
+a new output folder outside the project and runtime bundle. This package API
+uses saved files only. It has no editor menu or output chooser.
 
 The build runs on a worker. It stages the runtime, `game.slepkg` and `config.json` in
 a sibling `.sle-build-*` folder. The engine then mounts that staged package exactly as the
@@ -84,7 +84,7 @@ They are mounted in order into one namespace:
 - **Lua `require`:** searches `Scripts/` then the asset root of each package, in
   package order.
 
-The editor currently writes one `game.slepkg` per build. Additional packages can come
+Internal package tooling writes one `game.slepkg` per build. Additional packages can come
 from other builds of separate projects. Add them to `config.json` by hand.
 
 ## Package format (version 1)
@@ -124,7 +124,7 @@ running. Automatic eviction is not implemented.
 
 ## Limits
 
-- One package per editor build. Splitting a project into several packages is not
+- One package per internal build. Splitting a project into several packages is not
   automated yet.
 - STORED only: package size equals the sum of the asset sizes.
 - Windows x64 Release runtime bundles only, as with Export Game. Linux editors

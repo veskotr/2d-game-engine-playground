@@ -5,7 +5,11 @@ materializes asset references into a derived disk cache before `PrefabLoader`
 expands the ordinary prefab JSON. See [package format](../topics/PrefabPackages.md).
 `readScene` and `SceneLoader` likewise support `.slescene`. `SceneAuthoring`
 validates flat editable scenes through shared component codecs, while
-`Runtime::loadScenePreview` stages a paused full-scene preview. See the
+`Runtime::loadScenePreview` stages a paused full-scene preview.
+`ProjectRuntime` validates project prefab subtrees through the scene codecs,
+materializes derived prefab files, then expands UUID-based scene declarations
+before canonical scene validation. Both project preview and exported project
+loading therefore resolve saved linked prefab changes. See the
 [scene editor](../topics/SceneEditor.md).
 
 ## Responsibility
@@ -87,7 +91,7 @@ Cached/prepared XML UI can still be drawn. The sandbox camera retains configured
 logical dimensions; entity preview frames its authored geometry. All graphics calls and Runtime
 destruction require the host context to remain current on its owner thread.
 Standalone `init()`/`run()` retain GLFW ownership. The optional Windows editor JNI
-target and setup are documented in [the editor README](../../tools/entity-editor/README.md).
+target and setup are documented in [the editor README](../../tools/editor/README.md).
 
 
 Embedded hosts can advance once with `advanceEmbeddedFrame(dt, allowDebugInput)` and draw multiple
@@ -114,7 +118,7 @@ defaults for editing. It reuses ComponentRegistry and SceneComponentAdapter;
 WorldTransform/ChunkMap and derived/native fields are not offered as authorable
 components. Authoring metadata/validation do not require a Lua VM or GL context.
 The Kotlin editor owns document state and atomic file saves; no runtime snapshot
-is serialized. See [entity editor](../../tools/entity-editor/README.md).
+is serialized. See [entity editor](../../tools/editor/README.md).
 
 
 `EntityPreviewSystem` owns preview camera framing and grid/origin/sprite-bound

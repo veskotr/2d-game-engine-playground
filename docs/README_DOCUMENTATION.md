@@ -42,7 +42,7 @@ not proof of completion.
 | Portable prefab packages and bundled assets | [Prefab packages](topics/PrefabPackages.md) |
 | Scene editor and self-contained scene packages | [Scene editor](topics/SceneEditor.md) |
 | Docking, tool windows and layout recovery | [Editor workspace](topics/EditorWorkspace.md) |
-| Editor UI design system (Little Forest) | [UI design](../tools/entity-editor/UI_DESIGN.md), [adding UI features](../tools/entity-editor/HOW_TO_ADD_UI_FEATURES.md) |
+| Editor UI design system (Little Forest) | [UI design](../tools/editor/UI_DESIGN.md), [adding UI features](../tools/editor/HOW_TO_ADD_UI_FEATURES.md) |
 | Project folders and editor project settings | [Projects](topics/Projects.md) |
 | Built games: `.slepkg` packages and `config.json` | [Game packages](topics/GamePackages.md) |
 | Scripting and Lua | `topics/Scripting.md` |

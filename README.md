@@ -18,7 +18,7 @@ SLE is a modular C++ 2D game engine with ECS scene data, Lua scripting, command-
 - `tests/` - smoke, integration, and harness tests
 - `docs/` - constraints, module docs, topic docs, and historical references
 - `cmake/` - dependency setup and CMake helpers
-- `tools/entity-editor/` - [Kotlin Compose Desktop editor with an embedded SLE viewport](tools/entity-editor/README.md)
+- `tools/editor/` - [Kotlin Compose Desktop editor with an embedded SLE viewport](tools/editor/README.md)
 
 ## Build
 
@@ -72,8 +72,8 @@ Use `--frames N` for a bounded diagnostic run.
 To distribute a saved project, build the `sle_runtime_bundle` target in Release
 and use the editor's **File → Export Game…**. The exported executable discovers
 its adjacent game data. See [runnable export](docs/topics/Projects.md#export-a-runnable-game).
-**File → Build Game…** instead packs the content into `game.slepkg` beside a
-`config.json` engine config; see [game packages](docs/topics/GamePackages.md).
+Exports are placed in `<project>/Exports/<project-folder>` with numbered folders
+for repeat exports. Runtime package support is documented in [game packages](docs/topics/GamePackages.md).
 
 The default [`engine.json`](engine.json) starts `assets/scenes/npc_zone_demo.json`.
 

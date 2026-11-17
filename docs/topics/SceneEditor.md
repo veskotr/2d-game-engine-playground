@@ -24,13 +24,26 @@ portable `.slescene` workflow.
 - The default layout places the tree on the left, viewport in the center, and selected
   entity inspector on the right. Entity properties contain name, parent, Transform
   and Camera2D when present. **Fit** frames all entities;
-  edits preserve the camera. **Right-click → Edit** opens that live scene copy in a temporary entity tab.
-  Its component selector and handles edit sprite/collider geometry there.
-  Select Scene to return to placement. **File → Save** saves the scene.
+  edits preserve the camera. Edit the selected entity's components in the Inspector;
+  **Right-click → Add Component** adds one directly. There is no separate entity tab
+  for scene entities. **File → Save** saves the scene.
+- Drag an entity from the Hierarchy or out of the viewport onto an Assets folder to
+  save it as a linked prefab; **Apply Changes to Prefab** writes an instance's edits
+  back. See [Prefabs](Prefabs.md#creating-editing-and-applying-prefabs).
 - **Create → Entity → As Child** creates a child of the right-clicked selection. **Parent** reparents while
   preserving world pose; cycles and non-invertible parent transforms are rejected.
   **Entity → Duplicate Subtree** copies the complete selected subtree with independent UUIDs;
-  **Edit → Delete Entity** removes that subtree.
+  **Edit → Delete Entity** or Delete in the Hierarchy/Scene viewport removes that subtree
+  and clears selection, preventing a held Delete from deleting unrelated survivors.
+  **Scene Undo** restores the subtree and selection. Inspector text fields keep Delete
+  for text editing; modal dialogs and running/paused playback block scene deletion.
+  This also applies to detached windows.
+- Right-click empty Scene space to create at the clicked world position. The shared
+  creation menu includes Entity, Sprite, Camera, box/circle colliders and zones;
+  **As Child** converts the world point through the selected parent. Hierarchy creation
+  retains local-origin placement. New sprite/box components use 64×64 world units;
+  circle components use radius 32. Inspector-added shapes still fit an existing sprite.
+  These are editor presets; saved documents and native codec defaults are unchanged.
 - **Duplicate Subtree** creates another independent UUID and preserves references to
   other scene entities. **Edit → Delete Entity** removes the selection. Operations that would
   invalidate an Animator target are rejected. Save/reopen converts legacy numeric
@@ -68,7 +81,7 @@ Escape cancels. Drag dividers to resize. Panel `_` minimizes to a restore strip,
 Minimum sizes follow UI scale; impossible display constraints recover to tabs.
 Layouts save per project in `.sle/workspace-layout.json`, independently of UI
 scale and documents. Standalone storage, recovery behavior and the restart smoke
-are described under [workspace windows](../../tools/entity-editor/README.md#workspace-windows).
+are described under [workspace windows](../../tools/editor/README.md#workspace-windows).
 Restored windows recover to connected display work areas; reset changes layout only.
 
 Scene and Game share one simulation and durable GL owner; Scene pan/zoom and Game
@@ -163,7 +176,7 @@ repository's default startup config unchanged. To open the scene immediately in
 the desktop editor:
 
 ```powershell
-cd tools/entity-editor
+cd tools/editor
 ./gradlew.bat run --args="--scene assets/scenes/editor_starter.slescene"
 ```
 

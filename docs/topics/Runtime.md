@@ -88,7 +88,7 @@ presentation. Preview frames resolve world transforms and submit render commands
 they do not advance gameplay or run UI behaviours. This is distinct from the
 standalone loop above, which remains responsible for simulation and GLFW events.
 Destroy the Runtime before releasing the host context. See
-[editor setup](../../tools/entity-editor/README.md) for build and smoke commands.
+[editor setup](../../tools/editor/README.md) for build and smoke commands.
 
 
 ## Embedded gameplay and playback control
@@ -127,7 +127,7 @@ The editor bounds its wall-clock dt to 0.1 seconds after stalls. Its durable
 `EditorEngineSession` schedules once, then publishes independent Scene/Game textures
 with per-frame camera, letterbox and resize-generation metrics. The legacy
 `sceneGameViewport()` describes the most recent Game draw; presenters use their
-published frame snapshot. See [editor ownership](../../tools/entity-editor/README.md#ownership).
+published frame snapshot. See [editor ownership](../../tools/editor/README.md#ownership).
 
 `setEmbeddedPaused(true)` suspends audio and makes hosted ticks draw the current
 scene/UI without running gameplay, events or UI click/behavior callbacks. Stop is

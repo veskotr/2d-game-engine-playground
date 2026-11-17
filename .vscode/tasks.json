@@ -1,6 +1,6 @@
 {
     // Terminal → Run Task… lists everything below. Ctrl+Shift+B runs "Engine: Build Debug".
-    // Engine tasks need CMake + Visual Studio 2022; editor tasks need JDK 21 (see tools/entity-editor/find-jdk.ps1).
+    // Engine tasks need CMake + Visual Studio 2022; editor tasks need JDK 21 (see tools/editor/find-jdk.ps1).
     // Full Windows editor package: run "Editor: Package Windows App" (builds everything it needs).
     "version": "2.0.0",
     "options": {
@@ -130,7 +130,7 @@
             "command": "${input:gameExe}",
             "options": { "cwd": "${env:TEMP}" },
             "problemMatcher": [],
-            "detail": "Runs a Build Game output (e.g. My Game.exe) from an unrelated folder, as a player would."
+            "detail": "Runs an internal package build output (e.g. My Game.exe) from an unrelated folder, as a player would."
         },
 
         // ---------------------------------------------------------------- Editor (Kotlin)
@@ -138,7 +138,7 @@
             "label": "Editor: Run",
             "type": "process",
             "command": "powershell.exe",
-            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/entity-editor/run-editor.ps1"],
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/editor/run-editor.ps1"],
             "problemMatcher": [],
             "presentation": { "panel": "dedicated" },
             "detail": "Builds the Debug editor bridge and starts the editor with JDK 21 (gradle run)."
@@ -147,7 +147,7 @@
             "label": "Editor: Run Tests",
             "type": "process",
             "command": "powershell.exe",
-            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/entity-editor/gradle.ps1", "build"],
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/editor/gradle.ps1", "build"],
             "group": "test",
             "problemMatcher": [],
             "detail": "Compiles the editor and runs its unit tests (gradle build)."
@@ -166,28 +166,28 @@
             "label": "Editor: Package Windows App",
             "type": "process",
             "command": "powershell.exe",
-            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/entity-editor/gradle.ps1", "createDistributable"],
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/editor/gradle.ps1", "createDistributable"],
             "dependsOrder": "sequence",
             "dependsOn": ["Editor: Build Release Engine Library", "Game: Build Runtime Bundle (Release)"],
             "group": "build",
             "problemMatcher": [],
-            "detail": "Runnable folder: tools/entity-editor/build/compose/binaries/main/app/SLE Editor/SLE Editor.exe"
+            "detail": "Runnable folder: tools/editor/build/compose/binaries/main/app/SLE Editor/SLE Editor.exe"
         },
         {
             "label": "Editor: Package Installers (MSI/EXE)",
             "type": "process",
             "command": "powershell.exe",
-            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/entity-editor/gradle.ps1", "packageDistributionForCurrentOS"],
+            "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/tools/editor/gradle.ps1", "packageDistributionForCurrentOS"],
             "dependsOrder": "sequence",
             "dependsOn": ["Editor: Build Release Engine Library", "Game: Build Runtime Bundle (Release)"],
             "group": "build",
             "problemMatcher": [],
-            "detail": "Installers in tools/entity-editor/build/compose/binaries/main/{msi,exe} (Gradle downloads WiX)."
+            "detail": "Installers in tools/editor/build/compose/binaries/main/{msi,exe} (Gradle downloads WiX)."
         },
         {
             "label": "Editor: Run Packaged App",
             "type": "process",
-            "command": "${workspaceFolder}/tools/entity-editor/build/compose/binaries/main/app/SLE Editor/SLE Editor.exe",
+            "command": "${workspaceFolder}/tools/editor/build/compose/binaries/main/app/SLE Editor/SLE Editor.exe",
             "options": { "cwd": "${env:USERPROFILE}" },
             "problemMatcher": [],
             "detail": "Starts the packaged editor (run Editor: Package Windows App first)."

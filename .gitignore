@@ -65,3 +65,8 @@ dist/
 # Python maintenance tooling
 __pycache__/
 *.pyc
+
+# Legacy editor caches stay local after the source directory rename.
+/tools/entity-editor/.gradle/
+/tools/entity-editor/.gradle-user-home/
+/tools/entity-editor/.kotlin/

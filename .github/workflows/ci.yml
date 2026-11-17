@@ -60,7 +60,7 @@ jobs:
           java-version: '21'
 
       - name: Run editor unit tests
-        working-directory: tools/entity-editor
+        working-directory: tools/editor
         run: .\gradlew.bat test --no-daemon --console=plain
 
       - name: Upload editor test reports
@@ -69,6 +69,6 @@ jobs:
         with:
           name: editor-test-reports
           path: |
-            tools/entity-editor/build/reports/tests/test/
-            tools/entity-editor/build/test-results/test/
+            tools/editor/build/reports/tests/test/
+            tools/editor/build/test-results/test/
           if-no-files-found: warn

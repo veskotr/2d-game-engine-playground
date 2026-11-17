@@ -1,10 +1,18 @@
 # Editor workspace
 
 The editor has one project, document set and playback session across its windows.
-Hierarchy, Inspector, Assets, Scene, Game and Entity are singleton panels. The
+Hierarchy, Inspector, Assets, Scene and Game are singleton panels. **Prefab** is a
+temporary panel: it appears when a prefab is opened (for example by double-clicking
+one in Assets), is listed under **Windows** only while open, and asks before closing
+with unsaved changes. The
 home window owns **File / Edit / Create / View / Help / Windows**. Detached tool
 windows have native title bars and resize/minimize/close controls, without another
 application menu. Use the home window's **Windows → Focus Host** to find a tool.
+
+**Ctrl+S** invokes File → Save for the active scene or prefab from any workspace
+window, including native viewport focus. In a project it saves the project document;
+a new document opens the normal Save chooser. Playback, modal dialogs and busy
+project operations block saving.
 
 ## Arrange panels
 
@@ -92,5 +100,5 @@ For isolated standalone diagnostics, the JVM property
 `-Dsle.workspaceData=<directory>` selects a different layout directory. Layout
 files contain placement, not documents, asset paths or native runtime handles.
 
-See [editor setup and smokes](../../tools/entity-editor/README.md#workspace-windows)
+See [editor setup and smokes](../../tools/editor/README.md#workspace-windows)
 and the [acceptance record](../plans/editor-docking-plan.md#session-8--compatibility-acceptance-and-final-documentation).

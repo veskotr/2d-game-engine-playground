@@ -30,7 +30,7 @@ Do not reuse a Windows CMake cache from Linux.
 `.vscode/tasks.json` (**Terminal → Run Task…**) and `.vscode/launch.json`
 (**Run and Debug**, F5) cover every build and launch step. They need CMake and
 Visual Studio 2022, plus JDK 21 for the editor (found the same way as
-`tools/entity-editor/run-editor.ps1`, through `find-jdk.ps1`).
+`tools/editor/run-editor.ps1`, through `find-jdk.ps1`).
 
 | Task | What it does |
 |---|---|
@@ -39,7 +39,7 @@ Visual Studio 2022, plus JDK 21 for the editor (found the same way as
 | Engine: Run All Tests / Smoke Tests / Tests Matching… | CTest on `build/debug` |
 | Engine: Run engine_app / Project… / Built Game Config… | Debug engine with `engine.json`, a `.sleproject`, or a built game's `config.json` |
 | Game: Build Runtime Bundle (Release) | Prebuilt engine exe + DLLs + engine assets in `build/release/runtime/Release` |
-| Game: Run Built Game… | Runs a Build Game output (`My Game.exe`) |
+| Game: Run Built Game… | Runs an internal package build output (`My Game.exe`) |
 | Editor: Run / Run Tests | `gradle run` with the Debug bridge / `gradle build` |
 | Editor: Package Windows App | Release bridge + runtime bundle, then `createDistributable` |
 | Editor: Package Installers (MSI/EXE) | Same, then `packageDistributionForCurrentOS` |
@@ -51,17 +51,17 @@ or the same steps from a terminal:
 ```powershell
 cmake --preset release -DSLE_BUILD_EDITOR=ON
 cmake --build build/release --config Release --target sle_editor_native sle_runtime_bundle --parallel
-tools/entity-editor/gradle.ps1 createDistributable
+tools/editor/gradle.ps1 createDistributable
 ```
 
-The result is `tools/entity-editor/build/compose/binaries/main/app/SLE Editor/SLE Editor.exe`.
+The result is `tools/editor/build/compose/binaries/main/app/SLE Editor/SLE Editor.exe`.
 Copy the whole `SLE Editor` folder to distribute it. The debug configurations
 (**Debug engine_app …**) use the Visual Studio debugger from the C/C++ extension.
 
 The first Release build after engine changes is the slow step: it recompiles the
 engine with full optimization and relinks the editor bridge and `engine_app`
 (minutes). Later runs only rebuild what changed. The editor scripts use their own
-Gradle home (`tools/entity-editor/.gradle-user-home`), so the first Gradle run there
+Gradle home (`tools/editor/.gradle-user-home`), so the first Gradle run there
 starts a fresh daemon.
 
 ## Versions
@@ -72,8 +72,8 @@ MINOR for each added feature and PATCH for fixes.
 - **Engine:** `project(GameEngine VERSION …)` in the root [CMakeLists.txt](CMakeLists.txt).
   It generates `sle/core/Version.hpp` (`sle::core::EngineVersion`), is printed by
   `engine_app --version` and at startup, and is recorded in the runtime bundle
-  (`sle-runtime.json`) and in Build Game output (`sle-distribution.json`).
-- **Editor:** `version` in [build.gradle.kts](tools/entity-editor/build.gradle.kts).
+  (`sle-runtime.json`) and in internal package build output (`sle-distribution.json`).
+- **Editor:** `version` in [build.gradle.kts](tools/editor/build.gradle.kts).
   It sets the packaged app version and the window title (`SLE Editor 0.6.0 · engine 0.16.0`).
 
 ## Validation
@@ -96,7 +96,7 @@ ctest --test-dir build/debug -C Debug -L integration -LE windowed --output-on-fa
 ```
 
 A separate CI job uses JDK 21 and runs the editor JUnit suite with
-`.\gradlew.bat test --no-daemon --console=plain` from `tools/entity-editor/`. It uploads HTML and XML test reports
+`.\gradlew.bat test --no-daemon --console=plain` from `tools/editor/`. It uploads HTML and XML test reports
 even on failure. These unit tests do not require the native editor bridge;
 interactive and JNI smoke checks still require a graphics environment.
 
@@ -127,7 +127,7 @@ export regression:
 
 ```powershell
 cmake --build build/debug --config Release --target sle_runtime_bundle --parallel 4
-cd tools/entity-editor
+cd tools/editor
 ./gradlew.bat build run --args=--project-distribution-smoke
 ```
 

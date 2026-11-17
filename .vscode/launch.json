@@ -7,14 +7,14 @@
             "name": "SLE Editor",
             "type": "node-terminal",
             "request": "launch",
-            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/tools/entity-editor/run-editor.ps1\"",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/tools/editor/run-editor.ps1\"",
             "cwd": "${workspaceFolder}"
         },
         {
             "name": "SLE Editor (packaged app)",
             "type": "node-terminal",
             "request": "launch",
-            "command": "powershell.exe -NoProfile -Command \"& '${workspaceFolder}/tools/entity-editor/build/compose/binaries/main/app/SLE Editor/SLE Editor.exe'\"",
+            "command": "powershell.exe -NoProfile -Command \"& '${workspaceFolder}/tools/editor/build/compose/binaries/main/app/SLE Editor/SLE Editor.exe'\"",
             "cwd": "${env:USERPROFILE}",
             "preLaunchTask": "Editor: Package Windows App"
         },

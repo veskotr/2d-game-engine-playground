@@ -3,6 +3,7 @@
 #include <sle/engine/SceneAuthoring.hpp>
 #include <sle/engine/EntityAuthoring.hpp>
 #include "GamePackage.hpp"
+#include "PrefabExpansion.hpp"
 #include <fstream>
 #include <algorithm>
 #include <cctype>
@@ -135,6 +136,7 @@ void ProjectRuntime::index() {
         if(suffix(entry.path(),".scene.json") || suffix(entry.path(),".prefab.json")) documents.push_back(entry.path());
     }
     std::map<fs::path,Json> prefabs;
+    std::map<fs::path,Json> pendingScenes;
     // Reserve derived prefab destinations before resolving cross-document fields.
     for(const auto& path:documents) if(suffix(path,".prefab.json")) {
         if(!project.cache) {
@@ -160,19 +162,56 @@ void ProjectRuntime::index() {
         auto document=envelope.at("document");
         for(auto& entity:document.at("entities")) entity["components"]=project.resolveComponentAssets(entity.at("components"),true);
         const auto id=identity(read(fs::path(path.string()+".slemeta")).at("id").get<std::string>());
-        if(scene) {
-            document=SceneAuthoring::canonicalScene(document);
-            const auto key=document.at("key").get<std::string>();
-            require(key==id || !project.paths.contains(key),"Scene key conflicts with a project UUID: "+key);
-            require(aliases.insert(key).second,"Duplicate project scene key: "+key);
-            project.scenes.emplace(id,Scene{key,path.generic_string(),std::move(document)});
-        } else prefabs.emplace(path,EntityAuthoring::canonicalPrefab(document));
+        if(scene) pendingScenes.emplace(path,std::move(document));
+        else {
+            keys(document,{"root","entities"});
+            const auto root=document.at("root").get<std::string>();
+            require(!root.empty() && root!="@scene","Invalid prefab root");
+            auto canonical=SceneAuthoring::canonicalScene({{"entities",document.at("entities")}});
+            std::map<std::string,std::string> parents;
+            std::set<std::string> entityKeys;
+            for(const auto& entity:canonical["entities"]) {
+                const auto key=entity.at("key").get<std::string>();entityKeys.insert(key);
+                if(entity.contains("parent")) parents[key]=entity.at("parent").get<std::string>();
+            }
+            require(entityKeys.contains(root) && !parents.contains(root),"Prefab root must identify its single root entity");
+            for(auto key:entityKeys) {
+                while(parents.contains(key)) key=parents.at(key); // SceneAuthoring already rejects cycles.
+                require(key==root,"All prefab entities must descend from root");
+            }
+            document["entities"]=std::move(canonical["entities"]);
+            prefabs.emplace(path,std::move(document));
+        }
     }
-    require(project.scenes.contains(project.startup),"Startup UUID does not identify a project scene");
     for(const auto& [path,document]:prefabs) {
         const auto id=identity(read(fs::path(path.string()+".slemeta")).at("id").get<std::string>());
         std::ofstream output(project.derived.at(id),std::ios::binary);output<<document.dump();output.close();require(!output.fail(),"Cannot write derived runtime prefab");
     }
+    // All derived prefab files must exist before scene expansion (directory order is arbitrary).
+    for(auto& [path,document]:pendingScenes) {
+        if(document.contains("prefabs")) {
+            require(document["prefabs"].is_array(),"prefabs must be an array");
+            for(auto& instance:document["prefabs"]) {
+                keys(instance,{"file","key","parent","overrides"});
+                const auto file=instance.at("file").get<std::string>();
+                require(file.starts_with("project-asset://"),"Project prefab must use a UUID reference");
+                instance["file"]=project.resolveAsset(file);
+                if(instance.contains("overrides")) {
+                    require(instance["overrides"].is_object(),"Invalid prefab overrides");
+                    for(auto& patch:instance["overrides"]) patch=project.resolveComponentAssets(patch,true);
+                }
+            }
+            const auto expanded=detail::expandScenePrefabs(document,path.generic_string());
+            require(expanded.ok(),expanded.error());document=expanded.value();
+        }
+        document=SceneAuthoring::canonicalScene(document);
+        const auto id=identity(read(fs::path(path.string()+".slemeta")).at("id").get<std::string>());
+        const auto key=document.at("key").get<std::string>();
+        require(key==id || !project.paths.contains(key),"Scene key conflicts with a project UUID: "+key);
+        require(aliases.insert(key).second,"Duplicate project scene key: "+key);
+        project.scenes.emplace(id,Scene{key,path.generic_string(),std::move(document)});
+    }
+    require(project.scenes.contains(project.startup),"Startup UUID does not identify a project scene");
 }
 const nlohmann::json& ProjectRuntime::sceneDocument(const std::string& id) const { return scenes.at(identity(id)).document; }
 const nlohmann::json* ProjectRuntime::findSceneDocument(const std::string& nameOrPath) const {

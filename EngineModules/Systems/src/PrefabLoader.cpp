@@ -25,7 +25,8 @@ void merge(Json& destination, const Json& patch)
 {
     if (!destination.is_object() || !patch.is_object()) { destination=patch; return; }
     for (const auto& [key,value] : patch.items()) {
-        if (destination.contains(key)) merge(destination[key],value);
+        if (value.is_null()) destination.erase(key); // A null field removes it, like a null component.
+        else if (destination.contains(key)) merge(destination[key],value);
         else destination[key]=value;
     }
 }

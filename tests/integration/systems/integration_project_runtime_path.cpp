@@ -29,12 +29,31 @@ int main() {
         write(original/"Assets/Scenes/second.scene.json",scene("second"));meta(original/"Assets/Scenes/second.scene.json",second);
         fs::create_directories(original/"Assets/Scripts");std::ofstream(original/"Assets/Scripts/main.lua")<<"return {}";
         meta(original/"Assets/Scripts/main.lua",script);
+        const std::string prefabId="44444444-4444-4444-8444-444444444444";
+        const auto prefabPath=original/"Assets/Prefabs/actor.prefab.json";
+        const auto prefab=Json::parse(R"({"root":"root","entities":[
+            {"key":"root","components":{"Transform":{"position":[1,2]}}},
+            {"key":"child","parent":"root","components":{"Animator":{"targetEntities":{"root":1,"self":"child"}}}}
+        ]})");
+        write(prefabPath,{{"format","sle-project-prefab"},{"version",1},{"assets",Json::array()},{"document",prefab}});meta(prefabPath,prefabId);
+        auto linked=scene("second");
+        linked["document"]["prefabs"]=Json::parse(R"([
+            {"file":"placeholder","key":"one","overrides":{"root":{"Transform":{"position":[100,50]}}}},
+            {"file":"placeholder","key":"two"}
+        ])");
+        for(auto& instance:linked["document"]["prefabs"]) instance["file"]="project-asset://"+prefabId;
+        write(original/"Assets/Scenes/second.scene.json",linked);
         const auto moved=root/"relocated";fs::rename(original,moved);fs::current_path(root);
         auto loaded=sle::ProjectRuntime::open(moved/"game.sleproject");check(loaded.ok(),loaded.error().c_str());
         const auto& project=loaded.value();
         check(project.engineConfig().width==640 && project.engineConfig().height==360 && project.engineConfig().targetFPS==30,"game settings lost");
         check(project.startupScene()==first,"startup UUID lost");
         const auto document=project.sceneDocument(first);
+        const auto linkedDocument=project.sceneDocument(second);
+        check(linkedDocument["entities"].size()==5,"linked subtree expansion lost entities");
+        check(linkedDocument["entities"][2]["parent"]=="one","first subtree parent lost");
+        check(linkedDocument["entities"][4]["components"]["Animator"]["targetEntities"]["root"]=="two","instance references not isolated");
+        check(linkedDocument["entities"][1]["components"]["Transform"]["position"]["x"]==100,"placement override lost");
         check(project.resolveComponentAssets({{"variables",{{"texture","leave-me"}}}})["variables"]["texture"]=="leave-me","script data interpreted as asset");
         check(fs::equivalent(document.at("entities")[0]["components"]["Script"]["scriptAsset"].get<std::string>(),moved/"Assets/Scripts/main.lua"),"relocated script unresolved");
         sle::Runtime runtime(project.engineConfig());project.registerScenes(runtime);
@@ -42,6 +61,22 @@ int main() {
         check(runtime.loadScene(first).ok(),"startup scene failed");
         check(runtime.loadScene("second").ok(),"second scene failed");
         check(fs::equivalent(project.resolveAsset("Scripts/main.lua"),moved/"Assets/Scripts/main.lua"),"relative dynamic asset unresolved");
+        const auto renamedPrefab=moved/"Assets/Prefabs/renamed.prefab.json";
+        fs::rename(moved/"Assets/Prefabs/actor.prefab.json",renamedPrefab);
+        fs::rename(moved/"Assets/Prefabs/actor.prefab.json.slemeta",fs::path(renamedPrefab.string()+".slemeta"));
+        auto changedPrefab=prefab;changedPrefab["entities"][0]["components"]["Transform"]["position"]={7,8};
+        write(renamedPrefab,{{"format","sle-project-prefab"},{"version",1},{"assets",Json::array()},{"document",changedPrefab}});
+        auto refreshed=sle::ProjectRuntime::open(moved/"game.sleproject");check(refreshed.ok(),refreshed.error().c_str());
+        const auto refreshedScene=refreshed.value().sceneDocument(second);
+        check(refreshedScene["entities"][1]["components"]["Transform"]["position"]["x"]==100,"explicit placement changed after prefab update");
+        check(refreshedScene["entities"][3]["components"]["Transform"]["position"]["x"]==7,"unoverridden prefab did not refresh after rename");
+        auto invalidLink=linked;invalidLink["document"]["prefabs"][0]["overrides"]={{"missing",Json::object()}};
+        write(moved/"Assets/Scenes/second.scene.json",invalidLink);
+        check(!sle::ProjectRuntime::open(moved/"game.sleproject").ok(),"unknown override target accepted");
+        write(moved/"Assets/Scenes/second.scene.json",linked);
+        fs::rename(renamedPrefab,renamedPrefab.string()+".missing");
+        check(!sle::ProjectRuntime::open(moved/"game.sleproject").ok(),"missing linked prefab accepted");
+        fs::rename(renamedPrefab.string()+".missing",renamedPrefab);
         for (const auto& bad : {std::string("../game.sleproject"),(moved/"game.sleproject").generic_string(),std::string("project-asset://bad")}) {
             bool rejected=false;try { project.resolveAsset(bad); } catch(const std::exception&) { rejected=true; }
             check(rejected,"escaping or malformed dynamic path accepted");

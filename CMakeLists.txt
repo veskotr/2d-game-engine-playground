@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 # GLAD and audio decoder targets compile C in this directory scope.
 # Enable C here so MSVC runtime selection also applies to those objects.
 # Engine version: 0.MINOR.PATCH while pre-1.0; bump MINOR for each added engine feature.
-project(GameEngine VERSION 0.16.0 LANGUAGES C CXX)
+project(GameEngine VERSION 0.17.0 LANGUAGES C CXX)
 
 include(CTest)
 

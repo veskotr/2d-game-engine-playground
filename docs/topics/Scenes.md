@@ -129,6 +129,6 @@ files keep loading, but physics derives mass from fixture density. Lua rejects
 this inert field. Tiled loading remains a separate importer.
 
 
-The [desktop entity editor](../../tools/entity-editor/README.md) can now author
+The [desktop entity editor](../../tools/editor/README.md) can now author
 single-entity prefab JSON for a scene's `prefabs` list. This is authored document
 saving in the tool, distinct from serializing a running Runtime scene snapshot.

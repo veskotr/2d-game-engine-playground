@@ -33,6 +33,8 @@
 
 namespace sle {
 
+class ProjectRuntime;
+
 class Runtime
 {
 public:
@@ -47,6 +49,7 @@ public:
     sle::core::Result<bool> loadScenePreview(const nlohmann::json& document, bool preserveView = false);
     sle::core::Result<bool> loadEntityPreview(const nlohmann::json& document, bool preserveView = false);
     glm::vec2 getCameraViewportSize() const { return camera.getViewportSize(); }
+    float getCameraRotation() const { return camera.getRotation(); }
     sle::core::Result<bool> renderEntityPreview(int width, int height, bool fit);
     void zoomEntityPreview(float factor);
     void panEntityPreview(glm::vec2 delta);
@@ -57,6 +60,11 @@ public:
     nlohmann::json sceneTransforms();
     std::array<float,6> sceneGameViewport() const;
 
+    // Advance once per owner frame; never draws or polls/presents host events.
+    // Scene/Project Play passes false: Game input must not toggle editor debug UI.
+    sle::core::Result<bool> advanceEmbeddedFrame(float dt, bool allowDebugInput = true);
+    // Draw any number of views of the current snapshot. Never advances gameplay/UI interaction.
+    sle::core::Result<bool> drawSceneView(int width, int height, bool gameView, bool fit = false);
     sle::core::Result<bool> renderEmbeddedFrame(int framebufferWidth, int framebufferHeight);
     // Host clears/transfers input before ticking. Advances the same systems as run().
     sle::core::Result<bool> tickEmbeddedFrame(int framebufferWidth, int framebufferHeight, float dt);
@@ -67,6 +75,9 @@ public:
     bool registerScene(const std::string& sceneName, SceneManager::SceneBuilder builder);
     bool registerSceneFromFile(const std::string& sceneName, const std::string& jsonPath);
     bool registerSceneFromData(const std::string& sceneName, const nlohmann::json& data, const std::string& sourcePath);
+    sle::core::Result<bool> startProject(const ProjectRuntime& project);
+    std::string resolveProjectAsset(const std::string& value) const;
+    nlohmann::json resolveProjectComponents(const nlohmann::json& value) const;
     bool hasScene(const std::string& sceneName) const;
     sle::core::Result<bool> loadScene(const std::string& sceneName);
     sle::core::Result<bool> requestSceneSwitch(const std::string& sceneName);
@@ -102,6 +113,7 @@ private:
     struct FrameTimings {
         double transform, script, physics, renderSubmit, renderFlush;
     };
+    FrameTimings advanceSimulation(float dt);
     FrameTimings advanceAndRender(float dt);
     void processPendingSceneSwitch();
     void handleDebugInput();
@@ -129,6 +141,7 @@ private:
     void refreshChunkRuntimeState();
 
     sle::core::EngineConfig config;
+    std::shared_ptr<const ProjectRuntime> projectContext;
 
     sle::core::Window window;
     sle::renderer::Renderer renderer;

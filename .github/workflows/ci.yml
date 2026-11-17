@@ -11,7 +11,8 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: windows-latest
+    # Match the Visual Studio 17 2022 generator in CMakePresets.json.
+    runs-on: windows-2022
 
     steps:
       - name: Checkout
@@ -32,7 +33,9 @@ jobs:
         run: python EngineModules/Scripting/tools/generate_lua_api_stub.py --check
 
       - name: Configure (Debug preset)
-        run: cmake --preset debug
+        run: |
+          $ciPython = (Get-Command python).Source
+          cmake --preset debug "-DPython_EXECUTABLE=$ciPython" "-DPython3_EXECUTABLE=$ciPython"
 
       - name: Build (Debug)
         run: cmake --build build/debug --config Debug --parallel
@@ -42,3 +45,30 @@ jobs:
 
       - name: Run integration tests
         run: ctest --test-dir build/debug -C Debug -L integration -LE windowed --output-on-failure
+
+  editor-tests:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Run editor unit tests
+        working-directory: tools/editor
+        run: .\gradlew.bat test --no-daemon --console=plain
+
+      - name: Upload editor test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-test-reports
+          path: |
+            tools/editor/build/reports/tests/test/
+            tools/editor/build/test-results/test/
+          if-no-files-found: warn

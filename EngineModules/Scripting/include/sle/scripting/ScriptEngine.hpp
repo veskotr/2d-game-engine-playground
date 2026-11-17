@@ -30,6 +30,8 @@ class ScriptEngine : public ScriptRuntime
 public:
     bool init(ScriptApi* api);
     void shutdown();
+    // Host-owned search paths; set before executing project scripts.
+    void prependModulePaths(const std::vector<std::string>& roots);
     void clearSceneScripts();
     uint32_t getExecutingEntity() const { return executingEntity; }
     bool isExecutingEntityScript() const { return executingEntityScript; }

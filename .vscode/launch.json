@@ -1,0 +1,88 @@
+{
+    // Run and Debug (F5) entries. The engine_app configurations use the Visual Studio
+    // debugger (C/C++ extension, cppvsdbg) and build Debug first.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "SLE Editor",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/tools/editor/run-editor.ps1\"",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "SLE Editor (packaged app)",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "powershell.exe -NoProfile -Command \"& '${workspaceFolder}/tools/editor/build/compose/binaries/main/app/SLE Editor/SLE Editor.exe'\"",
+            "cwd": "${env:USERPROFILE}",
+            "preLaunchTask": "Editor: Package Windows App"
+        },
+        {
+            "name": "Debug engine_app (engine.json)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/debug/engine_app/Debug/engine_app.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "preLaunchTask": "Engine: Build Debug"
+        },
+        {
+            "name": "Debug engine_app (project…)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/debug/engine_app/Debug/engine_app.exe",
+            "args": ["--project", "${input:projectFile}"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "preLaunchTask": "Engine: Build Debug"
+        },
+        {
+            "name": "Debug engine_app (built game config.json…)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/debug/engine_app/Debug/engine_app.exe",
+            "args": ["--config", "${input:gameConfig}"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "preLaunchTask": "Engine: Build Debug"
+        },
+        {
+            "name": "Run built game (exe…)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${input:gameExe}",
+            "cwd": "${env:TEMP}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug sandbox example",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/debug/examples/sandbox/Debug/example_sandbox.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "preLaunchTask": "Engine: Build Debug"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "projectFile",
+            "type": "promptString",
+            "description": "Path to the .sleproject file",
+            "default": "C:/Games/My Game/My Game.sleproject"
+        },
+        {
+            "id": "gameConfig",
+            "type": "promptString",
+            "description": "Path to a built game's config.json",
+            "default": "C:/Games/Game Build/config.json"
+        },
+        {
+            "id": "gameExe",
+            "type": "promptString",
+            "description": "Path to a built game executable",
+            "default": "C:/Games/Game Build/My Game.exe"
+        }
+    ]
+}

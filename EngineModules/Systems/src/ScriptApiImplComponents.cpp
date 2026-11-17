@@ -24,7 +24,7 @@ bool ScriptApiImpl::setComponent(Ref ref,const std::string& name,const Json& pat
   if(!r.hasEntity(e)) throw std::invalid_argument("Entity is not alive");
   if(!patch.is_object()) throw std::invalid_argument("Component patch must be an object");
   const auto it=descriptors().find(name); if(it==descriptors().end() || !it->second.set) throw std::invalid_argument("Unknown or read-only component: "+name);
-  const auto normalized=normalizePatch(name,patch);
+  const auto normalized=normalizePatch(name,runtime.resolveProjectComponents({{name,patch}}).at(name));
   const Json candidate=it->second.validate(r,e,normalized);
   if(it->second.get(r,e)==candidate) return true;
   runtime.prepareComponentMutation(ref.id,name,normalized,false);

@@ -8,6 +8,11 @@ Self-contained [scene packages](SceneEditor.md) reuse the same machinery with
 extension `.slescene`, manifest format `sle-scene`, and `scene.json` in place of
 `entity.json`. Prefab and scene readers reject each other's document format.
 
+In an open project, new prefab Save defaults to plain `.prefab.json` source with
+shared UUID references. **Export Package** produces this portable archive without
+changing the source binding. See [project editing](Projects.md#scene-and-prefab-editing).
+The workflow below describes standalone package authoring.
+
 ## Editor workflow
 
 Add SpriteRenderer and use **Browse** to import a texture. The editor copies the

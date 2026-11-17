@@ -20,9 +20,15 @@ scripting::ScriptEntityRef ScriptApiImpl::instantiatePrefab(const std::string& p
     const nlohmann::json& overrides,scripting::ScriptEntityRef parent,std::string& error)
 {
     error.clear();
-    const auto result=PrefabLoader::instantiate(path,runtime.getScene(),key,overrides,entity::Entity(parent.id));
-    if(!result.ok()) {error=result.error();return {};}
-    return {result.value().getID()};
+    try {
+        auto resolvedOverrides=overrides;
+        if(resolvedOverrides.is_object())
+            for(auto& [entityKey,components]:resolvedOverrides.items())
+                components=runtime.resolveProjectComponents(components);
+        const auto result=PrefabLoader::instantiate(runtime.resolveProjectAsset(path),runtime.getScene(),key,resolvedOverrides,entity::Entity(parent.id));
+        if(!result.ok()) {error=result.error();return {};}
+        return {result.value().getID()};
+    } catch(const std::exception& failure) { error=failure.what();return {}; }
 }
 
 

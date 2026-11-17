@@ -18,7 +18,8 @@ class UISystem
 public:
     sle::core::Result<bool> init(sle::scripting::ScriptRuntime* scriptRuntime);
     void shutdown();
-    void update(UIFrameContext& ctx);
+    // Embedded advance traverses interaction/layout without queuing geometry.
+    void update(UIFrameContext& ctx, bool submitGeometry = true);
     void renderSnapshot(UIFrameContext& ctx);
     void setDefaultShaderID(uint32_t shaderID) { defaultShaderID = shaderID; }
     bool setBinding(const std::string& key, const UIValue& value);
@@ -31,7 +32,7 @@ private:
     bool loadDocumentResources(UIDocument& document);
     bool parseDocumentLayout(UIDocument& document);
     void syncEntityDocuments(UIFrameContext& ctx, bool executeBehaviors = true);
-    void submitDocument(UIFrameContext& ctx, UIDocument& document, bool interactive = true);
+    void submitDocument(UIFrameContext& ctx, UIDocument& document, bool interactive = true, bool submitGeometry = true);
     std::vector<UIDocument> documents;
     std::unordered_map<uint32_t, UIDocument> entityDocuments;
     std::unordered_set<uint32_t> deferredBehaviorEntities;

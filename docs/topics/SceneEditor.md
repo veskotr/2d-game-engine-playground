@@ -3,7 +3,10 @@
 The desktop editor's **Scene** tab authors keyed entity hierarchies and saves
 portable `.slescene` packages. A package includes the scene JSON and all recognized
 component assets, using the same bounded ZIP and asset-ID machinery as
-[packaged prefabs](PrefabPackages.md).
+[packaged prefabs](PrefabPackages.md). In an open project, Save defaults to plain
+`.scene.json` sources with shared UUID asset references; see
+[project editing](Projects.md#scene-and-prefab-editing). Export Package retains the
+portable `.slescene` workflow.
 
 ## Workflow
 
@@ -12,22 +15,35 @@ component assets, using the same bounded ZIP and asset-ID machinery as
   enter its name. Creation menus replace the former add/import buttons.
 - Prefab imports are editable copies, with new UUIDs and remapped self references.
   Editing a scene copy never modifies its source `.sleprefab` or another copy.
-- The expandable **Scene Tree** contains the scene root and entity nodes, with
+- The expandable scene tree in **Hierarchy** contains the scene root and entity nodes, with
   no component nodes. Select a node or click its geometry/origin in the viewport.
   Both select the complete entity. Dragging its center or body and arrow nudges
   change Transform position; the outline encloses its visible geometry. Components
   cannot be selected or resized from Scene. Use the tree to choose
   coincident entities. Selecting the root shows scene properties.
-- The tree stays on the left, the viewport in the center, and the selected
+- The default layout places the tree on the left, viewport in the center, and selected
   entity inspector on the right. Entity properties contain name, parent, Transform
   and Camera2D when present. **Fit** frames all entities;
-  edits preserve the camera. **Right-click → Edit** opens that live scene copy in a temporary entity tab.
-  Its component selector and handles edit sprite/collider geometry there.
-  Close the entity tab to return to placement. **File → Save** saves the scene.
+  edits preserve the camera. Edit the selected entity's components in the Inspector;
+  **Right-click → Add Component** adds one directly. There is no separate entity tab
+  for scene entities. **File → Save** saves the scene.
+- Drag an entity from the Hierarchy or out of the viewport onto an Assets folder to
+  save it as a linked prefab; **Apply Changes to Prefab** writes an instance's edits
+  back. See [Prefabs](Prefabs.md#creating-editing-and-applying-prefabs).
 - **Create → Entity → As Child** creates a child of the right-clicked selection. **Parent** reparents while
   preserving world pose; cycles and non-invertible parent transforms are rejected.
   **Entity → Duplicate Subtree** copies the complete selected subtree with independent UUIDs;
-  **Edit → Delete Entity** removes that subtree.
+  **Edit → Delete Entity** or Delete in the Hierarchy/Scene viewport removes that subtree
+  and clears selection, preventing a held Delete from deleting unrelated survivors.
+  **Scene Undo** restores the subtree and selection. Inspector text fields keep Delete
+  for text editing; modal dialogs and running/paused playback block scene deletion.
+  This also applies to detached windows.
+- Right-click empty Scene space to create at the clicked world position. The shared
+  creation menu includes Entity, Sprite, Camera, box/circle colliders and zones;
+  **As Child** converts the world point through the selected parent. Hierarchy creation
+  retains local-origin placement. New sprite/box components use 64×64 world units;
+  circle components use radius 32. Inspector-added shapes still fit an existing sprite.
+  These are editor presets; saved documents and native codec defaults are unchanged.
 - **Duplicate Subtree** creates another independent UUID and preserves references to
   other scene entities. **Edit → Delete Entity** removes the selection. Operations that would
   invalidate an Animator target are rejected. Save/reopen converts legacy numeric
@@ -37,7 +53,7 @@ component assets, using the same bounded ZIP and asset-ID machinery as
   restore additions, imports, duplication, deletion and scene-name changes; they
   preserve component edits on surviving entity objects. There is no unified
   chronological history across both types yet.
-- **Save / Save As** writes one `.slescene`. **Open** restores entities and assets.
+- In standalone mode, **Save / Save As** writes one `.slescene`. **Open** restores entities and assets.
   Save validates every entity, including hidden selections, before atomically
   replacing the file. Invalid drafts in any entity block saving. The scene dirty
   indicator covers all entity edits/imports and structure; New/Open/Close confirm
@@ -51,9 +67,28 @@ Scene copies retain their identities and do not modify their source prefab.
 Valid external Animator lookups are projected to self only for the isolated
 component preview; authored/saved references remain intact.
 
-Scene and Game are tabs on the same native canvas. Switching them preserves a
-running/paused runtime. Right-click **Edit** opens a component tab and stops
-scene gameplay. There is no Sandbox tab; Game executes the current edited scene.
+See the [workspace operating guide](EditorWorkspace.md) for docking, shared Play,
+window close behavior and layout recovery.
+
+The **Windows** menu shows, focuses, hides and moves the six registered panels.
+Detach Scene or Game, or use Move to to split/tab panels and groups. Only the main
+window owns application menus. Closing a tool window hides its panels; Show / Focus
+restores them with document drafts and Play intact. Restore Default Layout returns
+them to the main host. Drag tabs to reorder/merge, drop on a body edge to split,
+or outside editor windows to detach. The dotted group grip moves all its tabs;
+Escape cancels. Drag dividers to resize. Panel `_` minimizes to a restore strip,
+`↗` detaches and `×` hides; the native title bar minimizes the whole window.
+Minimum sizes follow UI scale; impossible display constraints recover to tabs.
+Layouts save per project in `.sle/workspace-layout.json`, independently of UI
+scale and documents. Standalone storage, recovery behavior and the restart smoke
+are described under [workspace windows](../../tools/editor/README.md#workspace-windows).
+Restored windows recover to connected display work areas; reset changes layout only.
+
+Scene and Game share one simulation and durable GL owner; Scene pan/zoom and Game
+dimensions stay independent. Explicitly opening entity editing stops playback;
+focusing its panel during Play preserves the session. Entity preview uses the
+existing separate content mode. Hierarchy, Inspector and File/Edit commands follow
+the active authoring mode, including Save-to-scene for edited scene copies.
 
 ## Scene cameras and gameplay
 
@@ -81,7 +116,7 @@ Open `assets/scenes/editor_camera_demo.slescene` for a player with a child camer
 a Lua movement script (WASD), and a falling crate. Run the same package standalone
 with `engine_app.exe --config examples/editor_camera/engine.json`. The example runs through the same runtime in the editor and standalone.
 
-The compact tool layout defaults to **UI 85%**. **View → UI Scale** offers
+The compact tool layout defaults to **UI 100%**. **View → UI Scale** offers
 75%, 85% and 100%; changing scale preserves documents/selection and updates native
 viewport sizing.
 
@@ -141,7 +176,7 @@ repository's default startup config unchanged. To open the scene immediately in
 the desktop editor:
 
 ```powershell
-cd tools/entity-editor
+cd tools/editor
 ./gradlew.bat run --args="--scene assets/scenes/editor_starter.slescene"
 ```
 

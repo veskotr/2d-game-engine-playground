@@ -118,6 +118,14 @@ int main()
             !scene.getRegistry().hasEntity(child)) return 3;
     }
     if (sle::PrefabLoader::instantiate("tests/data/prefabs/actor.prefab.json",scene,"a").ok()) return 4;
+    // A null field removes it, as a null component does (the editor writes these for removed map keys).
+    sle::entity::Scene trimmedScene;
+    const auto trimmed=sle::PrefabLoader::instantiate("tests/data/prefabs/actor.prefab.json",trimmedScene,"trimmed",
+        {{"root",{{"Animator",{{"targetEntities",{{"numeric",nullptr}}}}}}}});
+    if (!trimmed.ok()) { std::cerr << trimmed.error(); return 21; }
+    const auto* trimmedAnimator=trimmedScene.getRegistry().getComponent<sle::components::AnimatorComponent>(trimmed.value());
+    if (!trimmedAnimator || trimmedAnimator->targetEntities.contains("numeric") ||
+        trimmedAnimator->targetEntities.at("child")!=trimmedScene.findEntityByKey("trimmed/child").getID()) return 22;
     if (sle::PrefabLoader::instantiate("tests/data/prefabs/actor.prefab.json",scene,"dead-parent",Json::object(),
         sle::entity::Entity{999999}).ok() || scene.findEntityByKey("dead-parent").valid() || scene.getRoots()!=roots) return 11;
     const auto recursive=sle::PrefabLoader::instantiate("tests/data/prefabs/recursive.prefab.json",scene,"recursive");

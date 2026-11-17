@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 # GLAD and audio decoder targets compile C in this directory scope.
 # Enable C here so MSVC runtime selection also applies to those objects.
-project(GameEngine LANGUAGES C CXX)
+# Engine version: 0.MINOR.PATCH while pre-1.0; bump MINOR for each added engine feature.
+project(GameEngine VERSION 0.17.0 LANGUAGES C CXX)
 
 include(CTest)
 
@@ -26,6 +27,18 @@ endif()
 # Export compile commands (useful for VSCode IntelliSense)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Editor embedding is opt-in. Standalone builds do not require a JDK.
+option(SLE_BUILD_EDITOR "Build the editor JNI library (Windows x64, Linux x64)" OFF)
+if(SLE_BUILD_EDITOR)
+	# The JNI shared library links the engine's static libraries and dependencies.
+	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+	if(MSVC)
+		# The JVM loads its own msvcp140.dll, which may predate this toolset. Since VS 17.10
+		# the inline constexpr std::mutex constructor crashes with runtimes older than 14.40.
+		add_compile_definitions(_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
+	endif()
+endif()
+
 # -------------------------
 # Dependencies
 # -------------------------
@@ -42,8 +55,6 @@ add_subdirectory(EngineModules)
 add_subdirectory(engine_app)
 add_subdirectory(examples)
 
-# Editor embedding is opt-in. Standalone builds do not require a JDK.
-option(SLE_BUILD_EDITOR "Build the editor JNI library (Windows x64)" OFF)
 if(SLE_BUILD_EDITOR)
     add_subdirectory(tools/editor-native)
 endif()

@@ -19,7 +19,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     private val canonicalize: (String) -> String = ::canonicalSceneDocument) {
     var projectDocument by mutableStateOf<OpenedProjectDocument?>(null)
         private set
-    var projectImportPrefab: ((Path)->Unit)? = null
+    var projectImportPrefab: ((Path,Vec2?)->Unit)? = null
     var projectFileAction: ((Boolean,Boolean)->Boolean)? = null
     fun openProject(opened: OpenedProjectDocument) {
         require(opened.kind==ProjectDocumentKind.Scene) { "Select a project scene" }
@@ -92,6 +92,12 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         }
         error=null
     }
+    /** See [EntityWorkspaceState.relocateAssets]; also updates scene-level assets. */
+    fun relocateAssets(moved: Map<Path,Path>) {
+        if(moved.isEmpty()) return
+        entities.forEach { it.relocateAssets(moved) }
+        extras=extras.entries.associate { (path,label) -> (moved[path.toAbsolutePath().normalize()] ?: path) to label }
+    }
     fun rename(value: String) = change { name=value }
     fun select(value: String?) { selected?.endGesture();selectedKey=value?.takeIf { key -> entities.any { it.document.key==key } } }
     fun addEntity() = change {
@@ -99,17 +105,29 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         val state=EntityWorkspaceState(catalog)
         entities=entities+state;selectedKey=state.document.key
     }
-    fun importPrefab(path: Path) {
+    /** [position] places the instance at a world point (e.g. where it was dropped); null keeps the prefab's own. */
+    fun importPrefab(path: Path,position: Vec2?=null) {
         require(entities.size<MAX_SCENE_ENTITIES) { "Scene editor supports at most $MAX_SCENE_ENTITIES entities" }
-        projectImportPrefab?.let { it(path);return }
+        projectImportPrefab?.let { it(path,position);return }
         val imported=EntityWorkspaceState(catalog).apply { open(path) }
-        insertPrefab(imported.document,imported.assets)
+        insertPrefab(imported.document,imported.assets,position)
     }
-    fun insertPrefab(document: EntityDocument,imported: Map<Path,String>) {
+    fun insertPrefab(document: EntityDocument,imported: Map<Path,String>,position: Vec2?=null) {
         require(entities.size<MAX_SCENE_ENTITIES) { "Scene editor supports at most $MAX_SCENE_ENTITIES entities" }
-        val copy=copySceneEntity(document,listOf(document.key))
+        val placed=if(position==null) document else document.withPose(ScenePose.from(document).copy(position=position))
+        val copy=copySceneEntity(placed,listOf(document.key))
         val state=EntityWorkspaceState(catalog).apply { resetTo(copy,imported) }
         change { entities=entities+state;selectedKey=copy.key }
+    }
+    /** New root entity showing [texture] at its native size, e.g. an image dropped from Assets. */
+    fun addSprite(texture: String,name: String,size: Vec2,position: Vec2?) {
+        require(entities.size<MAX_SCENE_ENTITIES) { "Scene editor supports at most $MAX_SCENE_ENTITIES entities" }
+        val state=EntityWorkspaceState(catalog)
+        val sprite=(catalog["SpriteRenderer"]?.defaults ?: JsonObject(emptyMap()))+mapOf("texture" to JsonPrimitive(texture),
+            "size" to buildJsonObject { put("x",size.x);put("y",size.y) })
+        state.document=state.document.copy(name=name,components=JsonObject(state.document.components+("SpriteRenderer" to JsonObject(sprite))))
+            .withPose(ScenePose(position=position ?: Vec2(0.0,0.0)))
+        change { entities=entities+state;selectedKey=state.document.key }
     }
     private fun subtree(root: String): Set<String> {
         val children=parents.entries.groupBy({it.value},{it.key});val result=mutableSetOf<String>();val queue=java.util.ArrayDeque<String>();queue.add(root)

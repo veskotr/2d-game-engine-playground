@@ -8,6 +8,18 @@ animation, UI and audio. Switching Scene/Game preserves runtime state. Pause
 freezes it; Stop restores authored data. The former Sandbox tab is removed.
 Legacy sandbox smoke commands remain available for runtime regression checks.
 
+Selecting an entity in the Scene shows all of its components in the Inspector, with
+**Add Component**, **Remove**, and for colliders/sprites/zones **Edit** (resize handles in the
+Scene view) and **Fit** (match the sprite). Sprite colors show as RGBA with a color picker;
+textures show a thumbnail and **Use image size**. The Hierarchy toolbar adds, duplicates and
+deletes entities; **Delete** and **Ctrl+D** work in the Hierarchy and Scene view, and arrow
+keys move the selection. Drag a prefab or image from Assets onto the Scene view (placed at
+the cursor) or the Hierarchy. Saving a project scene copies textures from opened/imported
+packages into `Assets/Textures` instead of failing. Double-clicking a scene or prefab in Assets
+opens it; in a project, open scenes/prefabs that already have a file are saved automatically
+when you switch documents. File dialogs open in the project's Scenes/Prefabs/Textures folder,
+or the folder you last used.
+
 Right-click an entity in the hierarchy or Scene viewport and choose **Edit** to
 open its component editor in a temporary tab. Closing that tab returns to Scene.
 Opening component editing stops gameplay. Component handles edit sprites and

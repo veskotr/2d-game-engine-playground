@@ -10,6 +10,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Rect
@@ -35,6 +37,8 @@ internal fun assetBrowserMenu(state: AssetBrowserState?,visible: Boolean,onVisib
 internal fun AssetBrowserPanel(
     state: AssetBrowserState,assetRootName: String,modifier: Modifier=Modifier,
     commands: ProjectAssetCommands?=null,onOpen: (String)->Unit={},onBounds: (String,Rect)->Unit={_,_->},
+    /** Absolute path for a dragged file, or null when drag is unavailable. */
+    dragPath: (String)->java.nio.file.Path? = { null },
 ) {
     val colors=MaterialTheme.colors
     val tokens=LocalEditorColors.current
@@ -112,6 +116,7 @@ internal fun AssetBrowserPanel(
                 Text("${children.size} ${if(children.size==1) "item" else "items"}",color=tokens.textSecondary,style=MaterialTheme.typography.caption)
             }
             EditorSeparator()
+            sle.editor.ui.AssetDrag.dragging?.let { Text("Drop ${it.fileName} on the Scene view or Hierarchy",style=MaterialTheme.typography.caption,color=tokens.textSecondary,modifier=Modifier.padding(horizontal=metrics.panelPadding)) }
             commands?.message?.let { Text(it,style=MaterialTheme.typography.caption,modifier=Modifier.padding(horizontal=metrics.panelPadding)) }
             state.snapshot?.errors?.let { errors -> if(errors.isNotEmpty()) {
                 var showErrors by remember { mutableStateOf(false) }
@@ -149,6 +154,13 @@ internal fun AssetBrowserPanel(
                         items(children,key={it.path}) { entry ->
                             Row(Modifier.fillMaxWidth().then(measured("AssetFile:${entry.path}")).background(if(state.selected==entry.path) tokens.selectedBackground else androidx.compose.ui.graphics.Color.Transparent)
                                 .onPointerEvent(PointerEventType.Press) { if(it.buttons.isPrimaryPressed) state.select(entry.path) }
+                                .then(if(entry.kind==AssetKind.File) Modifier.pointerInput(entry.path) {
+                                    detectDragGestures(
+                                        onDragStart={ dragPath(entry.path)?.let { state.select(entry.path);sle.editor.ui.AssetDrag.begin(it) } },
+                                        onDragEnd={ sle.editor.ui.AssetDrag.release(java.awt.MouseInfo.getPointerInfo().location) },
+                                        onDragCancel={ sle.editor.ui.AssetDrag.cancel() },
+                                    ) { change,_ -> change.consume() }
+                                } else Modifier)
                                 .combinedClickable(onClick={state.select(entry.path)},onDoubleClick={if(entry.kind==AssetKind.Directory) state.navigate(entry.path) else if(entry.kind==AssetKind.File) onOpen(entry.path)})
                                 .heightIn(min=metrics.treeRow).padding(horizontal=metrics.panelPadding,vertical=metrics.gap/2),verticalAlignment=Alignment.CenterVertically) {
                                 TreeIcon(if(entry.kind==AssetKind.Directory) "Folder" else if(entry.kind==AssetKind.Link) "Link" else "File")

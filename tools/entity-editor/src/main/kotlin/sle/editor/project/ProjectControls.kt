@@ -66,10 +66,11 @@ internal fun projectControls(
     }
     val commands=remember(state) { ProjectCommands(
         create={
-            val chooser=EditorFileChooser(state.opened?.root?.parent?.toFile()).apply {
+            val chooser=EditorFileChooser(state.opened?.root?.parent?.toFile() ?: sle.editor.ui.EditorFileLocations.folder(sle.editor.ui.EditorFileLocations.Kind.Project)).apply {
                 dialogTitle="Choose parent folder for the new project";fileSelectionMode=JFileChooser.DIRECTORIES_ONLY
             }
             if(chooser.showOpenDialog(null)==JFileChooser.APPROVE_OPTION) {
+                sle.editor.ui.EditorFileLocations.remember(sle.editor.ui.EditorFileLocations.Kind.Project,java.io.File(chooser.selectedFile,"_"))
                 val name=EditorDialogs.showInputDialog(null,"Project name","New Project",JOptionPane.PLAIN_MESSAGE)?.trim()
                 if(name!=null) try {
                     validateProjectFolderName(name)
@@ -78,10 +79,13 @@ internal fun projectControls(
             }
         },
         open={
-            val chooser=EditorFileChooser(state.opened?.root?.toFile()).apply {
+            val chooser=EditorFileChooser(state.opened?.root?.parent?.toFile() ?: sle.editor.ui.EditorFileLocations.folder(sle.editor.ui.EditorFileLocations.Kind.Project)).apply {
                 dialogTitle="Open Project";fileFilter=FileNameExtensionFilter("SLE Project (*.sleproject)","sleproject")
             }
-            if(chooser.showOpenDialog(null)==JFileChooser.APPROVE_OPTION) load { ProjectFiles.open(chooser.selectedFile.toPath()) }
+            if(chooser.showOpenDialog(null)==JFileChooser.APPROVE_OPTION) {
+                sle.editor.ui.EditorFileLocations.remember(sle.editor.ui.EditorFileLocations.Kind.Project,chooser.selectedFile.parentFile)
+                load { ProjectFiles.open(chooser.selectedFile.toPath()) }
+            }
         },
         close={
             val current=state.opened

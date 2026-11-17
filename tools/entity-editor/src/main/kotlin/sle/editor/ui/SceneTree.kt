@@ -18,6 +18,10 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.*
 
 internal data class SceneTreeNode(val id: String,val label: String,val entityKey: String?=null,
     val children: List<SceneTreeNode> = emptyList())
@@ -54,17 +58,34 @@ internal fun SceneTree(state: SceneWorkspaceState,modifier: Modifier=Modifier,
         if(state.selectedKey!=null) expanded=true
     }
     val rows=flattenSceneTree(root,expandedNodes)
-    Column(modifier.editorContextMenu { sceneCreationMenu(state,editable,onEditEntity) }) {
+    val focus=remember { FocusRequester() }
+    fun choose(key: String?) { state.select(key);runCatching { focus.requestFocus() } }
+    fun attempt(action: ()->Unit) { try { state.selected?.endGesture();action() } catch(failure: Exception) { state.error=failure.message ?: "Scene operation failed" } }
+    // Delete removes the selected subtree, Ctrl+D duplicates it, arrows move the selection.
+    val keys=Modifier.focusRequester(focus).focusable().onPreviewKeyEvent { event ->
+        if(event.type!=KeyEventType.KeyDown) return@onPreviewKeyEvent false
+        val visible=if(expanded) rows.mapNotNull { it.first.entityKey } else emptyList()
+        val index=visible.indexOf(state.selectedKey)
+        when {
+            editable && state.selected!=null && (event.key==Key.Delete || event.key==Key.Backspace) -> { attempt { state.removeSelected() };true }
+            editable && state.selected!=null && event.isCtrlPressed && event.key==Key.D -> { attempt { state.duplicateSelected() };true }
+            event.key==Key.DirectionDown && visible.isNotEmpty() -> { state.select(visible[(index+1).coerceAtMost(visible.lastIndex)]);true }
+            event.key==Key.DirectionUp && visible.isNotEmpty() -> { state.select(if(index<=0) null else visible[index-1]);true }
+            event.key==Key.Enter && state.selectedKey!=null && onEditEntity!=null && editable -> { onEditEntity(state.selectedKey!!);true }
+            else -> false
+        }
+    }
+    Column(modifier.then(keys).editorContextMenu { sceneCreationMenu(state,editable,onEditEntity) }) {
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             item(key=root.id) {
-                EditorTreeRow(root.label,state.selectedKey==null,{state.select(null)},
+                EditorTreeRow(root.label,state.selectedKey==null,{choose(null)},
                     Modifier.editorContextMenu(beforeOpen={state.select(null)},node=true) { sceneCreationMenu(state,editable,onEditEntity) },
                     help=root.label,leading={ TreeExpander(expanded,true) { expanded=!expanded };TreeIcon("Scene") })
             }
             if(expanded) items(rows,key={it.first.id}) { (node,depth) ->
                 val selected=node.entityKey==state.selectedKey
                 EditorTreeRow(node.label+(if(state.entities.firstOrNull { it.document.key==node.entityKey }?.fieldErrors?.isNotEmpty()==true) " !" else ""),
-                    selected,{state.select(node.entityKey)},
+                    selected,{choose(node.entityKey)},
                     Modifier.editorContextMenu(beforeOpen={state.select(node.entityKey)},node=true) { sceneCreationMenu(state,editable,onEditEntity) }
                         .onGloballyPositioned { onEntityBounds(node.entityKey!!,it.boundsInWindow()) },
                     depth=depth.coerceAtMost(10),help=node.label,leading={

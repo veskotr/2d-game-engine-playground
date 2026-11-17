@@ -18,7 +18,15 @@ internal data class EditorPropertyDefinition(
 ) {
     val id get() = component+"/"+path.joinToString("/")
     /** Visible row label only; [label] stays the authored key for help and accessibility. */
-    val displayLabel get() = humanizePropertyLabel(label)
+    val displayLabel get() = when(path.last()) { "uv" -> "UV rect"; else -> humanizePropertyLabel(path.last()) }
+    /** Axis captions: RGBA for colors, U/V corners for texture rectangles, else the axis key. */
+    val axisLabels get() = axes.map { axis -> val key=axis.path.last()
+        when {
+            path.last().lowercase().let { it=="color" || it=="tint" } -> mapOf("x" to "R","y" to "G","z" to "B","w" to "A")[key] ?: key
+            path.last()=="uv" -> mapOf("x" to "U0","y" to "V0","z" to "U1","w" to "V1")[key] ?: key
+            else -> key
+        } }
+    val isColor get() = kind==PropertyKind.Vector && axes.size==4 && path.last().lowercase().let { it=="color" || it=="tint" }
 }
 
 /** "position" -> "Position", "linearDamping" -> "Linear damping", "max_speed" -> "Max speed". */
@@ -46,4 +54,27 @@ internal fun propertyDefinition(component: String, path: List<String>, value: Js
     }
     return EditorPropertyDefinition(component,path,path.joinToString("."),value,kind,choices?.toList().orEmpty(),
         if(kind==PropertyKind.Vector) vector!!.map { (axis,child) -> propertyDefinition(component,path+axis,child) } else emptyList())
+}
+
+/** Display order for well-known components; unknown fields keep authored order after these. */
+private val preferredFieldOrder=mapOf(
+    "SpriteRenderer" to listOf("texture","color","size","offset","layer","visible","region"),
+    "BoxCollider" to listOf("size","offset"),
+    "CircleCollider" to listOf("radius","offset"),
+)
+internal fun orderedFields(component: String, fields: Set<String>): List<String> {
+    val preferred=preferredFieldOrder[component].orEmpty()
+    return preferred.filter { it in fields }+fields.filter { it !in preferred }
+}
+
+/** Small fixed-shape objects (e.g. SpriteRenderer.region = {uv:{x,y,z,w}}) render as nested rows
+ * instead of raw JSON. Free-form maps such as script variables stay JSON. */
+internal fun isStructuredGroup(field: String, value: JsonElement): Boolean {
+    if(field in setOf("variables","targetEntities","stateClipMap") || value !is JsonObject || value.isEmpty()) return false
+    if(value.keys.all { it in setOf("x","y","z","w") }) return false
+    return value.values.all { child -> when(child) {
+        is JsonObject -> child.isNotEmpty() && child.keys.all { it in setOf("x","y","z","w") } && child.values.all { it is JsonPrimitive && !it.isString && it.doubleOrNull?.isFinite()==true }
+        is JsonPrimitive -> !child.isString
+        else -> false
+    } }
 }

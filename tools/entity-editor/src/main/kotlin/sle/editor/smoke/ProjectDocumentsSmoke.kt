@@ -170,6 +170,11 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
         canvas().runtimeTransforms()[relocatedActor.document.key]?.jsonObject?.get("position")?.jsonObject?.get("x")?.jsonPrimitive?.doubleOrNull?.let { it>245 }==true
     }
     ImageIO.write(robot.createScreenCapture(Rectangle(window.locationOnScreen,window.size)),"png",reports.resolve("project-documents-editor.png").toFile())
-    playback.stop()
-    println("PROJECT_DOCUMENTS_SMOKE_PASS plain-scene/prefab/shared-texture/Save/browser-open/discard/conflict/reopen/Play/script/immutable-snapshot/export/relocation")
+    playback.stop();await("Relocated stop failed") { canvas().scenePlayback()==Playback.Stopped && canvas().authoringReady() }
+    // Switching to another document saves a project scene that already has a file, without a prompt.
+    scene.rename("Autosaved Scene");check(scene.dirty)
+    click("AssetFolder:Prefabs");click("AssetFile:Prefabs/shared.prefab.json",true)
+    await("Autosave on document switch failed") { !project.busy && prefab.projectDocument!=null && !scene.dirty }
+    check(withContext(Dispatchers.IO) { Files.readString(moved.resolve(first.document.assetRoot).resolve("Scenes/shared.scene.json")) }.contains("Autosaved Scene"))
+    println("PROJECT_DOCUMENTS_SMOKE_PASS plain-scene/prefab/shared-texture/Save/browser-open/discard/conflict/reopen/Play/script/immutable-snapshot/export/relocation/autosave-switch")
 }

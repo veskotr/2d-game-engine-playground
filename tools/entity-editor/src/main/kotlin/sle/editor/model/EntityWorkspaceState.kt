@@ -42,6 +42,11 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
     var selectedTarget: String
         get() = target
         set(value) { if(target!=value) endGesture();target=value }
+    private var sceneShape by mutableStateOf("Entity")
+    /** Shape resized in the Scene view (Inspector "Edit"); separate from the component editor's tool. */
+    var sceneTarget: String
+        get() = sceneShape
+        set(value) { if(sceneShape!=value) endGesture();sceneShape=value }
     private var componentSelection by mutableStateOf<String?>(null)
     var selectedComponent: String?
         get() = componentSelection
@@ -187,6 +192,17 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
     }
 
     fun removeAsset(path: Path) = change { assets = assets - path }
+
+    /** Repoints asset fields and listed assets at relocated copies (e.g. after adoption into a
+     * project on save). Not an undoable edit: the content is identical, only its location moved. */
+    fun relocateAssets(moved: Map<Path, Path>) {
+        if (moved.isEmpty()) return
+        fun target(path: Path) = moved[path.toAbsolutePath().normalize()]
+        document = document.copy(components = relocateAssetFields(document.components, moved))
+        savedDocument = savedDocument?.let { it.copy(components = relocateAssetFields(it.components, moved)) }
+        assets = assets.entries.associate { (path, name) -> (target(path) ?: path) to name }
+        savedAssets = savedAssets.entries.associate { (path, name) -> (target(path) ?: path) to name }
+    }
 
     fun addComponent(type: String) = change {
         document = document.addComponent(type, catalog.getValue(type).defaults)

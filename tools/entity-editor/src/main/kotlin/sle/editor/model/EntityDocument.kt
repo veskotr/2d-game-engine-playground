@@ -90,6 +90,20 @@ internal object EntityFiles {
     }
 }
 
+/** Rewrites component asset fields whose file moved; names, script variables and entity keys stay data. */
+internal fun relocateAssetFields(components: JsonObject, moved: Map<Path, Path>): JsonObject {
+    fun fields(value: JsonElement, field: String = ""): JsonElement = when (value) {
+        is JsonObject -> if (field == "variables" || field == "targetEntities") value
+            else JsonObject(value.mapValues { (key, child) -> fields(child, if (field == "stateClipMap") "clipAsset" else key) })
+        is JsonArray -> JsonArray(value.map { fields(it, field) })
+        is JsonPrimitive -> if (value.isString && value.content.isNotBlank() && sle.editor.files.PrefabPackages.isAssetField(field))
+            runCatching { moved[Path.of(value.content).toAbsolutePath().normalize()] }.getOrNull()
+                ?.let { JsonPrimitive(it.toString().replace('\\', '/')) } ?: value
+        else value
+    }
+    return fields(components) as JsonObject
+}
+
 internal data class ComponentDefinition(val defaults: JsonObject, val enums: JsonObject)
 
 internal fun readComponentCatalog(): Map<String, ComponentDefinition> =

@@ -14,6 +14,8 @@ internal enum class ProjectDocumentKind(val format: String,val suffix: String) {
 internal data class OpenedProjectDocument(val path: Path,val kind: ProjectDocumentKind,val source: String,
     val assets: Map<Path,String>,val revision: String)
 
+internal data class AdoptedAssets(val source: String,val assets: Map<Path,String>,val moved: Map<Path,Path>)
+
 /** Portable source persistence. Native codecs only see the resolved, ordinary document. */
 internal class ProjectDocuments(val project: OpenedProject) {
     private val prefix="project-asset://"
@@ -59,6 +61,23 @@ internal class ProjectDocuments(val project: OpenedProject) {
             val asset=resolve(snapshot,value.jsonPrimitive.content);asset to asset.fileName.toString()
         }
         OpenedProjectDocument(file,kind,documentJson.encodeToString(JsonElement.serializer(),document),assets,fingerprint(bytes))
+    }
+    /** Copies asset files referenced from outside the project (package extractions, external
+     * picks) into Assets and points the document at the copies. [moved] maps old to new paths. */
+    fun adoptExternalAssets(source: String,assets: Map<Path,String>): AdoptedAssets = synchronized(AssetIdentity) {
+        val adoption=ProjectAssetAdoption(project.root,project.assets)
+        fun normalized(text: String): Path? = if(text.startsWith(prefix) || text.startsWith("asset://")) null
+            else runCatching { Path.of(text).toAbsolutePath().normalize() }.getOrNull()
+        val document=Json.parseToJsonElement(source).jsonObject
+        val referenced=mutableListOf<Path>()
+        references(document) { text -> normalized(text)?.let(referenced::add);text }
+        val names=assets.mapKeys { it.key.toAbsolutePath().normalize() }
+        val external=(referenced+names.keys).distinct().filter(adoption::outside)
+        if(external.isEmpty()) return AdoptedAssets(source,assets,emptyMap())
+        val moved=external.associateWith { adoption.adopt(it,names[it]) }
+        val rewritten=references(document) { text -> normalized(text)?.let(moved::get)?.toString()?.replace('\\','/') ?: text }
+        AdoptedAssets(documentJson.encodeToString(JsonElement.serializer(),rewritten),
+            assets.entries.associate { (path,name) -> (moved[path.toAbsolutePath().normalize()] ?: path) to name },moved)
     }
     fun save(path: Path,kind: ProjectDocumentKind,source: String,assets: Map<Path,String>,expected: OpenedProjectDocument?,validate: (String)->Unit): OpenedProjectDocument = synchronized(AssetIdentity) {
         val file=target(path)

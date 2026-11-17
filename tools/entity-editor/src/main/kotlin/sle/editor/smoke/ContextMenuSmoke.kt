@@ -119,7 +119,8 @@ internal suspend fun runContextMenuSmoke(
     open(canvas().locationOnScreen.x+canvas().width-20,canvas().locationOnScreen.y+canvas().height-20)
     val state: EntityWorkspaceState=scene.entities.first { it.document.key==child }
     choose("Add Component","Physics","BoxCollider")
-    check("BoxCollider" in state.document.components && state.selectedComponent=="BoxCollider")
+    // Adding keeps every component visible (no inspector filter) and expands the new section.
+    check("BoxCollider" in state.document.components && state.selectedComponent==null && state.inspectorSections.expanded(state.document.key,"BoxCollider"))
     open(canvas().locationOnScreen.x+canvas().width-20,canvas().locationOnScreen.y+canvas().height-20)
     val add=popup()!!.components.filterIsInstance<JMenu>().single { it.text=="Add Component" }
     val physics=add.menuComponents.filterIsInstance<JMenu>().single { it.text=="Physics" }

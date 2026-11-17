@@ -131,27 +131,53 @@ private fun componentGroup(type: String): String = when {
     else -> "Other"
 }
 
+/** Component types not yet attached, grouped by area. New shapes start fitted to the sprite. */
+internal fun addComponentEntries(state: EntityWorkspaceState): List<EditorMenuEntry> {
+    val hidden = setOf("WorldTransform", "ChunkMap")
+    val groups = state.catalog.keys.filter { it !in state.document.components && it !in hidden }.sorted().groupBy(::componentGroup)
+    return groups.map { (group, types) ->
+        EditorMenuEntry(group, children = types.map { type ->
+            EditorMenuEntry(type) {
+                try {
+                    state.endGesture()
+                    state.addComponent(type)
+                    fitShapeToSprite(state, type)
+                    state.selectedComponent = null
+                    state.inspectorSections.setExpanded(state.document.key, type, true)
+                } catch (failure: Exception) { state.error = failure.message ?: "Could not add $type" }
+            }
+        })
+    }
+}
+
+/** Sizes a collider/zone to the entity's sprite, if both exist. Returns false when nothing to fit. */
+internal fun fitShapeToSprite(state: EntityWorkspaceState, type: String): Boolean {
+    val sprite = state.document.components["SpriteRenderer"] as? kotlinx.serialization.json.JsonObject ?: return false
+    val shape = state.document.components[type] as? kotlinx.serialization.json.JsonObject ?: return false
+    val size = sprite["size"] as? kotlinx.serialization.json.JsonObject ?: return false
+    val offset = sprite["offset"]
+    val width = (size["x"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return false
+    val height = (size["y"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return false
+    if ("radius" in shape) state.setValue(type, listOf("radius"), kotlinx.serialization.json.JsonPrimitive(maxOf(width, height) / 2))
+    else if ("size" in shape) state.setValue(type, listOf("size"), size) else return false
+    if ("offset" in shape && offset != null) state.setValue(type, listOf("offset"), offset)
+    return true
+}
+
 internal fun entityCreationMenu(state: EntityWorkspaceState, embedded: Boolean = false, projectAssets: sle.editor.project.assets.ProjectAssetCommands?=null): List<EditorMenuEntry> {
     fun attempt(action: () -> Unit) {
         try { state.endGesture(); action() } catch (failure: Exception) { state.error = failure.message ?: "Operation failed" }
     }
-    val groups = state.catalog.keys.filter { it !in state.document.components }.sorted().groupBy(::componentGroup)
-    val components = groups.map { (group, types) ->
-        EditorMenuEntry(group, children = types.map { type ->
-            EditorMenuEntry(type) { attempt {
-                state.addComponent(type)
-                state.selectedComponent = type
-                state.selectedTarget = if (type in GizmoShape.targets) type else "Entity"
-            } }
-        })
-    }
+    val components = addComponentEntries(state)
     return buildList {
         add(EditorMenuEntry("Add Component", enabled = components.isNotEmpty(), children = components))
         add(EditorMenuEntry("Import", children = listOf(EditorMenuEntry("Assets…") {
             if(projectAssets!=null) projectAssets.importFiles() else {
-            val chooser = EditorFileChooser().apply { dialogTitle = "Import assets"; isMultiSelectionEnabled = true }
-            if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION)
+            val chooser = EditorFileChooser(EditorFileLocations.folder(EditorFileLocations.Kind.Asset)).apply { dialogTitle = "Import assets"; isMultiSelectionEnabled = true }
+            if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                EditorFileLocations.remember(EditorFileLocations.Kind.Asset, chooser.selectedFile)
                 attempt { chooser.selectedFiles.forEach { state.importAsset(it.toPath()) } }
+            }
             }
         })))
         if (!embedded) add(EditorMenuEntry("New", children = listOf(EditorMenuEntry("Entity") {
@@ -166,6 +192,8 @@ internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, on
     }
     return listOf(
         EditorMenuEntry("Edit",editable && state.selected!=null && onEditEntity!=null) { state.selectedKey?.let { onEditEntity?.invoke(it) } },
+        EditorMenuEntry("Duplicate",editable && state.selected!=null) { attempt { state.duplicateSelected() } },
+        EditorMenuEntry("Delete",editable && state.selected!=null) { attempt { state.removeSelected() } },
         EditorMenuEntry("Create", editable, listOf(
             EditorMenuEntry("Entity", children = listOf(
                 EditorMenuEntry("At Scene Root") { attempt { state.addEntity() } },
@@ -177,11 +205,13 @@ internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, on
             )),
         )),
         EditorMenuEntry("Import", editable, listOf(EditorMenuEntry("Prefab…") {
-            val chooser = EditorFileChooser("assets/prefabs").apply {
+            val chooser = EditorFileChooser(EditorFileLocations.folder(EditorFileLocations.Kind.Prefab)).apply {
                 fileFilter = FileNameExtensionFilter("Prefabs (*.sleprefab, *.json)", "sleprefab", "json")
             }
-            if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION)
+            if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                EditorFileLocations.remember(EditorFileLocations.Kind.Prefab, chooser.selectedFile)
                 attempt { state.importPrefab(chooser.selectedFile.toPath()) }
+            }
         })),
         EditorMenuEntry("Entity", editable && state.selected != null, listOf(
             EditorMenuEntry("Duplicate Subtree") { attempt { state.duplicateSelected() } },

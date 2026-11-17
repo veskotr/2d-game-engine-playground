@@ -8,10 +8,15 @@ internal data class ScenePick(val key: String,val target: String)
 internal object ScenePicking {
     fun pick(scene: SceneWorkspaceState,camera: PreviewCamera,point: Vec2): ScenePick? {
         val selected=scene.selected
-        val shape=selected?.let { GizmoShape.from(scene.worldDocument(it.document.key),"Entity") }
-        if(shape!=null && GizmoMath.handles(shape).any {
-            (camera.screen(GizmoMath.handleWorld(shape,it))-point).length()<=10
-        }) return ScenePick(selected.document.key,"Entity")
+        // Handles of the selected entity (including an edited collider/sprite) win over overlapping entities.
+        val shapes=selected?.let { entity ->
+            val world=scene.worldDocument(entity.document.key)
+            listOfNotNull(GizmoShape.from(world,"Entity"),
+                entity.sceneTarget.takeIf { it!="Entity" && it in GizmoShape.available(world) }?.let { GizmoShape.from(world,it) })
+        }.orEmpty()
+        if(selected!=null && shapes.any { shape -> GizmoMath.handles(shape).any {
+            (shape.target=="Entity" || it.kind!="move") && (camera.screen(GizmoMath.handleWorld(shape,it))-point).length()<=10
+        } }) return ScenePick(selected.document.key,"Entity")
         data class Hit(val pick: ScenePick,val layer: Int)
         val hits=scene.entities.asReversed().mapNotNull { entity ->
             (if(cameraOutlineHit(scene.worldDocument(entity.document.key),camera,point)) "Camera2D" else GizmoMath.pick(scene.worldDocument(entity.document.key),camera,point,entity.selectedTarget))?.let { target ->

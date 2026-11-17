@@ -43,6 +43,7 @@ import sle.editor.ui.SceneWorkspace
 import sle.editor.ui.SceneEntityInspector
 import sle.editor.ui.SceneTree
 import sle.editor.ui.EntityOutline
+import sle.editor.ui.assetDropTarget
 import sle.editor.ui.SceneViewControls
 import sle.editor.ui.confirmDiscard
 import sle.editor.ui.confirmDiscardScene
@@ -188,6 +189,25 @@ private fun launchEditor(args: Array<String>) = application {
     fun showScene(game: Boolean) {
         canvas?.finishGesture();selectedTab=2;scenePlayback.gameView=game
         manager.showPanel(PanelId(if(game) "game" else "scene"))
+    }
+    /** Asset dropped from the Assets panel: prefabs become instances, images become sprite entities. */
+    fun dropAsset(path: java.nio.file.Path,world: sle.editor.viewport.Vec2?) {
+        val state=scene.getOrNull() ?: return
+        if(!scenePlayback.editing) { state.error="Stop the game before adding to the scene";return }
+        val name=path.fileName.toString()
+        try {
+            canvas?.finishGesture()
+            when {
+                name.endsWith(".prefab.json",true) || name.endsWith(".sleprefab",true) -> state.importPrefab(path,world)
+                name.substringAfterLast('.').lowercase() in setOf("png","jpg","jpeg","bmp","tga","gif") -> {
+                    val image=runCatching { ImageIO.read(path.toFile()) }.getOrNull()
+                    state.addSprite(path.toAbsolutePath().toString().replace('\\','/'),name.substringBeforeLast('.'),
+                        sle.editor.viewport.Vec2((image?.width ?: 32).toDouble(),(image?.height ?: 32).toDouble()),world)
+                }
+                else -> { state.error="Drop a prefab or an image into the scene";return }
+            }
+        } catch(failure: Exception) { state.error=failure.message ?: "Could not add $name";return }
+        if(mode!=ViewportMode.Scene) { editingSceneKey=null;showScene(false) }
     }
     LaunchedEffect(Unit) {
         if("--simultaneous-views" in args) {
@@ -437,7 +457,7 @@ private fun launchEditor(args: Array<String>) = application {
                         scene.getOrNull()?.entities?.map { Triple(it.document,it.assets,it.drafts) })
                 },uiScale={uiScale},setUiScale={uiScale=it},
                 startupScenes=assets?.snapshot?.pathsById?.entries?.filter { it.value.endsWith(".scene.json",true) }?.map { it.key to it.value }?.sortedBy { it.second } ?: emptyList(),onBounds={id,bounds -> if(projectSmoke || runtimeSmoke) projectFields[id]=bounds})
-            SideEffect { projectActions=commands }
+            SideEffect { projectActions=commands;sle.editor.ui.EditorFileLocations.projectAssets=project.opened?.let { it.root.resolve(it.document.assetRoot) } }
             LaunchedEffect(requestedProject) { requestedProject?.let { commands.openPath(java.nio.file.Path.of(it)) } }
             val documents=sle.editor.project.projectDocumentControls(project,assets,scene.getOrNull(),authoring.getOrNull(),
                 editable={scenePlayback.editing},onOpen={ kind ->
@@ -552,6 +572,18 @@ private fun launchEditor(args: Array<String>) = application {
                         if(failed) Text(status,Modifier.padding(horizontal=m.panelPadding,vertical=m.gap),color=MaterialTheme.colors.error)
                         if(!ready && !failed) LinearProgressIndicator(Modifier.fillMaxWidth())
                         if(inspector?.fieldErrors?.isNotEmpty()==true) Text("Finish the highlighted fields. Preview keeps the last valid values.",Modifier.padding(horizontal=m.panelPadding,vertical=m.gap),color=MaterialTheme.colors.error)
+                        if(!entity && !game) DisposableEffect(panelCanvas) {
+                            val view=panelCanvas
+                            val key=Any()
+                            if(view!=null) sle.editor.ui.AssetDrag.register(key,sle.editor.ui.AssetDrag.Target({
+                                if(view.isShowing) java.awt.Rectangle(view.locationOnScreen,view.size) else null
+                            }) { path,point ->
+                                val origin=view.locationOnScreen
+                                val world=view.previewCamera()?.world(sle.editor.viewport.Vec2((point.x-origin.x).toDouble(),(point.y-origin.y).toDouble()))
+                                dropAsset(path,world?.let { sle.editor.viewport.Vec2(Math.round(it.x).toDouble(),Math.round(it.y).toDouble()) })
+                            })
+                            onDispose { sle.editor.ui.AssetDrag.unregister(key) }
+                        }
                         androidx.compose.ui.awt.SwingPanel(modifier=Modifier.weight(1f).fillMaxWidth(),
                             factory={EngineCanvas(engineSession,if(entity) ViewId.Entity else if(game || mode==ViewportMode.Sandbox) ViewId.Game else ViewId.Scene).also { panelCanvas=it;canvas=it }},
                             update={ view -> if((entity && mode==ViewportMode.Entity) || (!entity && game==scenePlayback.gameView)) canvas=view },
@@ -584,12 +616,12 @@ private fun launchEditor(args: Array<String>) = application {
                     project.error?.let { Text(it,notice,color=MaterialTheme.colors.error) }
                     distribution.message?.let { Text(it,notice,style=MaterialTheme.typography.caption) }
                     val panels=WorkspacePanels(mapOf(
-                        PanelId("hierarchy") to {
+                        PanelId("hierarchy") to { Box(Modifier.fillMaxSize().assetDropTarget { path,_ -> dropAsset(path,null) }) {
                             if(mode==ViewportMode.Scene) scene.getOrNull()?.let { state ->
                                 SceneWorkspace(state,onEditEntity={editSceneEntity(it)},onEntityBounds={key,bounds -> if(sceneSmoke || menuSmoke) treeNodeBounds[key]=bounds},editable=scenePlayback.editing)
                             } else if(linkedEntity!=null) SceneTree(scene.getOrThrow(),Modifier.fillMaxSize(),onEditEntity={editSceneEntity(it)})
                             else activeEntity?.let { EntityOutline(it,Modifier.fillMaxSize()) }
-                        },
+                        } },
                         PanelId("inspector") to {
                             if(mode==ViewportMode.Scene) scene.getOrNull()?.let { SceneEntityInspector(it,editable=scenePlayback.editing) }
                             else Column(Modifier.fillMaxSize()) {
@@ -600,7 +632,8 @@ private fun launchEditor(args: Array<String>) = application {
                         },
                         PanelId("assets") to {
                             if(assets==null) EditorEmptyState("No project open","Open or create a project to browse its assets.",brand=true)
-                            else AssetBrowserPanel(assets,project.opened?.document?.assetRoot ?: "Assets",Modifier.fillMaxSize(),commands=assetCommands,onOpen={ relative -> project.opened?.let { documents?.openPath?.invoke(it.root.resolve(it.document.assetRoot).resolve(relative)) } },onBounds={id,bounds -> if(assetSmoke || documentSmoke || runtimeSmoke) assetBounds[id]=bounds})
+                            else AssetBrowserPanel(assets,project.opened?.document?.assetRoot ?: "Assets",Modifier.fillMaxSize(),commands=assetCommands,onOpen={ relative -> project.opened?.let { documents?.openPath?.invoke(it.root.resolve(it.document.assetRoot).resolve(relative)) } },
+                                dragPath={ relative -> project.opened?.let { it.root.resolve(it.document.assetRoot).resolve(relative) } },onBounds={id,bounds -> if(assetSmoke || documentSmoke || runtimeSmoke) assetBounds[id]=bounds})
                         },
                         PanelId("scene") to { viewportPanel(false,false) },
                         PanelId("game") to { viewportPanel(true,false) },

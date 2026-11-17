@@ -87,7 +87,8 @@ ctest --test-dir build/debug -C Debug -R '^integration_scene_loader_roundtrip_pa
 ```
 
 CI uses `windows-2022` to match the Visual Studio 2022 presets and runs smoke
-and integration tests excluding the `windowed` label:
+and integration tests excluding the `windowed` label. CI passes the setup-python
+interpreter explicitly to CMake so GLAD uses the Python where `jinja2` is installed:
 
 ```powershell
 ctest --test-dir build/debug -C Debug -L smoke --output-on-failure

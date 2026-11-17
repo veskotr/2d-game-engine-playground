@@ -33,7 +33,9 @@ jobs:
         run: python EngineModules/Scripting/tools/generate_lua_api_stub.py --check
 
       - name: Configure (Debug preset)
-        run: cmake --preset debug
+        run: |
+          $ciPython = (Get-Command python).Source
+          cmake --preset debug "-DPython_EXECUTABLE=$ciPython" "-DPython3_EXECUTABLE=$ciPython"
 
       - name: Build (Debug)
         run: cmake --build build/debug --config Debug --parallel

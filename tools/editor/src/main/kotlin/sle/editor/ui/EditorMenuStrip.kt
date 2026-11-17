@@ -120,8 +120,7 @@ internal fun editorApplicationMenus(
             EditorMenuEntry("Exit",action=onExit),
         ),
         "Edit" to listOf(
-            entry(EditCommands.undo),entry(EditCommands.redo),
-            entry(EditCommands.sceneUndo),entry(EditCommands.sceneRedo),
+            EditCommands.undo.menuEntry(ctx,keymap,EditCommands.undoLabel(ctx)),EditCommands.redo.menuEntry(ctx,keymap,EditCommands.redoLabel(ctx)),
             EditorMenuEntry.Separator,
             entry(EditCommands.editEntity),entry(EditCommands.duplicate),entry(EditCommands.delete),entry(EditCommands.applyToPrefab),
             EditorMenuEntry.Separator,

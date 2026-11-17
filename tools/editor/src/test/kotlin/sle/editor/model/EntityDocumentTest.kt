@@ -48,6 +48,23 @@ class EntityDocumentTest {
         assertFalse(state.dirty)
     }
 
+    // Undo characterization for the standalone prefab workspace (written before L1 S2).
+    @Test fun undoCharacterizationPrefabWorkspaceUndoesItsOwnEditsInOrder() {
+        val state = EntityWorkspaceState(mapOf(
+            "Transform" to ComponentDefinition(buildJsonObject { put("rotation", 0.0) }, JsonObject(emptyMap())),
+            "Script" to ComponentDefinition(buildJsonObject { put("enabled", true) }, JsonObject(emptyMap()))))
+        state.addComponent("Script")
+        state.setValue("Script", listOf("enabled"), JsonPrimitive(false))
+        state.rename("Crate")
+        state.undo(); assertEquals("New Entity", state.document.name)
+        state.undo(); assertTrue(state.document.components.getValue("Script").jsonObject.getValue("enabled").jsonPrimitive.boolean)
+        state.undo(); assertFalse("Script" in state.document.components); assertFalse(state.canUndo)
+        repeat(3) { state.redo() }
+        assertEquals("Crate", state.document.name); assertFalse(state.canRedo)
+        state.undo(); state.rename("Barrel"); assertFalse(state.canRedo)
+        state.newDocument(); assertFalse(state.canUndo); assertFalse(state.canRedo)
+    }
+
     @Test fun existingNonUuidKeysSurviveRenameAndRoundTrip() {
         val loaded = EntityDocument.parse("""{"root":"legacy-player","entities":[{"key":"legacy-player","name":"Old","components":{}}]}""")
         val renamed = loaded.copy(name = "New")

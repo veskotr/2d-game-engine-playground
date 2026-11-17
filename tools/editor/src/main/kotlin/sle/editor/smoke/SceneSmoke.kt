@@ -64,8 +64,8 @@ internal suspend fun runSceneSmoke(canvas: EngineCanvas,scene: SceneWorkspaceSta
     val count=scene.entities.size
     scene.duplicateSelected();val duplicate=scene.selected!!.document.key
     check(scene.entities.size==count+1 && duplicate!=other.document.key)
-    scene.undoStructure();check(scene.entities.size==count)
-    scene.redoStructure();check(scene.selectedKey==duplicate)
+    scene.undo();check(scene.entities.size==count)
+    scene.redo();check(scene.selectedKey==duplicate)
     scene.removeSelected();check(scene.entities.size==count)
     val target=folder.resolve("edited-level.slescene")
     scene.save(target);check(!scene.dirty)
@@ -77,7 +77,7 @@ internal suspend fun runSceneSmoke(canvas: EngineCanvas,scene: SceneWorkspaceSta
     val moved=folder.resolve("relocated-level.slescene")
     Files.copy(target,moved,REPLACE_EXISTING)
     scene.newScene();scene.open(moved);ready()
-    check(scene.entities.size==count && !scene.dirty && !scene.canUndoStructure)
+    check(scene.entities.size==count && !scene.dirty && !scene.canUndo)
     check(scene.document().entities.map{it.key}==expected.entities.map{it.key})
     check(scene.entities.first { it.document.key==crate.document.key }.document.components["Transform"]==crate.document.components["Transform"])
     val desktop=robot.createScreenCapture(Rectangle(canvas.locationOnScreen,canvas.size))

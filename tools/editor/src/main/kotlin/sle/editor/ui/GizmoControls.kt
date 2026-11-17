@@ -24,8 +24,12 @@ internal fun GizmoControls(state: EntityWorkspaceState, entityOnly: Boolean = fa
                 state.selectedComponent=if(target=="Entity") "Transform" else target
             }
         },enabled=targets.isNotEmpty())
-        EditorButton("Undo",{state.undo()},enabled=state.canUndo,style=EditorButtonStyle.Ghost)
-        EditorButton("Redo",{state.redo()},enabled=state.canRedo,style=EditorButtonStyle.Ghost)
+        // The active document's timeline: the scene for scene entities, else the prefab workspace.
+        val timeline=state.timeline;val history=timeline.history
+        EditorButton("Undo",{timeline.undo()},enabled=history.canUndo || timeline.gestureActive,
+            help=history.undoLabel?.let { "Undo $it" },style=EditorButtonStyle.Ghost)
+        EditorButton("Redo",{timeline.redo()},enabled=history.canRedo || timeline.gestureActive,
+            help=history.redoLabel?.let { "Redo $it" },style=EditorButtonStyle.Ghost)
         EditorCheckBox("Snap 0.1",state.snap,{state.snap=it})
     }
 }

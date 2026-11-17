@@ -1,26 +1,38 @@
 package sle.editor.command
 
 import java.awt.event.KeyEvent
+import sle.editor.model.EntityWorkspaceState
+import sle.editor.model.SceneWorkspaceState
+import sle.editor.model.UndoableDocument
 import sle.editor.ui.applySelectionToPrefab
 import sle.editor.ui.canApplyToPrefab
 import sle.editor.ui.deleteSceneSelection
 
-/** Edit commands. Undo/Redo still use the active entity's history until the unified timeline (L1 S2). */
+/** Edit commands. Undo and Redo walk the active document's single timeline ([CommandContext.document]). */
 internal object EditCommands {
     val undo = EditorCommand(CommandId("edit.undo"), "Undo", defaultChords = listOf(KeyChord.ctrl(KeyEvent.VK_Z)),
         scopes = setOf(CommandScope.Document), repeatable = true,
         // Undo during a drag or numeric edit cancels that gesture first.
-        enabled = { it.editable && it.entity?.let { entity -> entity.canUndo || entity.gestureActive } == true }) { it.entity?.undo() }
+        enabled = { it.editable && it.document?.let { document -> document.history.canUndo || document.gestureActive } == true }) { ctx ->
+        timelineAttempt(ctx, UndoableDocument::undo)
+    }
     val redo = EditorCommand(CommandId("edit.redo"), "Redo",
         defaultChords = listOf(KeyChord.ctrl(KeyEvent.VK_Y), KeyChord.ctrl(KeyEvent.VK_Z, shift = true)),
         scopes = setOf(CommandScope.Document), repeatable = true,
-        enabled = { it.editable && it.entity?.let { entity -> entity.canRedo || entity.gestureActive } == true }) { ctx ->
-        ctx.entity?.let { if(it.gestureActive) it.cancelGesture() else it.redo() }
+        enabled = { it.editable && it.document?.let { document -> document.history.canRedo || document.gestureActive } == true }) { ctx ->
+        timelineAttempt(ctx, UndoableDocument::redo)
     }
-    val sceneUndo = EditorCommand(CommandId("edit.scene.undo"), "Scene Undo",
-        enabled = { it.editable && it.sceneDocument && it.scene?.canUndoStructure == true }) { ctx -> sceneAttempt(ctx) { it.undoStructure() } }
-    val sceneRedo = EditorCommand(CommandId("edit.scene.redo"), "Scene Redo",
-        enabled = { it.editable && it.sceneDocument && it.scene?.canRedoStructure == true }) { ctx -> sceneAttempt(ctx) { it.redoStructure() } }
+    /** "Undo Move Player" for the Edit menu; plain "Undo" while a gesture would be cancelled. */
+    fun undoLabel(ctx: CommandContext) = ctx.document?.takeIf { !it.gestureActive }?.history?.undoLabel?.let { "Undo $it" } ?: "Undo"
+    fun redoLabel(ctx: CommandContext) = ctx.document?.takeIf { !it.gestureActive }?.history?.redoLabel?.let { "Redo $it" } ?: "Redo"
+    // A step that cannot be applied (it would break an Animator target) stays and becomes the notice.
+    private fun timelineAttempt(ctx: CommandContext, action: (UndoableDocument) -> Unit) {
+        val document = ctx.document ?: return
+        try { action(document) } catch(failure: Exception) {
+            val text = failure.message ?: "Undo failed"
+            when(document) { is SceneWorkspaceState -> document.error = text; is EntityWorkspaceState -> document.error = text }
+        }
+    }
 
     private fun selected(ctx: CommandContext) = ctx.editable && ctx.sceneDocument && ctx.selection != null
     private val sceneSelection = setOf(CommandScope.Hierarchy, CommandScope.SceneViewport)
@@ -37,5 +49,5 @@ internal object EditCommands {
     val applyToPrefab = EditorCommand(CommandId("edit.applyToPrefab"), "Apply Changes to Prefab",
         enabled = { it.editable && it.sceneDocument && it.scene?.let(::canApplyToPrefab) == true }) { ctx -> sceneAttempt(ctx, ::applySelectionToPrefab) }
 
-    val all = listOf(undo, redo, sceneUndo, sceneRedo, editEntity, duplicate, delete, applyToPrefab)
+    val all = listOf(undo, redo, editEntity, duplicate, delete, applyToPrefab)
 }

@@ -1,6 +1,6 @@
 # L1 — Editor core: commands, history, selection, status bar, viewport tools
 
-**Status:** Planned 2026-11-17. Session 1 implemented and validated (see Progress); sessions 2–7 not started.
+**Status:** Planned 2026-11-17. Sessions 1–2 implemented and validated (see Progress); sessions 3–7 not started.
 **Parent:** [editor-game-workflows.md](editor-game-workflows.md) §5, base layer
 **L1** (roadmap items 0.1, 0.2, 0.4, 1.1, 1.2 and rule R3).
 **Request:** Plan L1 only. Tilemaps and the other layers come later.
@@ -173,11 +173,11 @@ is shippable alone.
 
 ### Session 2: One undo timeline per document (R3)
 
-- [ ] Add `model/History`. Each entry holds a label, an optional merge key,
+- [x] Add `model/History`. Each entry holds a label, an optional merge key,
   `undo()`/`redo()` and the selection to restore. Keep the 100-entry cap.
   Provide `group(label) { }` for compound edits; a nested group joins its
   parent.
-- [ ] Give `EntityWorkspaceState` a history *sink*.
+- [x] Give `EntityWorkspaceState` a history *sink*.
   - **Scene-owned entities:** `endGesture` and instant edits post an
     `EntityEdit(key, before, after, label)` to the scene's `History` instead of
     the local `past`.
@@ -185,21 +185,21 @@ is shippable alone.
     API.
   - `beginGesture/cancelGesture` and the numeric-edit contract keep their
     behaviour: undo during an active edit cancels that edit first.
-- [ ] Rebuild `SceneWorkspaceState.change { }` on `History`:
+- [x] Rebuild `SceneWorkspaceState.change { }` on `History`:
   - Structural entries keep today's `Structure` snapshots.
   - An `EntityEdit` resolves its entity by key at undo time, so it still works
     after the entity was deleted and restored. Undoing selects that entity.
-- [ ] Labels: Move/Rotate/Scale `<name>`, `Edit <Component> <field>`,
+- [x] Labels: Move/Rotate/Scale `<name>`, `Edit <Component> <field>`,
   Add/Remove `<Component>`, Create/Delete/Duplicate `<name | N entities>`,
   Reparent, Rename, Apply to Prefab.
-- [ ] Merging: arrow nudges with the same merge key within ~750 ms merge into
+- [x] Merging: arrow nudges with the same merge key within ~750 ms merge into
   one step.
-- [ ] Edit menu: a single Undo/Redo with labels; remove Scene Undo/Redo. The
+- [x] Edit menu: a single Undo/Redo with labels; remove Scene Undo/Redo. The
   `GizmoControls` Undo/Redo buttons, viewport keys and commands all use the
   active document's timeline.
-- [ ] `replaceLinkedScene` still clears history. Record a notice for S4
+- [x] `replaceLinkedScene` still clears history. Record a notice for S4
   ("Undo history cleared after prefab update").
-- [ ] Tests (extend `SceneAuthoringUxTest`, `SceneHierarchyRegressionTest`,
+- [x] Tests (extend `SceneAuthoringUxTest`, `SceneHierarchyRegressionTest`,
   `EntityDocumentTest`):
   - interleaved structure and component edits undo in reverse order
   - undo of a component edit on an entity that was deleted and then restored
@@ -210,7 +210,7 @@ is shippable alone.
   - group atomicity on failure
   - numeric edit contract unchanged
   - prefab workspace unaffected
-- [ ] Smokes: `--scene-smoke`, `--context-menu-smoke`, `--gizmo-smoke`. Update
+- [x] Smokes: `--scene-smoke`, `--context-menu-smoke`, `--gizmo-smoke`. Update
   fixtures that click "Scene Undo".
 
 ### Session 3: Selection service and multi-select
@@ -503,3 +503,119 @@ Desktop smokes need an unlocked interactive Windows session.
     context-menu smoke screenshot shows the Dark theme.
   - No editor version bump (planned for S7).
 - Next: Session 2 (one undo timeline), only when requested.
+
+### Session 2 handoff — 2026-11-17
+
+- Start state: `feat/project-foundation` at 68c6960 (Session 1). Only the untracked
+  starter-assets zip and `docs/plans/editor-game-workflows.md` were present; both were
+  left alone. The "Current code" evidence matched. Nothing was committed.
+- Characterization first: six `undoCharacterization*` tests (five in `SceneAuthoringUxTest`,
+  one in `EntityDocumentTest`) were written against the old two-history API and passed on
+  the unchanged code. They cover an edit surviving delete/restore, gesture cancel before a
+  recorded step, a drag as one step, redo discarding, the 100-entry caps, and linked-scene
+  replacement clearing history. Each orders its steps so "undo the latest step" gives the same
+  answer in both models; after the refactor they only switched to `undo()`/`redo()`.
+- Implemented:
+  - `model/History.kt`:
+    - `History` keeps entries with a label, an optional merge key, `undo`/`redo` closures
+      and the selection to restore before and after. It has the 100-entry cap and
+      `group(label) { }` (a nested group joins its parent; a throwing block undoes what it
+      recorded and keeps nothing).
+    - Equal merge keys within 750 ms merge; the window rolls from the latest step, and
+      undo/redo ends a burst. Steps recorded while an entry is applied are ignored. A step
+      whose undo throws stays on the timeline, and a compound step is put back if one part
+      fails.
+    - It also holds `HistorySelection` (one key; S3 extends it), `UndoableDocument`,
+      `EntityHistoryOwner` and `describeEntityEdit` (Move/Rotate/Scale `<name>`,
+      Add/Remove `<Component>`, `Edit <Component> <field>`, Rename `<name>`).
+  - `EntityWorkspaceState` is an `UndoableDocument`.
+    - Its `history` is the owning scene's timeline once the scene attaches it, and
+      otherwise its own (the standalone prefab workspace).
+    - `endGesture` and instant edits post one step. The step's closures restore
+      the before/after `Snapshot` and resolve the entity by key when applied.
+    - Explicit labels: Rename, Add/Remove `<Component>`, `Edit <Component> <field>` (also for
+      numeric edits), Import/Remove `<file>`. Viewport gestures derive the label from the diff.
+    - `undo()`/`redo()` on a scene entity delegate to the scene. During an open gesture both
+      cancel it first. The second one is a change: standalone Redo during a gesture used to
+      do nothing.
+    - Edits made through a stale reference to a deleted entity are not recorded.
+  - `SceneWorkspaceState` implements `EntityHistoryOwner`.
+    - The `entities` setter attaches every held entity to the scene's timeline.
+    - `change(label) { }` records `Structure` snapshots as before. Selection moved out of
+      `Structure` into the entry, so a selection-only change is never a step.
+    - `undo()`/`redo()` replace `undoStructure`/`redoStructure`; `canUndo`/`canRedo`
+      replace `canUndoStructure`/`canRedoStructure`.
+    - Labels: Create/Delete/Duplicate `<name | N entities>`, Reparent `<name>`, Rename Scene,
+      Set Active Camera `<name>`, and Create Prefab `<name>` for drag-to-Assets.
+  - `replaceLinkedScene` still clears history. It now returns whether steps were
+    cleared and sets `message` to `HISTORY_CLEARED_NOTICE` ("Undo history cleared after
+    prefab update"). Apply Changes to Prefab appends the notice to its own message. S4 should
+    move it into `EditorNotices`. Because Apply clears history, "Apply to Prefab" is never an
+    undo label.
+  - Commands and UI:
+    - `CommandContext.document` picks the scene (also for a scene entity open in the Entity
+      tab) or the prefab workspace. Undo/Redo run on it and report a refused step as that
+      document's error.
+    - `EditCommands.undoLabel/redoLabel` give the Edit menu "Undo Move Player". Scene
+      Undo/Redo commands and menu items are removed.
+    - The `GizmoControls` buttons use `state.timeline` and show the label as a tooltip.
+    - The `ViewportGizmos.key` Ctrl+Z/Y fallback uses `state.timeline`. Arrow nudges pass a
+      `NudgeMergeKey(entity, shape)`, and `applyWorldDocument`/`applyGizmo` take a merge key.
+- Deliberate behaviour changes (correct them if wrong):
+  - Ctrl+Z from a scene entity now undoes the latest scene step, which may be structural
+    or another entity's edit. `NumberEditTest.sceneSelectionFinishesOnlyTheOriginalEntityTransaction`
+    now undoes the later Create first.
+  - `SceneHierarchyRegressionTest.transparentReparent…` now does its rename before the
+    reparent, so the test still shows that undoing a reparent removes only the inserted
+    Transform.
+  - An entity that survives `replaceLinkedScene` unchanged no longer keeps a private
+    component history, because the scene's whole history is cleared.
+- Tests: `HistoryTest` adds 10 tests (order/labels, redo discard, cap, merge window, burst
+  end, groups, failed group, failing/partial undo, re-entrancy and selection, label
+  derivation). `SceneAuthoringUxTest` adds 7 `timeline*` tests:
+  - interleaved structure and component edits undo in reverse and redo to the same document
+  - an edit on a deleted and restored entity, with its selection
+  - labels, including the Edit-menu label and "Undo" during a drag
+  - nudge merging through `ViewportGizmos.key` with an injected clock
+  - the numeric-edit contract on the scene timeline
+  - the prefab workspace keeping its own history, through `CommandContext.document`
+  - a refused Animator-breaking undo that stays and becomes the error
+- Smoke changes:
+  - No fixture clicked the "Scene Undo" menu item. The scene, context-menu, prefab-workflow
+    and project-documents smokes called `undoStructure`/`redoStructure` directly; those
+    calls became `undo`/`redo`, and every call site was checked against the new ordering.
+  - `--context-menu-smoke` gained the `edit-menu-labelled-undo` stage: it renames the
+    scene, opens Edit, checks "Undo Rename Scene" with Ctrl+Z and no "Scene …" items, then
+    clicks it.
+- Commands run, from `tools/editor` through `gradle.ps1` (JDK 21) on an interactive Windows
+  desktop. Smokes were started with `powershell -File gradle.ps1 run --args=--<smoke>` from
+  Git Bash, because `*>` redirection inside PowerShell turns Gradle's stderr into a
+  terminating error under the script's `ErrorActionPreference=Stop`. The first scene-smoke
+  attempt aborted that way before the editor ran.
+  - `test --tests sle.editor.model.SceneAuthoringUxTest --tests sle.editor.model.EntityDocumentTest`
+    on the unchanged code, with the characterization tests: passed.
+  - `test` after the refactor: two expected failures (see deliberate changes); both tests
+    were updated. Then two failures in new tests: a delta-based merge fixture (merging
+    needs state-restoring steps, now documented on `History`) and a label diff that treated
+    `0` and `0.0` as different (fixed). Then 284 tests, 0 failures.
+  - `build`: passed, 284 tests, 0 failures, 2 existing skips.
+  - `run --args=--scene-smoke`: `SCENE_EDITOR_SMOKE_PASS`, `SCENE_TREE_COMPONENT_HANDOFF_PASS`,
+    `SCENE_ENTITY_SANDBOX_SWITCH_PASS`.
+  - `run --args=--context-menu-smoke`: passed before and after the new stage
+    (`CONTEXT_MENU_SMOKE_PASS`, `DETACHED_DELETE_PLAYBACK_SMOKE_PASS`).
+  - `run --args=--gizmo-smoke`: `VIEWPORT_GIZMO_SMOKE_PASS` (handles=176).
+  - `run --args=--project-documents-smoke`: `PROJECT_DOCUMENTS_SMOKE_PASS`,
+    `PREFAB_WORKFLOW_SMOKE_PASS`.
+  - `build` again after the last edits: passed.
+- Docs: SceneEditor (Undo/Redo bullet, Delete wording, the "unified history later" note),
+  Prefabs (replacement clears history, with the notice), the editor README (shortcut table,
+  menu summary, Delete wording, nudge merging) and UI_DESIGN (Scene creation and deletion).
+- Not done:
+  - No manual walk.
+  - The Edit-menu label is checked by the smoke and unit tests, not by a screenshot review.
+  - Typing in an Inspector text field still records one step per change, as before; only
+    arrow nudges merge.
+  - `History.group` is unused in production until S3 multi-move.
+  - No editor version bump (planned for S7).
+- Next: Session 3 (selection service and multi-select), only when requested.
+  `HistorySelection` is the place to store the full selection.

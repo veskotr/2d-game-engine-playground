@@ -232,9 +232,9 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
             }
             if(!sameProject()) return@launch
             if(revision(ProjectDocumentKind.Scene)==before) {
-                state.replaceLinkedScene(update.scene ?: rebased)
+                val cleared=state.replaceLinkedScene(update.scene ?: rebased)
                 state.relocateAssets(adopted.moved)
-                state.message="Applied instance changes to ${path.fileName}"
+                state.message="Applied instance changes to ${path.fileName}"+if(cleared) ". ${sle.editor.model.HISTORY_CLEARED_NOTICE}" else ""
             } else failure(ProjectDocumentKind.Scene,"Applied to ${path.fileName}; the scene changed meanwhile, so reopen it to refresh instances")
             if(openPrefab && prefab?.dirty==false) {
                 val reloaded=withContext(Dispatchers.IO) { store.open(path).let { it.copy(source=canonical(it.kind,it.source)) } }

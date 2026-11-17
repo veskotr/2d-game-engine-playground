@@ -3,6 +3,7 @@ package sle.editor.command
 import sle.editor.model.EntityWorkspaceState
 import sle.editor.model.ScenePlaybackState
 import sle.editor.model.SceneWorkspaceState
+import sle.editor.model.UndoableDocument
 import sle.editor.project.ProjectCommands
 import sle.editor.viewport.ViewportMode
 import sle.editor.workspace.PanelId
@@ -19,7 +20,7 @@ internal data class CommandContext(
     /** A scene entity is open in the prefab workspace (legacy linked editing). */
     val linked: Boolean = false,
     val scene: SceneWorkspaceState? = null,
-    /** The entity the Inspector/prefab workspace edits; owns Undo/Redo until the unified history. */
+    /** The entity the Inspector or prefab workspace edits. */
     val entity: EntityWorkspaceState? = null,
     /** The standalone prefab document. */
     val prefab: EntityWorkspaceState? = null,
@@ -39,6 +40,9 @@ internal data class CommandContext(
     val documentKind get() = if(mode != ViewportMode.Entity || linked) DocumentKind.Scene else DocumentKind.Prefab
     val sceneDocument get() = documentKind == DocumentKind.Scene
     val selection get() = scene?.selected
+    /** The active document's undo timeline: the scene (also while one of its entities is open in
+     * the Entity tab) or the standalone prefab workspace. */
+    val document: UndoableDocument? get() = if(sceneDocument) scene else prefab
 }
 
 /** Application operations that live in the window composition rather than in document models. */

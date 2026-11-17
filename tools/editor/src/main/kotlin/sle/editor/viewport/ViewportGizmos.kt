@@ -7,6 +7,9 @@ import sle.editor.model.SceneWorkspaceState
 import java.awt.event.KeyEvent
 import java.awt.event.MouseEvent
 
+/** Arrow nudges of the same entity and shape merge into one undo step. */
+internal data class NudgeMergeKey(val entity: String, val target: String)
+
 internal class ViewportGizmos(val state: EntityWorkspaceState, val entityOnly: Boolean = false, val scene: SceneWorkspaceState? = null) {
     private data class Drag(val document: EntityDocument, val target: String, val handle: GizmoHandle,
         val start: Vec2, val camera: PreviewCamera)
@@ -19,13 +22,13 @@ internal class ViewportGizmos(val state: EntityWorkspaceState, val entityOnly: B
         else state.sceneTarget.takeIf { it!="Entity" && it in GizmoShape.available(document()) } ?: "Entity"
     /** In the scene a shape exposes only resize handles: dragging its center still moves the entity. */
     private fun sceneHandle(shape: GizmoShape, handle: GizmoHandle) = !entityOnly || shape.target=="Entity" || handle.kind!="move"
-    private fun apply(value: EntityDocument, target: String = "Entity") {
+    private fun apply(value: EntityDocument, target: String = "Entity", mergeKey: Any? = null) {
         try {
             if(entityOnly && scene!=null && target!="Entity") {
                 // Shape fields are entity-local; never round-trip the transform through world space.
                 val fields=value.components[target] ?: return
-                state.applyGizmo(state.document.copy(components=kotlinx.serialization.json.JsonObject(state.document.components+(target to fields))))
-            } else if(entityOnly && scene!=null) scene.applyWorldDocument(state.document.key,value) else state.applyGizmo(value)
+                state.applyGizmo(state.document.copy(components=kotlinx.serialization.json.JsonObject(state.document.components+(target to fields))),mergeKey)
+            } else if(entityOnly && scene!=null) scene.applyWorldDocument(state.document.key,value,mergeKey) else state.applyGizmo(value,mergeKey)
         }
         catch(failure: IllegalArgumentException) { state.error=failure.message }
     }
@@ -67,10 +70,11 @@ internal class ViewportGizmos(val state: EntityWorkspaceState, val entityOnly: B
         if (event.keyCode == KeyEvent.VK_ESCAPE) { cancel(); return }
         if (event.isControlDown && event.keyCode == KeyEvent.VK_Z) {
             if (drag != null) { cancel(); return }
-            if (event.isShiftDown) state.redo() else state.undo(); return
+            // Fallback when the Undo/Redo commands are disabled; both use the document's timeline.
+            if (event.isShiftDown) state.timeline.redo() else state.timeline.undo(); return
         }
         if (event.isControlDown && event.keyCode == KeyEvent.VK_Y) {
-            if (drag != null) cancel() else state.redo()
+            if (drag != null) cancel() else state.timeline.redo()
             return
         }
         // Delete and Ctrl+D are registered commands; the shortcut dispatcher runs them before this listener.
@@ -82,6 +86,8 @@ internal class ViewportGizmos(val state: EntityWorkspaceState, val entityOnly: B
             else -> return
         }
         val shape=selected() ?: return
-        apply(GizmoMath.drag(document(),shape.target,GizmoHandle("move",shape.offset),shape.center,shape.center+delta,state.snap),shape.target)
+        // A burst of nudges on one shape is one undo step (see History.MERGE_WINDOW_MILLIS).
+        apply(GizmoMath.drag(document(),shape.target,GizmoHandle("move",shape.offset),shape.center,shape.center+delta,state.snap),shape.target,
+            NudgeMergeKey(state.document.key,shape.target))
     }
 }

@@ -20,7 +20,7 @@ opens it; in a project, open scenes/prefabs that already have a file are saved a
 when you switch documents. File dialogs open in the project's Scenes/Prefabs/Textures folder,
 or the folder you last used.
 
-Delete removes the selected subtree as one **Scene Undo** operation and clears selection,
+Delete removes the selected subtree as one undo step and clears selection,
 so a held key cannot delete the next entity. Delete in Inspector text inputs edits text;
 modal dialogs, Play and Pause block scene deletion. The same command works in detached
 Hierarchy and Scene windows.
@@ -39,7 +39,7 @@ colliders; Scene handles move complete entities. Entity editing operates on the
 live scene copy, and File → Save saves its containing scene.
 
 The **File**, **Edit**, **Create**, **View**, **Help**, and **Windows** menu strip contains
-file operations, separate entity/scene histories, creation/import commands,
+file operations, labelled Undo/Redo, creation/import commands,
 Scene/Game/Prefab navigation, Fit, UI scale and controls/About. Use
 **File → New/Open → Project, Scene, or Prefab** for project and document authoring.
 New projects open a saved empty Main scene, configured as startup. Reopening a project
@@ -69,7 +69,7 @@ detached windows and the native viewport:
 | Command | Shortcut | Where |
 |---|---|---|
 | Save / Save As | Ctrl+S / Ctrl+Shift+S | anywhere |
-| Undo / Redo | Ctrl+Z / Ctrl+Y or Ctrl+Shift+Z | anywhere (active entity's history) |
+| Undo / Redo | Ctrl+Z / Ctrl+Y or Ctrl+Shift+Z | anywhere (the active document's one timeline) |
 | Delete / Duplicate | Delete or Backspace / Ctrl+D | Hierarchy or Scene view focused |
 | Play (Resume) / Pause / Stop | F5 / F6 / Shift+F5 | anywhere |
 | Run Project | Ctrl+F5 | anywhere |
@@ -264,8 +264,11 @@ picking, but can still be selected from the menu.
 - **Escape** cancels the current drag. **Undo / Redo** (**Ctrl+Z / Ctrl+Y**, or
   Ctrl+Shift+Z) restore complete edits; pressed during a drag, they cancel it.
 
-Each drag is one undo step. Inspector, component and imported-asset changes also
-enter history; New/Open reset it. Handles account for rotation, mirrored scale
+Each drag is one undo step, and so is a burst of arrow nudges on one shape (keys
+pressed within 0.75 s of each other). Inspector, component and imported-asset changes
+also enter history; New/Open reset it. In a scene, the toolbar Undo/Redo buttons and
+Ctrl+Z walk the scene's single timeline, structure included; the prefab workspace
+keeps its own. Handles account for rotation, mirrored scale
 and viewport DPI. Collapsed shapes with a zero scale must be corrected in the
 inspector before their collider/size handles can be used. Radius follows the
 engine's maximum-scale circle rendering. Rotation, tint and UV values remain

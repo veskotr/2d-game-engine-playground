@@ -79,7 +79,7 @@ class ProjectWorkspaceDocumentsTest {
         val loaded=OpenedProjectDocument(path,ProjectDocumentKind.Scene,SceneDocument(name="From disk").serialize(),emptyMap(),"revision")
         state.openProject(loaded)
         assertEquals("From disk",state.name);assertEquals(path,state.file)
-        assertFalse(state.dirty);assertFalse(state.canUndoStructure)
+        assertFalse(state.dirty);assertFalse(state.canUndo)
         state.rename("Keep draft")
         assertFails { state.openProject(loaded.copy(source="{}")) }
         assertEquals("Keep draft",state.name);assertTrue(state.dirty)
@@ -109,8 +109,8 @@ class ProjectWorkspaceDocumentsTest {
         assertNotEquals(first.key,scene.selected!!.document.key)
         assertEquals(source.components,scene.selected!!.document.components)
         assertTrue(scene.dirty)
-        scene.undoStructure();assertEquals(listOf(first),scene.document().entities)
-        scene.undoStructure();assertTrue(scene.entities.isEmpty());assertFalse(scene.dirty)
+        scene.undo();assertEquals(listOf(first),scene.document().entities)
+        scene.undo();assertTrue(scene.entities.isEmpty());assertFalse(scene.dirty)
     }
 
     @Test fun editsDuringSaveRemainDirtyButNextSaveUsesNewDiskRevision() {

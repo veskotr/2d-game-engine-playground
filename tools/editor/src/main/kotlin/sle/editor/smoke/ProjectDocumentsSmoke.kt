@@ -120,7 +120,7 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     scene.importPrefab(prefabPath)
     await("Project prefab insertion failed") { !project.busy && scene.entities.size==3 }
     check(scene.selected!!.document.components.getValue("SpriteRenderer").jsonObject.getValue("texture").jsonPrimitive.content==first.assets.resolve("Textures/tile2.png").toString().replace('\\','/'))
-    scene.undoStructure();check(scene.entities.size==2 && !scene.dirty)
+    scene.undo();check(scene.entities.size==2 && !scene.dirty)
     check(withContext(Dispatchers.IO) { Files.list(first.assets.resolve("Textures")).use { it.count() } }==2L)
     // A clean New document during loading is a switch, not permission to replace it.
     val locked=CompletableDeferred<Unit>()
@@ -199,7 +199,7 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
         !project.busy && !prefab.dirty && scene.dirty &&
             scene.entities.first { it.document.key==linkedKey }.document.components["SpriteRenderer"]!!.jsonObject["size"]!!.jsonObject["x"]?.jsonPrimitive?.doubleOrNull==96.0
     }
-    check(scene.selectedKey==linkedKey && !scene.canUndoStructure)
+    check(scene.selectedKey==linkedKey && !scene.canUndo)
     documents()!!.savePath(ProjectDocumentKind.Scene,linkedScenePath)
     await("Refreshed linked scene save failed") { !project.busy && !scene.dirty }
     documents()!!.openPath(linkedScenePath)

@@ -79,9 +79,9 @@ internal suspend fun runPrefabWorkflowSmoke(window: JFrame,canvas: ()->EngineCan
     }
     check(scene.entities.any { it.document.key=="$root/$child" } && scene.parents["$root/$child"]==root) { "Dragged subtree was not re-keyed as its instance" }
     check(EntityDrag.dragging==null && scene.selectedKey==root)
-    scene.undoStructure()
+    scene.undo()
     check(scene.document().prefabInstances.none { it.key==root } && scene.entities.any { it.document.key==child }) { "Undo did not restore the unlinked subtree" }
-    scene.redoStructure()
+    scene.redo()
     check(scene.document().prefabInstances.any { it.key==root })
     println("PREFAB_WORKFLOW_STAGE hierarchy-drag")
     // --- Escape cancels; a stale payload is refused at drop time.

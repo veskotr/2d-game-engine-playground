@@ -35,7 +35,7 @@ portable `.slescene` workflow.
   **Entity → Duplicate Subtree** copies the complete selected subtree with independent UUIDs;
   **Edit → Delete Entity** or Delete in the Hierarchy/Scene viewport removes that subtree
   and clears selection, preventing a held Delete from deleting unrelated survivors.
-  **Scene Undo** restores the subtree and selection. Inspector text fields keep Delete
+  **Undo** restores the subtree and selection. Inspector text fields keep Delete
   for text editing; modal dialogs and running/paused playback block scene deletion.
   This also applies to detached windows.
 - Right-click empty Scene space to create at the clicked world position. The shared
@@ -48,11 +48,17 @@ portable `.slescene` workflow.
   other scene entities. **Edit → Delete** (Delete) removes the selection and its descendants. Operations that would
   invalidate an Animator target are rejected. Save/reopen converts legacy numeric
   targets to stable keys before structural edits that would change their meaning.
-- **Undo / Redo** (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z from any panel) edit the selected entity. Each entity keeps
-  its history across selection changes. **Scene Undo / Scene Redo** separately
-  restore additions, imports, duplication, deletion and scene-name changes; they
-  preserve component edits on surviving entity objects. There is no unified
-  chronological history across both types yet.
+- **Undo / Redo** (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z from any panel) walk one timeline per
+  document. In a scene it holds structure (create, import, duplicate, delete, reparent,
+  active camera, scene rename) and every entity's component and transform edits, in the
+  order they happened. **Edit → Undo** names the step, for example "Undo Move Player".
+  Undo restores the selection from before the step and selects the entity it changed;
+  selecting alone is never a step. A drag, a committed numeric edit and a burst of arrow
+  nudges (within 0.75 s) are one step each. Pressed during a drag or numeric edit, Undo
+  and Redo cancel that edit first. The history keeps the latest 100 steps. A step that
+  would break an Animator target is refused and stays. The standalone prefab workspace
+  has its own timeline. Saving a prefab that refreshes linked instances clears the
+  scene's history and reports "Undo history cleared after prefab update".
 - In standalone mode, **Save / Save As** writes one `.slescene`. **Open** restores entities and assets.
   Save validates every entity, including hidden selections, before atomically
   replacing the file. Invalid drafts in any entity block saving. The scene dirty
@@ -189,7 +195,7 @@ scene metadata. It accepts scene JSON with key/name/entities; entity keys must
 exist and be unique. Tiled imports, linked prefab
 instances, scene-root components and unknown metadata are explicitly rejected by
 the editor rather than discarded. Existing engine loaders still support their
-full JSON scene formats. Linked overrides and a unified scene/entity history remain later work.
+full JSON scene formats. Linked overrides remain later work.
 
 Asset bundling and dynamic dependency limitations are the same as prefabs: known
 asset fields/JSON dependencies are imported, but arbitrary Lua expressions and

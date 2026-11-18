@@ -246,7 +246,7 @@ internal object PrefabPackages {
             return Json.parseToJsonElement(bytes.toString(Charsets.UTF_8)).jsonObject
         }
         val manifest = json("manifest.json")
-        require(manifest["format"]?.jsonPrimitive?.content == format && manifest["version"]?.jsonPrimitive?.intOrNull == 1) { "Unsupported prefab package format/version" }
+        require(manifest["format"]?.jsonPrimitive?.content == format && manifest["version"]?.jsonPrimitive?.intOrNull == 1) { "Unsupported entity template package format/version" }
         val directory = temporaryDirectory()
         val paths = linkedMapOf<String, Path>()
         val names = linkedMapOf<Path, String>()

@@ -23,9 +23,8 @@ internal fun EntityWorkspace(state: EntityWorkspaceState, embedded: Boolean = fa
     var assetsExpanded by remember { mutableStateOf(false) }
     val m=sle.editor.ui.theme.LocalEditorMetrics.current
     Column(Modifier.fillMaxSize().editorContextMenu { entityCreationMenu(state,embedded,projectAssets) }) {
-        sle.editor.ui.controls.EditorPanelHeader("Prefab")
+        sle.editor.ui.controls.EditorPanelHeader("Entity Template")
         Column(Modifier.padding(horizontal=m.panelPadding,vertical=m.gap),verticalArrangement=Arrangement.spacedBy(m.gap/2)) {
-            state.error?.let { Text(it, color = MaterialTheme.colors.error) }
             key(state,state.document.key) {
                 sle.editor.ui.controls.EditorPropertyRow("Name",help="Entity name") {
                     sle.editor.ui.inspector.InspectorTextInput(state.document.name,"Name",{state.rename(it)})

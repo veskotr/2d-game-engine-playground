@@ -11,7 +11,7 @@ import javax.swing.JFrame
 import java.nio.file.Path
 
 /** Robot gestures enter through the installed desktop listener, never the controller API. */
-internal suspend fun runInteractiveDockingSmoke(home: JFrame, workspace: EditorWorkspace) {
+internal suspend fun runInteractiveDockingSmoke(home: JFrame, workspace: EditorWorkspace, statusBar: ()->androidx.compose.ui.geometry.Rect?) {
     val manager=workspace.windows
     val robot=Robot().apply { autoDelay=20 }
     val scene=PanelId("scene");val inspector=PanelId("inspector");val assets=PanelId("assets")
@@ -55,7 +55,7 @@ internal suspend fun runInteractiveDockingSmoke(home: JFrame, workspace: EditorW
     snapshot("before-drag")
     // Merge then reorder through actual tab positions.
     drag(tab(inspector),tab(scene))
-    await("Inspector tab merge failed") { manager.layout.tabs().any { inspector in it.panels && scene in it.panels } }
+    await("Details tab merge failed") { manager.layout.tabs().any { inspector in it.panels && scene in it.panels } }
     val sceneTab=area(scene).tabs.single { it.first==scene }.second
     drag(tab(inspector),DockPoint(sceneTab.x+4,sceneTab.y+sceneTab.height/2))
     await("Tab reorder failed") { manager.layout.tabs().single { scene in it.panels }.panels.first()==inspector }
@@ -108,8 +108,10 @@ internal suspend fun runInteractiveDockingSmoke(home: JFrame, workspace: EditorW
     robot.mouseMove((a.x+a.width-60*scale).toInt(),(a.y+16*scale).toInt())
     robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
     await("Panel minimize button failed") { scene in manager.layout.minimized }
+    // The 28dp strip ends where the main window's status bar (L1 S4) begins.
     val pane=home.contentPane
-    robot.mouseMove(pane.locationOnScreen.x+60,(pane.locationOnScreen.y+pane.height-14*scale).toInt())
+    val bar=statusBar() ?: error("Status bar not laid out")
+    robot.mouseMove(pane.locationOnScreen.x+60,(pane.locationOnScreen.y+bar.top-14*scale).toInt())
     robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
     await("Panel restore strip failed") { scene !in manager.layout.minimized }
     check(prefab.drafts==drafts && prefab.canUndo)

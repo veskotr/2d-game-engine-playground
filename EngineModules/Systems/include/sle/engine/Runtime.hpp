@@ -55,6 +55,9 @@ public:
     void panEntityPreview(glm::vec2 delta);
     glm::vec2 getPreviewPosition() const { return editorCamera.getPosition(); }
     glm::vec2 getPreviewViewportSize() const { return editorCamera.getViewportSize(); }
+    // Editor grid of the Scene/Entity preview only; invalid values are ignored (returns false).
+    bool setEditorGrid(const EditorGrid& grid);
+    const EditorGrid& getEditorGrid() const { return editorGrid; }
     sle::core::Result<bool> startScenePlay(const nlohmann::json& document);
     sle::core::Result<bool> renderSceneView(int width, int height, float dt, bool gameView, bool playing, bool fit = false);
     nlohmann::json sceneTransforms();
@@ -134,6 +137,7 @@ private:
     int hostWidth = 480, hostHeight = 270;
     void configureRenderViewport();
     sle::core::Camera2D editorCamera{480,270};
+    EditorGrid editorGrid;
     float previewAspect = 0.0f;
     bool initializationStarted = false;
     bool initialized = false;

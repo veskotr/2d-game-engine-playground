@@ -1,5 +1,8 @@
 # Prefabs
 
+The desktop editor shows prefabs as **Entity Templates**. File formats, scene `prefabs`
+arrays and the engine and Lua APIs below keep the prefab name.
+
 A prefab is a JSON entity subtree, loaded through the same component codecs as a
 scene. Each entity needs a unique, nonempty key. `root` names its single root;
 every other entity must reach that root through its `parent` reference.
@@ -125,9 +128,9 @@ values. When switching documents autosaves both a dirty scene and a dirty prefab
 the scene is saved first and the prefab save still refreshes it. The root Transform
 stays local, including position, rotation and scale. Internal reference remapping
 keeps repeated instances isolated. Invalid updates retain the asset and scene.
-The refreshed scene becomes dirty; replacement clears structural undo history,
-retains selection only for surviving keys, and keeps the live state (field drafts,
-component history) of entities whose content did not change.
+The refreshed scene becomes dirty; replacement clears the scene's undo history
+(the notice says "Undo history cleared after prefab update"), retains selection only
+for surviving keys, and keeps the field drafts of entities whose content did not change.
 
 Instance overrides cannot change entity identity, names or internal hierarchy.
 Currently root Inspector rename and descendant reparent commands can be attempted,

@@ -30,9 +30,9 @@ class SceneDocumentTest {
         assertEquals(3,scene.entities.size)
         first.document=first.document.setValue("Animator",listOf("targetEntities","other"),JsonPrimitive(scene.entities.last().document.key))
         scene.select(scene.entities.last().document.key)
-        assertFails { scene.undoStructure() }
+        assertFails { scene.undo() }
         assertEquals(3,scene.entities.size)
-        assertTrue(scene.canUndoStructure)
+        assertTrue(scene.canUndo)
     }
     @Test fun sceneStructureHistoryKeepsEntityEditsAndSelection() {
         val scene=SceneWorkspaceState(emptyMap()) { it }
@@ -46,10 +46,10 @@ class SceneDocumentTest {
         assertTrue(first.canUndo)
         scene.select(second.document.key);scene.removeSelected()
         assertEquals(1,scene.entities.size)
-        scene.undoStructure()
+        scene.undo()
         assertEquals("Second",scene.selected!!.document.name)
-        scene.redoStructure();assertEquals(1,scene.entities.size)
-        scene.newScene();assertFalse(scene.dirty);assertFalse(scene.canUndoStructure)
+        scene.redo();assertEquals(1,scene.entities.size)
+        scene.newScene();assertFalse(scene.dirty);assertFalse(scene.canUndo)
     }
 
     @Test fun numericPrefabSelfReferencesBecomeTheNewEntityKey() {

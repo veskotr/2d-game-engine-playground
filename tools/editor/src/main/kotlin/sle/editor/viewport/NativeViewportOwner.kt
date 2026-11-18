@@ -33,6 +33,10 @@ internal class NativeViewportOwner(
     private val onFailure: (Throwable) -> Unit,
     private val onStatus: (String) -> Unit,
     private val previewSmoke: Boolean = false,
+    /** Snap steps and the toggle; the grid follows the move step. */
+    val snap: SnapService = SnapService(),
+    /** The active Scene view tool (per-user editor state). */
+    val tools: sle.editor.viewport.tools.ViewportToolState = sle.editor.viewport.tools.ViewportToolState(),
 ) : AWTGLCanvas(GLData().apply {
     majorVersion = 4
     minorVersion = 3
@@ -96,6 +100,16 @@ internal class NativeViewportOwner(
     private var camera: PreviewCamera? = null
     private val overlay = GizmoOverlay()
     var editorSelectionColor = sle.editor.ui.theme.editorColors(sle.editor.ui.theme.EditorThemeMode.Dark).selectionOutline
+    /** Move, Rotate and Scale handles use the viewport axis tokens of the current theme. */
+    var editorAxisColors = sle.editor.ui.theme.editorColors(sle.editor.ui.theme.EditorThemeMode.Dark).let { it.viewportXAxis to it.viewportYAxis }
+    /** Scene view tools: right-click, pan, zoom and entity drags to Assets are handled here first. */
+    private val toolHost = sle.editor.viewport.tools.ToolHost(tools,snap).also { host ->
+        host.gizmos={ gizmos }
+        host.selectionChanged={ scene?.let { setAuthoring(it.selected) } }
+    }
+    /** Handles of the active tool in viewport pixels (smokes aim at them). */
+    fun toolHandles(): List<sle.editor.viewport.tools.ToolHandle> { toolHost.camera=camera;return toolHost.handles() }
+    private var appliedGrid: Pair<Float,Int>? = null
     fun previewCamera(): PreviewCamera? = camera
     fun contextIdentity(): Long = context
     fun withContext(action: () -> Unit) = runInContext { GL.setCapabilities(capabilities); action() }
@@ -104,7 +118,7 @@ internal class NativeViewportOwner(
     fun runtimeTransforms(): JsonObject = Json.parseToJsonElement(NativeEngine.sceneTransforms(session).toString(Charsets.UTF_8)).jsonObject
     fun gameCameraMetrics(): FloatArray = NativeEngine.gameCamera(session)
     fun gameViewport(): FloatArray = gameMetrics.toFloatArray()
-    fun finishGesture() { gizmos?.finish(); panAnchor=null; cancelEntityDrag() }
+    fun finishGesture() { toolHost.finish(); gizmos?.finish(); panAnchor=null; cancelEntityDrag() }
     /** A picked scene entity dragged out of the viewport onto an Assets folder (set by the workspace).
      * The drag shows only once the pointer leaves the canvas; dropping on a target first cancels the
      * in-progress move, so the entity keeps its pose and the scene is unchanged before the drop. */
@@ -132,12 +146,12 @@ internal class NativeViewportOwner(
         else gizmos?.state?.document?.let { document ->
             if(scene!=null) isolatedComponentPreview(document,scene!!.entities.map { it.document.key }).serialize() else document.serialize()
         }) == lastGoodPreview
-    fun setScene(value: SceneWorkspaceState?) { scene=value }
+    fun setScene(value: SceneWorkspaceState?) { if(scene!==value) toolHost.finish();scene=value;toolHost.scene=value }
     fun setAuthoring(state: EntityWorkspaceState?) {
         val entityOnly=desiredMode==ViewportMode.Scene
         val graph=if(entityOnly) scene else null
         if (gizmos?.state !== state || gizmos?.entityOnly != entityOnly || gizmos?.scene !== graph) {
-            gizmos?.cancel(); gizmos=state?.let { ViewportGizmos(it,entityOnly,graph) }
+            gizmos?.cancel(); gizmos=state?.let { ViewportGizmos(it,entityOnly,graph,snap) }
         }
     }
 
@@ -149,7 +163,16 @@ internal class NativeViewportOwner(
         desiredPlayback = playback
     }
     fun fitEntity() { if(desiredMode!=ViewportMode.Scene || !inputGameView) { finishGesture(); pendingFit = true } }
-    fun zoomEntity(factor: Float) { if (gizmos?.dragging != true && (desiredMode!=ViewportMode.Scene || !inputGameView)) pendingZoom *= factor }
+    fun zoomEntity(factor: Float) { if (gizmos?.dragging != true && !toolHost.pressed && (desiredMode!=ViewportMode.Scene || !inputGameView)) pendingZoom *= factor }
+    /** Frame Selected: fits the Scene view to [bounds] (world units), keeping the view's aspect. */
+    fun frameBounds(bounds: Bounds) {
+        if(desiredMode!=ViewportMode.Scene || inputGameView) return
+        val view=camera ?: return
+        finishGesture()
+        val (factor,center)=frameView(view.size,bounds) ?: return
+        pendingZoom*=factor.toFloat()
+        pendingPan+=center-(view.origin+view.size*0.5)
+    }
     private fun status(text: String) = EventQueue.invokeLater { if (!stopped) onStatus(text) }
 
     var contextPosition: Vec2? = null; private set
@@ -172,9 +195,12 @@ internal class NativeViewportOwner(
                 requestFocusInWindow()
                 if(event.button==MouseEvent.BUTTON3 && editingAllowed()) {
                     finishGesture()
-                    contextPosition=camera?.world(Vec2(event.x.toDouble(),event.y.toDouble()))
+                    // Click-to-create lands on the move step while snapping applies (Ctrl inverts).
+                    contextPosition=camera?.world(Vec2(event.x.toDouble(),event.y.toDouble()))?.let { snap.placement(it,event.isControlDown) }
                     if(desiredMode==ViewportMode.Scene) camera?.let { view -> scene?.let { state ->
-                        state.select(ScenePicking.pick(state,view,Vec2(event.x.toDouble(),event.y.toDouble()))?.key)
+                        // Right-clicking a selected entity keeps the selection, so the menu acts on the set.
+                        val pick=ScenePicking.pick(state,view,Vec2(event.x.toDouble(),event.y.toDouble()))?.key
+                        if(pick!=null && pick in state.selection) state.activate(pick) else state.select(pick)
                         setAuthoring(state.selected)
                     } }
                     onContextMenu?.invoke(event.xOnScreen,event.yOnScreen)
@@ -186,15 +212,14 @@ internal class NativeViewportOwner(
                 }
                 if (editingAllowed() && authoringReady()) {
                     camera?.let { view ->
-                        if (desiredMode == ViewportMode.Scene && event.button == MouseEvent.BUTTON1) {
-                            scene?.let { scene ->
-                                val pick=ScenePicking.pick(scene,view,Vec2(event.x.toDouble(),event.y.toDouble()))
-                                scene.select(pick?.key)
-                                setAuthoring(scene.selected)
-                                cancelEntityDrag();draggedEntity=pick?.key
+                        if (desiredMode == ViewportMode.Scene) {
+                            // The active tool picks, toggles, box-selects or drags (see viewport/tools).
+                            if(event.button == MouseEvent.BUTTON1) scene?.let { scene ->
+                                cancelEntityDrag()
+                                toolHost.scene=scene;toolHost.camera=view
+                                draggedEntity=toolHost.press(pointer(event)).dragEntity
                             }
-                        }
-                        gizmos?.press(event,view)
+                        } else gizmos?.press(event,view)
                     }
                     return
                 }
@@ -206,14 +231,24 @@ internal class NativeViewportOwner(
                 if (event.button == MouseEvent.BUTTON1) {
                     val dragged=draggedEntity.takeIf { entityDragShown }
                     if(dragged!=null && entityDragOver?.invoke(event.locationOnScreen)==true) {
-                        gizmos?.cancel();draggedEntity=null;entityDragShown=false
+                        toolHost.cancel();gizmos?.cancel();draggedEntity=null;entityDragShown=false
                         entityDrop?.invoke(dragged,event.locationOnScreen)
-                    } else { gizmos?.finish();cancelEntityDrag() }
+                    } else {
+                        if(toolHost.pressed) toolHost.release(pointer(event)) else gizmos?.finish()
+                        cancelEntityDrag()
+                    }
                 }
                 if(event.button==MouseEvent.BUTTON2 || event.button==MouseEvent.BUTTON1) panAnchor=null
                 sendButton(event,false)
             }
-            override fun mouseMoved(event: MouseEvent) = sendCursor(event)
+            override fun mouseMoved(event: MouseEvent) {
+                // The presenter canvas shows the tool's cursor (e.g. over a Move arrow).
+                if(desiredMode==ViewportMode.Scene && editingAllowed()) {
+                    toolHost.camera=camera
+                    (event.component ?: this@NativeViewportOwner).cursor=java.awt.Cursor.getPredefinedCursor(toolHost.cursor(Vec2(event.x.toDouble(),event.y.toDouble())))
+                } else event.component?.cursor=java.awt.Cursor.getDefaultCursor()
+                sendCursor(event)
+            }
             override fun mouseDragged(event: MouseEvent) {
                 val previous=panAnchor
                 if(previous!=null) {
@@ -221,7 +256,7 @@ internal class NativeViewportOwner(
                     camera?.let { pendingPan += Vec2(-(next.x-previous.x)*it.size.x/logicalWidth,(next.y-previous.y)*it.size.y/logicalHeight) }
                     panAnchor=next
                 } else if (editingAllowed()) {
-                    gizmos?.move(event)
+                    if(toolHost.pressed) toolHost.drag(pointer(event)) else gizmos?.move(event)
                     val dragged=draggedEntity
                     if(dragged!=null && entityDragMove!=null) {
                         // Presenters forward their own events: test against the visible source canvas.
@@ -254,10 +289,15 @@ internal class NativeViewportOwner(
             if(type==3) releaseSink() else inputRequest?.let { inputSink(ViewInput(if(desiredMode==ViewportMode.Sandbox) ViewId.Game else inputView,it.generation,type,code,x,y)) }
     }
     private fun sendKey(event: KeyEvent, down: Boolean) {
-        if (!gameInput()) { if (down && editingAllowed()) gizmos?.key(event); return }
+        if (!gameInput()) {
+            if (down && editingAllowed()) { if(desiredMode==ViewportMode.Scene) { toolHost.camera=camera;toolHost.key(event) } else gizmos?.key(event) }
+            return
+        }
         val key=engineKey(event)
         if (key >= 0) sendInput(0,key,if (down) 1.0 else 0.0)
     }
+    private fun pointer(event: MouseEvent) = sle.editor.viewport.tools.ToolPointer(Vec2(event.x.toDouble(),event.y.toDouble()),
+        event.isShiftDown,event.isControlDown || event.isMetaDown)
     private fun sendButton(event: MouseEvent, down: Boolean) {
         val button=when(event.button) { MouseEvent.BUTTON1 -> 0; MouseEvent.BUTTON3 -> 1; MouseEvent.BUTTON2 -> 2; else -> return }
         sendInput(1,button,if (down) 1.0 else 0.0)
@@ -289,7 +329,7 @@ internal class NativeViewportOwner(
         lastFrameNanos=System.nanoTime()
     }
     private fun createSession() {
-        session=NativeEngine.create(); creates++
+        session=NativeEngine.create(); creates++;appliedGrid=null
         if (smokeTest || previewSmoke) session=ViewportSmokeChecks.verifySessionGuardsAndReopen(session)
         actualMode=null
         actualPlayback=Playback.Running
@@ -403,6 +443,9 @@ internal class NativeViewportOwner(
             pendingFit=false
             pendingZoom=1f
         }
+        // The editor grid follows the move snap step (Scene and Entity previews only).
+        val grid=snap.gridSpacing.toFloat() to SnapSettings.GRID_MAJOR_EVERY
+        if(desiredMode!=ViewportMode.Sandbox && appliedGrid!=grid) { NativeEngine.setEditorGrid(session,grid.first,grid.second);appliedGrid=grid }
         if(pendingPan!=Vec2(0.0,0.0)) {
             NativeEngine.panPreview(session,pendingPan.x.toFloat(),pendingPan.y.toFloat());pendingPan=Vec2(0.0,0.0)
         }
@@ -435,9 +478,30 @@ internal class NativeViewportOwner(
             val view=if(game) NativeEngine.gameCamera(session) else NativeEngine.previewView(session)
             frameCamera=PreviewCamera(Vec2(view[0].toDouble(),view[1].toDouble()),Vec2(view[2].toDouble(),view[3].toDouble()),request.logicalWidth,request.logicalHeight)
             if(!game) gizmos?.resize(request.logicalWidth,request.logicalHeight)
-            if (!game && (desiredMode!=ViewportMode.Scene || desiredPlayback==Playback.Stopped) && desiredDocument == lastGoodPreview) gizmos?.selected()?.let {
-                val document=if(desiredMode==ViewportMode.Scene) scene?.selectedKey?.let { key -> scene?.worldDocument(key) } else null
-                overlay.draw(it,frameCamera!!,document,editorSelectionColor)
+            if (!game && (desiredMode!=ViewportMode.Scene || desiredPlayback==Playback.Stopped) && desiredDocument == lastGoodPreview) {
+                // Every selected entity is outlined; only the active one gets handles.
+                if(desiredMode==ViewportMode.Scene) scene?.let { state ->
+                    overlay.outline(state.selection.keys.filter { it!=state.selectedKey && state.entity(it)!=null }.map(state::worldDocument),frameCamera!!,editorSelectionColor)
+                }
+                // Move, Rotate and Scale draw their own handles at the entity (or the selection center).
+                val toolHandles=desiredMode==ViewportMode.Scene && tools.active!=sle.editor.viewport.tools.ViewportToolId.Select
+                gizmos?.selected()?.let {
+                    val document=if(desiredMode==ViewportMode.Scene) scene?.selectedKey?.let { key -> scene?.worldDocument(key) } else null
+                    overlay.draw(it,frameCamera!!,document,editorSelectionColor,entityHandles=!toolHandles)
+                }
+                if(desiredMode==ViewportMode.Scene) {
+                    val view=frameCamera!!
+                    toolHost.camera=view
+                    toolHost.draw(object : sle.editor.viewport.tools.ToolOverlay {
+                        override fun moveHandles(origin: Vec2, active: DragAxis?) =
+                            overlay.moveHandles(origin,view,editorAxisColors.first,editorAxisColors.second,editorSelectionColor,active)
+                        override fun marquee(from: Vec2, to: Vec2) = overlay.marquee(from,to,view,editorSelectionColor)
+                        override fun rotateRing(center: Vec2, radius: Double, active: Boolean, sweep: Pair<Double, Double>?) =
+                            overlay.rotateRing(center,radius,view,editorAxisColors.first,editorAxisColors.second,editorSelectionColor,active,sweep)
+                        override fun scaleHandles(origin: Vec2, xTip: Vec2, yTip: Vec2, active: DragAxis?) =
+                            overlay.scaleHandles(origin,xTip,yTip,view,editorAxisColors.first,editorAxisColors.second,editorSelectionColor,active)
+                    })
+                }
             }
         }
         if(game) gameMetrics=NativeEngine.sceneGameViewport(session).toList()

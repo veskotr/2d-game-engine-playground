@@ -61,7 +61,7 @@ class LinkedPrefabPersistenceTest {
         assertEquals("enemy",restored.parents["enemy/weapon"])
         val changed=prefab.copy(entities=prefab.entities.map { it.removeComponent("Audio") })
         val update=store.updatePrefab(path,changed,emptyMap(),asset,restored,{}, {})
-        assertNull(update.scene,"Unlinked entities sharing prefab keys must not be reconciled")
+        assertNull(update.scene,"Unlinked entities sharing entity template keys must not be reconciled")
         assertTrue("Audio" in SceneDocument.parse(store.open(scenePath).source).entities.first().components)
     }
     @Test fun subtreeSavedAsPrefabIsLinkedAndSurvivesSceneSaveAndReopen() {

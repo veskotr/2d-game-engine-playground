@@ -6,6 +6,11 @@ Archive SHA-256: `365b6ffe9cb23c5322a3380c0e345f64d8dc16871f35620d33dd58aeb2196f
 SLE icons and mascot are the supplied approved SLE graphics. SVG originals and
 both 16/24px themed PNG families are retained; Compose uses PNG painters.
 Only the consumed 256px app icon is included. No runtime textures are copied.
+
+Command, tool and notice icons (27 keys such as `tool_move`, `undo`, `play`, `info`) were added
+from the supplied `SLE_Editor_Icons_Expanded.zip` (SHA-256
+`e2e64f877f3ba5ba4304c31808532d81be5e5c83c2d254fde9b6e22890865d44`), in the same SVG and
+16/24px light/dark PNG layout. Its 20 original icons are byte-identical to the starter set.
 Handjet is Copyright The Handjet Project Authors under SIL OFL 1.1;
 see licenses/Handjet-OFL.txt. Source: https://fonts.google.com/specimen/Handjet.
 Handjet Medium/SemiBold are used only for branding (the empty-project state);

@@ -1,5 +1,6 @@
 package sle.editor.smoke
 
+import sle.editor.ui.postedAfter
 import androidx.compose.ui.geometry.Rect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -15,7 +16,7 @@ import javax.swing.*
 internal suspend fun runProjectSmoke(
     window: JFrame,state: ProjectWorkspaceState,commands: ProjectCommands,
     scene: SceneWorkspaceState,fields: Map<String,Rect>,documents: ()->ProjectDocumentCommands?,
-    setTheme: (sle.editor.ui.theme.EditorThemeMode)->Unit,
+    setTheme: (sle.editor.ui.theme.EditorThemeMode)->Unit,notices: sle.editor.ui.EditorNotices,
 ) {
     val robot=Robot().apply { autoDelay=12 }
     suspend fun await(message: String,condition: ()->Boolean) {
@@ -127,10 +128,10 @@ internal suspend fun runProjectSmoke(
     scene.newScene()
     val malformed=parent.resolve("bad.sleproject")
     Files.writeString(malformed,"{bad")
+    val beforeRejected=notices.recent.firstOrNull()
     commands.openPath(malformed)
-    await("Rejected open did not finish") { !state.busy }
-    check(state.opened==active && state.error!=null)
-    state.error=null
+    await("Rejected open did not finish") { !state.busy && notices.postedAfter(beforeRejected).any { it.level==sle.editor.ui.NoticeLevel.Error } }
+    check(state.opened==active)
     // An asynchronous open must not discard edits typed after its first confirmation.
     commands.openPath(movedFile)
     scene.addEntity();scene.selected!!.rename("Keep this new edit")

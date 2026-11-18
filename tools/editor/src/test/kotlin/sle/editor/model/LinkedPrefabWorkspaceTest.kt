@@ -18,7 +18,7 @@ class LinkedPrefabWorkspaceTest {
         assertEquals(2,state.document().prefabInstances.size)
         assertEquals(second,state.parents["$second/child"])
         state.removeSelected();assertEquals(1,state.document().prefabInstances.size)
-        state.undoStructure();assertEquals(2,state.document().prefabInstances.size)
+        state.undo();assertEquals(2,state.document().prefabInstances.size)
         val opened=OpenedProjectDocument(Path.of("scene.scene.json"),ProjectDocumentKind.Scene,state.serialize(),emptyMap(),"revision",state.document().prefabInstances)
         state.openProject(opened)
         assertEquals(2,state.document().prefabInstances.size)

@@ -14,14 +14,14 @@ import kotlinx.serialization.json.*
 import java.nio.file.Files
 import java.nio.file.Path
 
-internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition>) {
+internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition>) : UndoableDocument {
     val inspectorSections = sle.editor.ui.inspector.InspectorSectionState()
     var projectDocument by mutableStateOf<OpenedProjectDocument?>(null)
         private set
     // Installed by the project UI; standalone actions retain their existing behavior.
     var projectFileAction: ((Boolean,Boolean)->Boolean)? = null
     fun openProject(opened: OpenedProjectDocument) {
-        require(opened.kind==ProjectDocumentKind.Prefab) { "Select a project prefab" }
+        require(opened.kind==ProjectDocumentKind.Prefab) { "Select a project entity template" }
         openResolved(opened.source,opened.assets,opened.path)
         projectDocument=opened
     }
@@ -56,7 +56,6 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
     var selectedComponent: String?
         get() = componentSelection
         set(value) { if(componentSelection!=value) endGesture();componentSelection=value }
-    var snap by mutableStateOf(false)
     var document by mutableStateOf(freshDocument())
     private var savedDocument by mutableStateOf<EntityDocument?>(document)
     var assets by mutableStateOf<Map<Path, String>>(emptyMap())
@@ -74,51 +73,77 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
 
     private data class Snapshot(val document: EntityDocument, val assets: Map<Path, String>,
         val drafts: Map<String, String>, val errors: Set<String>)
-    private var past by mutableStateOf<List<Snapshot>>(emptyList())
-    private var future by mutableStateOf<List<Snapshot>>(emptyList())
+    private val ownHistory = History()
+    private var owner: EntityHistoryOwner? = null
+    /** The timeline these edits join: the owning scene's, or this prefab workspace's own. */
+    override val history: History get() = owner?.history ?: ownHistory
+    /** The document whose Undo/Redo applies here: the owning scene, or this prefab workspace. */
+    val timeline: UndoableDocument get() = owner ?: this
+    /** Called by the owning scene for every entity it holds; edits then post to the scene's timeline. */
+    internal fun attachHistory(value: EntityHistoryOwner) { owner = value }
     private var gesture: Snapshot? = null
+    private var gestureLabel: String? = null
     private var gestureToken: Any? = null
     // Invalidates delayed inspector actions at selection/tab/playback boundaries, even without a gesture.
     var editContextVersion = 0L
         private set
     private var numberEditEpoch = 0L
     private val numberEdits = mutableMapOf<Pair<String, NumberOptions>, NumberEdit>()
-    val gestureActive get() = gesture != null
-    val canUndo get() = past.isNotEmpty()
-    val canRedo get() = future.isNotEmpty()
+    override val gestureActive get() = gesture != null
+    /** The active document's timeline (the scene's for scene entities). */
+    val canUndo get() = history.canUndo
+    val canRedo get() = history.canRedo
     private fun snapshot() = Snapshot(document, assets, drafts, fieldErrors)
     private fun restore(value: Snapshot) {
         document = value.document; assets = value.assets; drafts = value.drafts; fieldErrors = value.errors; error = null
     }
-    private fun change(action: () -> Unit) {
+    /** Posts one entity edit. A scene entry resolves its entity by key when applied, so it still
+     * works after the entity was deleted and restored; applying it selects that entity. */
+    private fun post(before: Snapshot, label: String?, mergeKey: Any? = null) {
+        val after = snapshot()
+        if (before == after) return
+        val key = document.key
+        val scene = owner
+        // A stale presenter editing a deleted entity changes nothing in the document.
+        if (scene != null && scene.entity(key) !== this) return
+        // Linear history means the entity is back by the time its edit is undone; if not, skip.
+        fun target() = if (scene == null) this else scene.entity(key)
+        val selection = scene?.historySelection(key)
+        history.record(History.Entry(label ?: describeEntityEdit(before.document, after.document), mergeKey, selection, selection,
+            undo = { target()?.restore(before) }, redo = { target()?.restore(after) }))
+    }
+    private fun change(label: String? = null, mergeKey: Any? = null, action: () -> Unit) {
         if (numberEdits.values.any { it.active }) endGesture()
         val before = snapshot()
         action()
-        if (gesture == null && before != snapshot()) {
-            past = (past + before).takeLast(100)
-            future = emptyList()
-        }
+        if (gesture == null) post(before, label, mergeKey)
     }
-    fun beginGesture() { if (gesture == null) { gesture = snapshot(); gestureToken = Any() } }
+    /** [label] names the step when the edit has no obvious one (the default derives it from the change). */
+    fun beginGesture(label: String? = null) { if (gesture == null) { gesture = snapshot(); gestureLabel = label; gestureToken = Any() } }
     fun endGesture() {
         editContextVersion++
         val before = gesture ?: return
-        gesture = null; gestureToken = null
-        if (before != snapshot()) { past = (past + before).takeLast(100); future = emptyList() }
+        val label = gestureLabel
+        gesture = null; gestureLabel = null; gestureToken = null
+        post(before, label)
     }
-    fun cancelGesture() { editContextVersion++;gesture?.let(::restore); gesture = null; gestureToken = null }
-    fun undo() {
+    fun cancelGesture() { editContextVersion++;gesture?.let(::restore); gesture = null; gestureLabel = null; gestureToken = null }
+    /** Undo during a drag or numeric edit cancels that edit first. Scene entities use the scene's timeline. */
+    override fun undo() {
+        owner?.let { it.undo(); return }
         if (gesture != null) { cancelGesture(); return }
-        if (past.isEmpty()) return
-        future = future + snapshot(); val previous = past.last(); past = past.dropLast(1); restore(previous)
+        history.undo()
     }
-    fun redo() {
-        if (gesture != null || future.isEmpty()) return
-        past = (past + snapshot()).takeLast(100); val next = future.last(); future = future.dropLast(1); restore(next)
+    override fun redo() {
+        owner?.let { it.redo(); return }
+        if (gesture != null) { cancelGesture(); return }
+        history.redo()
     }
-    private fun resetHistory() { editContextVersion++;gesture = null; gestureToken = null; numberEditEpoch++; numberEdits.clear(); past = emptyList(); future = emptyList(); selectedTarget = "Entity"; selectedComponent = null }
-    fun rename(name: String) = change { document = document.copy(name = name); error = null }
-    fun applyGizmo(value: EntityDocument) = change { applyStructure(value) }
+    // Scene entities share the scene's timeline, which the scene clears itself.
+    private fun resetHistory() { editContextVersion++;gesture = null; gestureLabel = null; gestureToken = null; numberEditEpoch++; numberEdits.clear(); ownHistory.clear(); selectedTarget = "Entity"; selectedComponent = null }
+    fun rename(name: String) = change("Rename ${historyName(document)}") { document = document.copy(name = name); error = null }
+    /** Viewport edits; equal [mergeKey]s in quick succession (arrow nudges) merge into one step. */
+    fun applyGizmo(value: EntityDocument, mergeKey: Any? = null) = change(mergeKey = mergeKey) { applyStructure(value) }
 
     // Structural scene operations own their undo record; refresh only changed field drafts.
     fun applyStructure(value: EntityDocument) {
@@ -200,11 +225,11 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
 
     fun importAsset(path: Path): Path {
         val imported = PrefabPackages.importFile(path)
-        change { assets = assets + (imported to path.fileName.toString()); error = null }
+        change("Import ${path.fileName}") { assets = assets + (imported to path.fileName.toString()); error = null }
         return imported
     }
 
-    fun removeAsset(path: Path) = change { assets = assets - path }
+    fun removeAsset(path: Path) = change("Remove ${path.fileName}") { assets = assets - path }
 
     /** Repoints asset fields and listed assets at relocated copies (e.g. after adoption into a
      * project on save). Not an undoable edit: the content is identical, only its location moved. */
@@ -218,7 +243,7 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         savedAssets = savedAssets.entries.associate { (path, name) -> (target(path) ?: path) to name }
     }
 
-    fun addComponent(type: String) = change {
+    fun addComponent(type: String) = change("Add $type") {
         document = document.addComponent(type, editorComponentDefaults(type, catalog.getValue(type).defaults))
         error = null
     }
@@ -226,7 +251,7 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
     fun removeComponent(type: String) {
         endGesture()
         numberEditEpoch++; numberEdits.clear()
-        change {
+        change("Remove $type") {
             if (selectedComponent == type) selectedComponent = null
             if (selectedTarget == type) selectedTarget = "Entity"
             document = document.removeComponent(type)
@@ -236,7 +261,7 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         }
     }
 
-    fun editField(component: String, path: List<String>, template: JsonElement, text: String) = change {
+    fun editField(component: String, path: List<String>, template: JsonElement, text: String) = change(fieldLabel(component, path)) {
         val id = component + "/" + path.joinToString("/")
         drafts = drafts + (id to text)
         try {
@@ -254,7 +279,7 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         error = null
     }
 
-    fun setValue(component: String, path: List<String>, value: JsonElement) = change {
+    fun setValue(component: String, path: List<String>, value: JsonElement) = change(fieldLabel(component, path)) {
         document = document.setValue(component, path, value)
         val id = component + "/" + path.joinToString("/")
         drafts = drafts - id
@@ -279,7 +304,7 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
                 read = { drafts[id] ?: value()?.toString().orEmpty() },
                 start = {
                     if (epoch != numberEditEpoch || value() == null) null else {
-                        endGesture(); beginGesture(); expected = value(); entityKey = document.key
+                        endGesture(); beginGesture(fieldLabel(component, fieldPath)); expected = value(); entityKey = document.key
                         gestureToken
                     }
                 },
@@ -297,6 +322,9 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
             )
         }
     }
+
+    private fun fieldLabel(component: String, path: List<String>) =
+        if (path.isEmpty()) "Edit $component" else "Edit $component ${path.joinToString(".")}"
 
     private fun clearDrafts() {
         drafts = emptyMap()

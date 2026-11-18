@@ -83,7 +83,9 @@ internal fun EditorTooltip(help: String?, modifier: Modifier = Modifier, content
 internal fun EditorButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier,
     enabled: Boolean = true, selected: Boolean = false, primary: Boolean = false, help: String? = null,
     source: MutableInteractionSource = remember { MutableInteractionSource() },
-    style: EditorButtonStyle = if(primary) EditorButtonStyle.Primary else EditorButtonStyle.Secondary) {
+    style: EditorButtonStyle = if(primary) EditorButtonStyle.Primary else EditorButtonStyle.Secondary,
+    /** Smaller only inside a shorter strip, such as the status bar. */
+    minHeight: Dp = LocalEditorMetrics.current.button) {
     val m=LocalEditorMetrics.current
     val hovered by source.collectIsHoveredAsState()
     val pressed by source.collectIsPressedAsState()
@@ -92,7 +94,7 @@ internal fun EditorButton(label: String, onClick: () -> Unit, modifier: Modifier
     EditorTooltip(help,modifier) {
         Box(Modifier.controlChrome(colors,focused)
             .clickable(source,null,enabled,role=Role.Button,onClick=onClick)
-            .heightIn(min=m.button).padding(horizontal=m.controlPadding,vertical=m.controlVerticalPadding),
+            .heightIn(min=minHeight).padding(horizontal=m.controlPadding,vertical=m.controlVerticalPadding),
             contentAlignment=Alignment.Center) {
             Text(label,color=colors.content,style=LocalEditorTypography.current.toolbar,maxLines=1,softWrap=false)
         }
@@ -104,6 +106,15 @@ internal fun EditorToggle(label: String, selected: Boolean, onSelectedChange: (B
     modifier: Modifier = Modifier, enabled: Boolean = true, help: String? = null,
     style: EditorButtonStyle = EditorButtonStyle.Secondary) {
     EditorButton(label,{onSelectedChange(!selected)},modifier.semantics { this.selected=selected },enabled,selected,help=help,style=style)
+}
+
+/** Icon-only toggle (viewport tools, snapping): the selected state uses the control's selected chrome. */
+@Composable
+internal fun EditorIconToggle(label: String, glyph: EditorGlyph, selected: Boolean, onSelectedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true, help: String? = label) {
+    EditorGlyphButton(label,{onSelectedChange(!selected)},modifier.semantics { this.selected=selected },enabled,selected,help) { tint ->
+        EditorGlyphIcon(glyph,tint,size=LocalEditorMetrics.current.icon)
+    }
 }
 
 @Composable
@@ -135,12 +146,29 @@ internal fun EditorGlyphButton(label: String, onClick: () -> Unit, modifier: Mod
     }
 }
 
-/** Small stroked glyphs shared by dock actions, selects, trees and checkboxes. */
-enum class EditorGlyph { Minimize, Detach, Close, ChevronDown, ChevronRight, Check, Plus, Minus, Grip }
+/**
+ * Small glyphs shared by dock actions, selects, trees and checkboxes. Glyphs with an [iconKey] use
+ * the supplied editor icon (`EditorIcons`) as a mask in the state tint; the rest are drawn strokes.
+ */
+enum class EditorGlyph(internal val iconKey: String? = null) {
+    Minimize, Detach, Close, ChevronDown, ChevronRight, ChevronUp, Check, Plus, Minus, Grip,
+    /** Notice levels: drawn in the level's token colour, always beside the notice text. */
+    Info("info"), Success("success"), Warning("warning"), Error("error"),
+    /** Scene view tools and snapping. */
+    ToolSelect("tool_select"), ToolMove("tool_move"), ToolRotate("tool_rotate"), ToolScale("tool_scale"), Snap("snap"),
+    /** Rotate/Scale pivot: the active entity's pivot, or the selection center. */
+    PivotActive("pivot"), PivotCenter("center") }
 
 @Composable
 internal fun EditorGlyphIcon(glyph: EditorGlyph, tint: Color, modifier: Modifier = Modifier,
     size: Dp = LocalEditorMetrics.current.iconSmall) {
+    glyph.iconKey?.let { key ->
+        // The 16px art stays crisp at 100%; larger scales use the 24px art.
+        val pixels=with(androidx.compose.ui.platform.LocalDensity.current) { size.toPx() }
+        val path=sle.editor.ui.EditorIcons.path(key,LocalEditorAppearance.current.mode,if(pixels<=18f) 16 else 24)
+        Icon(androidx.compose.ui.res.painterResource(path),null,modifier.size(size),tint=tint)
+        return
+    }
     Canvas(modifier.size(size)) {
         val w=this.size.width;val h=this.size.height
         val stroke=(1.4f*density).coerceAtLeast(1f)
@@ -159,6 +187,8 @@ internal fun EditorGlyphIcon(glyph: EditorGlyph, tint: Color, modifier: Modifier
             EditorGlyph.Minus -> line(.25f,.5f,.75f,.5f)
             EditorGlyph.Grip -> for(x in listOf(.38f,.62f)) for(y in listOf(.3f,.5f,.7f))
                 drawCircle(tint,stroke*.75f,Offset(x*w,y*h))
+            EditorGlyph.ChevronUp -> { line(.3f,.6f,.5f,.4f);line(.5f,.4f,.7f,.6f) }
+            else -> Unit // Supplied icons, handled above.
         }
     }
 }
@@ -248,9 +278,12 @@ internal fun EditorTextField(value: TextFieldValue, onValueChange: (TextFieldVal
     val hovered by source.collectIsHoveredAsState()
     val shape=RoundedCornerShape(m.controlRadius)
     val style=(if(numeric) t.numeric else t.body).copy(color=if(enabled) c.textPrimary else c.disabledText)
+    // Shortcuts leave plain keys (Delete, arrows, letters) to a focused field.
+    val textFocus=remember { Any() }
+    DisposableEffect(textFocus) { onDispose { sle.editor.workspace.TextInputFocus.report(textFocus,false) } }
     EditorTooltip(help,modifier) {
         BasicTextField(value,onValueChange,Modifier.fillMaxWidth()
-            .onFocusChanged { onFocusChange(it.isFocused) }
+            .onFocusChanged { sle.editor.workspace.TextInputFocus.report(textFocus,it.isFocused);onFocusChange(it.isFocused) }
             .onPreviewKeyEvent {
                 if(it.type!=KeyEventType.KeyDown || !enabled || readOnly) false
                 else when(it.key) { Key.Enter -> {if(singleLine) {onCommit();true} else false};Key.Escape -> {onCancel();true};else -> false }
@@ -438,6 +471,8 @@ internal fun EditorInspectorSection(title: String, expanded: Boolean, onExpanded
 @Composable
 internal fun EditorTreeRow(label: String, selected: Boolean, onClick: () -> Unit,
     modifier: Modifier = Modifier, depth: Int = 0, enabled: Boolean = true, help: String? = null,
+    /** The active row of a multi-selection: an accent marker on its leading edge. */
+    active: Boolean = false,
     leading: @Composable () -> Unit = {}) {
     val source=remember { MutableInteractionSource() }
     val c=LocalEditorColors.current
@@ -447,6 +482,7 @@ internal fun EditorTreeRow(label: String, selected: Boolean, onClick: () -> Unit
     EditorTooltip(help,modifier) {
         Row(Modifier.fillMaxWidth()
             .background(when { selected -> c.selectedBackground;hovered && enabled -> c.hoverBackground;else -> Color.Transparent })
+            .then(if(active) Modifier.drawBehind { drawRect(c.accent,size=size.copy(width=m.tabUnderline.toPx())) } else Modifier)
             .then(if(focused) Modifier.border(m.borderWidth,c.focusRing) else Modifier)
             .semantics { this.selected=selected }
             .clickable(source,null,enabled,role=Role.Button,onClick=onClick)

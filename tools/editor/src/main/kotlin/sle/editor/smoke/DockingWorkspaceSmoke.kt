@@ -74,7 +74,7 @@ internal suspend fun runDockingWorkspaceSmoke(
     println("ACTIVE_DOCK_TAB_VISIBLE_PASS")
     workspace.appearance.update(originalAppearance)
     manager.resetLayout();delay(200)
-    runInteractiveDockingSmoke(home,workspace)
+    runInteractiveDockingSmoke(home,workspace) { toolbarBounds["StatusBar"] }
     manager.showPanel(PanelId("scene"))
     scene.addEntity()
     scene.selected!!.apply {

@@ -13,10 +13,37 @@ internal class EditorWorkspace(
     previewSmoke: Boolean = false,
     val scenePlayback: ScenePlaybackState = ScenePlaybackState(),
     val appearance: sle.editor.ui.theme.EditorAppearanceState = sle.editor.ui.theme.EditorAppearanceState(),
+    /** Snap settings while no project is open (smokes pass a temporary folder). */
+    private val snapStore: sle.editor.viewport.SnapSettingsStore = sle.editor.viewport.SnapSettingsStore(),
 ) : AutoCloseable {
-    val project = ProjectWorkspaceState { root -> windows.switchStorage(root?.let(WorkspaceLayoutKey::project) ?: WorkspaceLayoutKey.standalone()) }
+    /** Results and failures for the status bar; one per editor, shared by every window. */
+    val notices = sle.editor.ui.EditorNotices()
+    val project: ProjectWorkspaceState = ProjectWorkspaceState { root -> windows.switchStorage(root?.let(WorkspaceLayoutKey::project) ?: WorkspaceLayoutKey.standalone());loadSnap() }
     fun startLayoutPersistence() = windows.startPersistence(project.opened?.root?.let(WorkspaceLayoutKey::project) ?: WorkspaceLayoutKey.standalone())
-    private val engine = lazy { EditorEngineSession(smoke, previewSmoke = previewSmoke) }
+    /** Snap steps: per project in `.sle/editor-state.json`, else in user-local prefs ([snapStore]). */
+    val snap: sle.editor.viewport.SnapService = sle.editor.viewport.SnapService().also { service ->
+        service.load(snapStore.load())
+        snapStore.lastFailure?.let(notices::warning)
+        // A change is saved at once: to the open project's `.sle/` state, else to user-local prefs.
+        service.onChange = { value ->
+            val opened = project.opened
+            val failure = if(opened != null)
+                runCatching { sle.editor.project.ProjectFiles.saveEditorState(opened,sle.editor.project.ProjectEditorState(uiScale,snap=value)) }
+                    .exceptionOrNull()?.let { "Could not save snap settings: ${it.message}" }
+            else snapStore.takeUnless { it.save(value) }?.lastFailure
+            failure?.let(notices::warning)
+        }
+    }
+    /** Snap settings follow the open project (its `.sle/` state) or the standalone prefs. Read
+     * failures of the project state are reported by the scene recovery that reads the same file. */
+    private fun loadSnap(): Unit {
+        val opened = project.opened
+        if(opened == null) { snap.load(snapStore.load());snapStore.lastFailure?.let(notices::warning);return }
+        snap.load(sle.editor.project.ProjectFiles.editorState(opened).snap ?: sle.editor.viewport.SnapSettings())
+    }
+    /** The active Scene view tool; per-user state, never an undo step. */
+    val tools = sle.editor.viewport.tools.ViewportToolState()
+    private val engine = lazy { EditorEngineSession(smoke, previewSmoke = previewSmoke, snap = snap, tools = tools) }
     val engineSession get() = engine.value
     private var tab by mutableStateOf(2)
     var selectedTab: Int
@@ -44,7 +71,7 @@ internal class EditorWorkspace(
     })
     val sceneDocument get() = selectedTab != 0 || linkedEntity != null
     fun saveProjectEditorState(): Boolean = try {
-        project.opened?.let { sle.editor.project.ProjectFiles.saveEditorState(it,sle.editor.project.ProjectEditorState(uiScale)) }
+        project.opened?.let { sle.editor.project.ProjectFiles.saveEditorState(it,sle.editor.project.ProjectEditorState(uiScale,snap=snap.settings)) }
         true
     } catch(failure: Exception) {
         project.error="Could not save local editor state: ${failure.message}"

@@ -36,11 +36,11 @@ class GizmoTest {
         val shape=GizmoShape.from(doc,"SpriteRenderer")!!
         val handle=GizmoMath.handles(shape).first { it.x==1 && it.y==1 }
         val start=GizmoMath.handleWorld(shape,handle)
-        val changed=GizmoMath.drag(doc,"SpriteRenderer",handle,start,shape.world(Vec2(1.0,1.0)),false)
+        val changed=GizmoMath.drag(doc,"SpriteRenderer",handle,start,shape.world(Vec2(1.0,1.0)))
         assertEquals(doc.components["Transform"],changed.components["Transform"])
         assertEquals(doc.components["BoxCollider"],changed.components["BoxCollider"])
         assertTrue(GizmoShape.from(changed,"SpriteRenderer")!!.size.x>1.0)
-        val moved=GizmoMath.drag(changed,"SpriteRenderer",GizmoHandle("move",shape.offset),start,start+Vec2(1.0,0.0),false)
+        val moved=GizmoMath.drag(changed,"SpriteRenderer",GizmoHandle("move",shape.offset),start,start+Vec2(1.0,0.0))
         assertEquals(doc.components["Transform"],moved.components["Transform"])
         assertEquals(doc.components["BoxCollider"],moved.components["BoxCollider"])
         assertNotEquals(shape.offset,GizmoShape.from(moved,"SpriteRenderer")!!.offset)
@@ -89,7 +89,7 @@ class GizmoTest {
         val shape = GizmoShape.from(doc, "BoxCollider")!!
         val oldOpposite = shape.world(Vec2(-1.0, -2.0))
         val handle = GizmoHandle("size", Vec2(1.0, 2.0), 1, 1)
-        val changed = GizmoMath.drag(doc, "BoxCollider", handle, shape.world(Vec2(1.0, 2.0)), shape.world(Vec2(2.0, 3.0)), false)
+        val changed = GizmoMath.drag(doc, "BoxCollider", handle, shape.world(Vec2(1.0, 2.0)), shape.world(Vec2(2.0, 3.0)))
         val resized = GizmoShape.from(changed, "BoxCollider")!!
         val actual = resized.world(resized.offset - resized.size * 0.5)
         assertEquals(oldOpposite.x, actual.x, 1e-8)
@@ -101,11 +101,11 @@ class GizmoTest {
     @Test fun colliderMovementUsesLocalOffsetAndCircleUsesMaximumScale() {
         val doc = document()
         val shape = GizmoShape.from(doc, "CircleCollider")!!
-        val moved = GizmoMath.drag(doc, "CircleCollider", GizmoHandle("move", Vec2(0.0, 0.0)), shape.position, shape.position + Vec2(3.0, 2.0), false)
+        val moved = GizmoMath.drag(doc, "CircleCollider", GizmoHandle("move", Vec2(0.0, 0.0)), shape.position, shape.position + Vec2(3.0, 2.0))
         val offset = GizmoShape.from(moved, "CircleCollider")!!.offset
         assertEquals(1.0, offset.x, 1e-8)
         assertEquals(1.0, offset.y, 1e-8)
-        val radius = GizmoMath.drag(doc, "CircleCollider", GizmoHandle("radius", Vec2(0.0, 0.0),1,0), shape.position+Vec2(3.0,0.0), shape.position + Vec2(6.0, 0.0), false)
+        val radius = GizmoMath.drag(doc, "CircleCollider", GizmoHandle("radius", Vec2(0.0, 0.0),1,0), shape.position+Vec2(3.0,0.0), shape.position + Vec2(6.0, 0.0))
         assertEquals(2.0, GizmoShape.from(radius, "CircleCollider")!!.radius, 1e-8)
     }
 
@@ -115,21 +115,21 @@ class GizmoTest {
             val shape=GizmoShape.from(doc,target)!!
             val handle=GizmoMath.handles(shape).last()
             val grab=GizmoMath.handleWorld(shape,handle)+Vec2(0.08,0.05)
-            val unchanged=GizmoMath.drag(doc,target,handle,grab,grab,false)
+            val unchanged=GizmoMath.drag(doc,target,handle,grab,grab)
             val actual=GizmoShape.from(unchanged,target)!!
             assertEquals(shape.radius,actual.radius,1e-8)
             assertEquals(shape.size.x,actual.size.x,1e-8)
             assertEquals(shape.size.y,actual.size.y,1e-8)
             val handleCenter=GizmoMath.handleWorld(shape,handle)
             val delta=Vec2(0.01,0.02)
-            val centered=GizmoShape.from(GizmoMath.drag(doc,target,handle,handleCenter,handleCenter+delta,false),target)!!
-            val offsetGrab=GizmoShape.from(GizmoMath.drag(doc,target,handle,grab,grab+delta,false),target)!!
+            val centered=GizmoShape.from(GizmoMath.drag(doc,target,handle,handleCenter,handleCenter+delta),target)!!
+            val offsetGrab=GizmoShape.from(GizmoMath.drag(doc,target,handle,grab,grab+delta),target)!!
             assertEquals(centered.radius,offsetGrab.radius,1e-8)
             assertEquals(centered.size.x,offsetGrab.size.x,1e-8)
             assertEquals(centered.size.y,offsetGrab.size.y,1e-8)
         }
         val zero=doc.setValue("Transform",listOf("scale","x"),JsonPrimitive(0.0))
-        assertEquals(zero,GizmoMath.drag(zero,"BoxCollider",GizmoHandle("size",Vec2(1.0,1.0),1,1),Vec2(0.0,0.0),Vec2(4.0,4.0),false))
+        assertEquals(zero,GizmoMath.drag(zero,"BoxCollider",GizmoHandle("size",Vec2(1.0,1.0),1,1),Vec2(0.0,0.0),Vec2(4.0,4.0)))
         val tiny=doc.setValue("Transform",listOf("scale"),buildJsonObject { put("x",0.000001); put("y",0.000002) })
         assertEquals(0.0001,GizmoShape.from(tiny,"CircleCollider")!!.worldRadius,1e-9)
     }

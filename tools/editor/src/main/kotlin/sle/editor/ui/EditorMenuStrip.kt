@@ -12,31 +12,18 @@ import kotlin.math.roundToInt
 import javax.swing.event.MenuEvent
 import javax.swing.event.MenuListener
 import javax.swing.plaf.basic.BasicMenuBarUI
-import sle.editor.model.EntityWorkspaceState
-import sle.editor.model.SceneWorkspaceState
+import sle.editor.command.*
 
 /** Install a real window menu bar, including native menu traversal and Alt mnemonics. */
 @Composable
 internal fun EditorMenuStrip(
     groups: List<Pair<String,List<EditorMenuEntry>>>,window: JFrame,title: String,
     onMenuBounds: (String,Rect)->Unit={_,_->},
-    shortcutWindows: ()->Collection<java.awt.Window> = { listOf(window) },
 ) {
     val editorAppearance=sle.editor.ui.theme.LocalEditorAppearance.current
     val appearance=MenuAppearance.of(editorAppearance.mode,editorAppearance.density,editorAppearance.scale)
     val currentGroups by rememberUpdatedState(groups)
     val currentBounds by rememberUpdatedState(onMenuBounds)
-    val currentWindows by rememberUpdatedState(shortcutWindows)
-    DisposableEffect(window) {
-        val focus=java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
-        val shortcut=SaveShortcut(
-            { event -> javax.swing.SwingUtilities.getWindowAncestor(event.component) in currentWindows() },
-            { java.awt.Window.getWindows().any { it is java.awt.Dialog && it.isModal && it.isVisible } },
-            { currentGroups.firstOrNull { it.first=="File" }?.second?.firstOrNull { it.label=="Save" } },
-        )
-        focus.addKeyEventDispatcher(shortcut)
-        onDispose { focus.removeKeyEventDispatcher(shortcut) }
-    }
     val titleLabel=remember(appearance) { JLabel().apply {
         isOpaque=true;background=appearance.surface
         foreground=appearance.secondary;font=appearance.secondaryFont
@@ -103,58 +90,66 @@ internal fun EditorMenuStrip(
     }
 }
 
+/** The window menus. Command entries take label, enabled state and shortcut from the registry. */
 internal fun editorApplicationMenus(
-    scene: SceneWorkspaceState?,entity: EntityWorkspaceState?,prefab: EntityWorkspaceState?,
-    entityMode: Boolean,linked: Boolean,editable: Boolean,
-    onScene: (Boolean)->Unit,onEntity: (String?)->Unit,onFit: ()->Unit,
+    ctx: CommandContext,
     onScale: (Float)->Unit,onExit: ()->Unit,projectEntries: List<EditorMenuEntry> = emptyList(),assetEntries: List<EditorMenuEntry> = emptyList(),projectAssets: sle.editor.project.assets.ProjectAssetCommands?=null,projectDocuments: sle.editor.project.ProjectDocumentCommands?=null,
     onTheme: (sle.editor.ui.theme.EditorThemeMode)->Unit = {},
     onDensity: (sle.editor.ui.theme.EditorDensity)->Unit = {},
-    projectCommands: sle.editor.project.ProjectCommands? = null,projectBusy: Boolean=false,
+    keymap: Keymap = standardKeymap,
 ): List<Pair<String,List<EditorMenuEntry>>> {
-    fun attempt(action: ()->Unit) { try { action() } catch(failure: Exception) { if(entityMode && !linked) entity?.error=failure.message else scene?.error=failure.message } }
-    val sceneDocument=!entityMode || linked
-    fun save(saveAs: Boolean) { if(sceneDocument) scene?.let { sceneFileAction(it,true,saveAs) } else entity?.let { entityFileAction(it,true,saveAs) } }
-    val creation=if(entityMode) entity?.let { entityCreationMenu(it,linked,projectAssets) } ?: emptyList() else scene?.let { sceneCreationMenu(it,editable,onEditEntity={ key -> onEntity(key) }) } ?: emptyList()
+    fun entry(command: EditorCommand) = command.menuEntry(ctx,keymap)
+    val entityMode=ctx.mode==sle.editor.viewport.ViewportMode.Entity
+    val scene=ctx.scene;val entity=ctx.entity
+    val creation=if(entityMode) entity?.let { entityCreationMenu(it,ctx.linked,projectAssets) } ?: emptyList() else scene?.let { sceneCreationMenu(it,ctx.editable,onEditEntity=ctx.actions::editEntity) } ?: emptyList()
+    val files=ctx.editable && !ctx.projectBusy
     return listOf(
         "File" to projectEntries + listOf(
-            EditorMenuEntry("New",editable && !projectBusy,listOfNotNull(
-                projectCommands?.let { EditorMenuEntry("Project…",action=it.create) },
-                EditorMenuEntry("Scene") { scene?.let { if(confirmDiscardScene(it)) { it.newScene();onScene(false) } } },
-                EditorMenuEntry("Prefab") { prefab?.let { if(confirmDiscard(it)) { it.newDocument();onEntity(null) } } },
+            EditorMenuEntry("New",files,listOfNotNull(
+                ctx.actions.project?.let { entry(DocumentCommands.newProject) },
+                entry(DocumentCommands.newScene),entry(DocumentCommands.newPrefab),
             )),
-            EditorMenuEntry("Open",editable && !projectBusy,listOfNotNull(
-                projectCommands?.let { EditorMenuEntry("Project…",action=it.open) },
-                EditorMenuEntry("Scene…") { scene?.let { if(sceneFileAction(it,false)) onScene(false) else if(entityMode) entity?.error=it.error } },
-                EditorMenuEntry("Prefab…") { prefab?.let { if(entityFileAction(it,false)) onEntity(null) else if(sceneDocument) scene?.error=it.error } },
+            EditorMenuEntry("Open",files,listOfNotNull(
+                ctx.actions.project?.let { entry(DocumentCommands.openProject) },
+                entry(DocumentCommands.openScene),entry(DocumentCommands.openPrefab),
             )),
-            EditorMenuEntry("Save",editable && !projectBusy && (!entityMode || entity!=null)) { save(false) },
-            EditorMenuEntry("Save As…",editable && !projectBusy && (!entityMode || entity!=null)) { save(true) },
-            EditorMenuEntry("Export Package…",editable && projectDocuments!=null) { projectDocuments?.exportPackage(if(sceneDocument) sle.editor.project.ProjectDocumentKind.Scene else sle.editor.project.ProjectDocumentKind.Prefab) },
+            entry(DocumentCommands.save),
+            entry(DocumentCommands.saveAs),
+            EditorMenuEntry("Export Package…",ctx.editable && projectDocuments!=null) { projectDocuments?.exportPackage(if(ctx.sceneDocument) sle.editor.project.ProjectDocumentKind.Scene else sle.editor.project.ProjectDocumentKind.Prefab) },
+            EditorMenuEntry.Separator,
             EditorMenuEntry("Exit",action=onExit),
         ),
         "Edit" to listOf(
-            EditorMenuEntry("Undo",editable && entity?.canUndo==true) { entity?.undo() },
-            EditorMenuEntry("Redo",editable && entity?.canRedo==true) { entity?.redo() },
-            EditorMenuEntry("Scene Undo",editable && sceneDocument && scene?.canUndoStructure==true) { attempt { scene?.undoStructure() } },
-            EditorMenuEntry("Scene Redo",editable && sceneDocument && scene?.canRedoStructure==true) { attempt { scene?.redoStructure() } },
-            EditorMenuEntry("Edit Entity",editable && sceneDocument && scene?.selected!=null) { scene?.selectedKey?.let(onEntity) },
-            EditorMenuEntry("Duplicate Subtree",editable && sceneDocument && scene?.selected!=null) { attempt { scene?.duplicateSelected() } },
-            EditorMenuEntry("Delete Entity",editable && sceneDocument && scene?.selected!=null) { attempt { scene?.let { deleteSceneSelection(it,editable) } } },
-            EditorMenuEntry("Apply Changes to Prefab",editable && sceneDocument && scene?.let(::canApplyToPrefab)==true) { attempt { scene?.let(::applySelectionToPrefab) } },
+            EditCommands.undo.menuEntry(ctx,keymap,EditCommands.undoLabel(ctx)),EditCommands.redo.menuEntry(ctx,keymap,EditCommands.redoLabel(ctx)),
+            EditorMenuEntry.Separator,
+            entry(EditCommands.selectAll),entry(EditCommands.editEntity),entry(EditCommands.duplicate),entry(EditCommands.delete),entry(EditCommands.applyToPrefab),
+            EditorMenuEntry.Separator,
+            entry(PlayCommands.play),entry(PlayCommands.pause),entry(PlayCommands.stop),entry(PlayCommands.runProject),
         ),
         "Create" to creation.flatMap { when(it.label) { "Create" -> it.children.map { child -> child.copy(enabled=it.enabled && child.enabled) };"Add Component","Import" -> listOf(it);else -> emptyList() } },
         "View" to listOf(
-            EditorMenuEntry("Scene") { onScene(false) },EditorMenuEntry("Game") { onScene(true) },
-            EditorMenuEntry("Prefab Workspace",editable) { onEntity(null) },
-            EditorMenuEntry("Fit",editable,action=onFit),
+            EditorMenuEntry("Scene") { ctx.actions.showScene(false) },EditorMenuEntry("Game") { ctx.actions.showScene(true) },
+            EditorMenuEntry("Entity Template Workspace",ctx.editable) { ctx.actions.openPrefabWorkspace() },
+            entry(ViewCommands.fit),entry(sle.editor.command.ToolCommands.frameSelected),
+            EditorMenuEntry.Separator,
             EditorMenuEntry("Appearance",children=sle.editor.ui.theme.EditorThemeMode.entries.map { mode -> EditorMenuEntry(mode.name) { onTheme(mode) } }),
             EditorMenuEntry("Density",children=sle.editor.ui.theme.EditorDensity.entries.map { density -> EditorMenuEntry(density.name) { onDensity(density) } }),
             EditorMenuEntry("UI Scale",children=listOf(0.75f,0.85f,1f).map { scale -> EditorMenuEntry("${(scale*100).toInt()}%") { onScale(scale) } }),
         ) + assetEntries,
+        "Tools" to sle.editor.command.ToolCommands.tools.map(::entry) + listOf(
+            EditorMenuEntry.Separator,
+            sle.editor.command.ToolCommands.toggleSnap.menuEntry(ctx,keymap,sle.editor.command.ToolCommands.toggleSnapLabel(ctx)),
+            entry(sle.editor.command.ToolCommands.configureSnap),
+            sle.editor.command.ToolCommands.togglePivot.menuEntry(ctx,keymap,sle.editor.command.ToolCommands.togglePivotLabel(ctx)),
+        ),
         "Help" to listOf(
-            EditorMenuEntry("Controls…") { EditorDialogs.showMessageDialog(null,"Scene: middle-drag or Alt+left-drag to pan; wheel to zoom.\nSelect an entity to edit it in the Inspector; right-click it to add components.\nDrag an entity onto an Assets folder to save it as a linked prefab; double-click a prefab to edit it.\nDrag handles to edit; Shift snaps; Escape cancels.\nCtrl+S saves the active scene or prefab.\nCtrl+Z / Ctrl+Y undo and redo entity edits.\nGame shows the active camera. Play runs the scene; Pause freezes it.\nStop discards runtime changes. Click Game to focus input.","Editor Controls",JOptionPane.INFORMATION_MESSAGE) },
-            EditorMenuEntry("About SLE Editor…") { EditorDialogs.showMessageDialog(null,"SLE Editor\nKotlin Compose Desktop · SLE native renderer\nScene and prefab authoring", "About",JOptionPane.INFORMATION_MESSAGE) },
+            entry(ViewCommands.keyboardShortcuts),
+            EditorMenuEntry("About SLE Editor…") { EditorDialogs.showMessageDialog(null,"SLE Editor\nKotlin Compose Desktop · SLE native renderer\nScene and entity template authoring", "About",JOptionPane.INFORMATION_MESSAGE) },
         ),
     )
+}
+
+/** Help → Keyboard Shortcuts, generated from the command registry. */
+internal fun showKeyboardShortcuts(keymap: Keymap = standardKeymap) {
+    EditorDialogs.showMessageDialog(null,JLabel(keyboardShortcutsHtml(keymap)),"Keyboard Shortcuts",JOptionPane.PLAIN_MESSAGE)
 }

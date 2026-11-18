@@ -77,6 +77,9 @@ class NumberEditTest {
         val scene=SceneWorkspaceState(state().catalog);scene.addEntity();val first=scene.selected!!
         val edit=number(first);edit.focus();edit.input("7");scene.addEntity();val second=scene.selected!!
         edit.input("99");edit.cancel()
-        assertEquals(7.0,value(first));assertEquals(0.0,value(second));first.undo();assertEquals(0.0,value(first))
+        assertEquals(7.0,value(first));assertEquals(0.0,value(second))
+        // One scene timeline: the later Create is undone first, then the committed edit.
+        first.undo();assertEquals(listOf(first),scene.entities);assertEquals(7.0,value(first))
+        first.undo();assertEquals(0.0,value(first))
     }
 }

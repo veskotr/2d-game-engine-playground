@@ -14,6 +14,12 @@ window, including native viewport focus. In a project it saves the project docum
 a new document opens the normal Save chooser. Playback, modal dialogs and busy
 project operations block saving.
 
+All shortcuts go through one dispatcher (`command/ShortcutDispatcher.kt`) over the
+command registry; **Help → Keyboard Shortcuts** lists them. Scoped commands such as
+Delete and Ctrl+D need focus in their panel: each dock tab group reports Compose
+focus-within, and the native canvas registers its panel with `WorkspaceFocus`, so this
+works the same in detached windows.
+
 ## Arrange panels
 
 - Drag a panel tab along a tab row to reorder or insert it into another group.

@@ -101,8 +101,9 @@ private fun launchEditor(args: Array<String>) = application {
     val menuSmoke="--context-menu-smoke" in args
     val cameraSmoke="--camera-smoke" in args
     val appearanceSmoke="--editor-appearance-smoke" in args
+    val walkSmoke="--l1-walk-smoke" in args
     val previewSmoke=authoringUiSmoke || switchingSmoke
-    val testing=layoutPhase || dockingSmoke || sandboxSmoke || previewSmoke || gizmoSmoke || sceneSmoke || cameraSmoke || menuSmoke || projectSmoke || assetSmoke || documentSmoke || runtimeSmoke || appearanceSmoke
+    val testing=layoutPhase || dockingSmoke || sandboxSmoke || previewSmoke || gizmoSmoke || sceneSmoke || cameraSmoke || menuSmoke || projectSmoke || assetSmoke || documentSmoke || runtimeSmoke || appearanceSmoke || walkSmoke
     val windowState=rememberWindowState(width=1280.dp,height=900.dp)
     val authoring=remember {
         runCatching { EntityWorkspaceState(readComponentCatalog()).apply {
@@ -130,8 +131,8 @@ private fun launchEditor(args: Array<String>) = application {
     val assetBounds=remember { mutableMapOf<String,androidx.compose.ui.geometry.Rect>() }
     var projectActions by remember { mutableStateOf<ProjectCommands?>(null) }
     val scene=remember { authoring.map { workspace -> SceneWorkspaceState(workspace.catalog).apply {
-        if(sceneSmoke || menuSmoke || dockingSmoke) createStarterScene(this,workspace.catalog,java.nio.file.Path.of(System.getProperty("sle.smokeReport")).parent)
-        if(cameraSmoke) createCameraScene(this,workspace.catalog,java.nio.file.Path.of(System.getProperty("sle.smokeReport")).parent)
+        if(sceneSmoke || menuSmoke || dockingSmoke || gizmoSmoke) createStarterScene(this,workspace.catalog,java.nio.file.Path.of(System.getProperty("sle.smokeReport")).parent)
+        if(cameraSmoke || walkSmoke) createCameraScene(this,workspace.catalog,java.nio.file.Path.of(System.getProperty("sle.smokeReport")).parent)
     } } }
     val workspace=remember { EditorWorkspace(authoring,scene,sandboxSmoke,previewSmoke,
         appearance=sle.editor.ui.theme.EditorAppearanceState(
@@ -139,10 +140,15 @@ private fun launchEditor(args: Array<String>) = application {
                 // Smoke-only: -Dsle.smokeTheme=Light captures the real editor in the light theme.
                 System.getProperty("sle.smokeTheme")?.let { mode -> store.save(sle.editor.ui.theme.EditorAppearance(mode=sle.editor.ui.theme.EditorThemeMode.valueOf(mode))) }
             }
-            else sle.editor.ui.theme.EditorAppearanceStore())) }
+            else sle.editor.ui.theme.EditorAppearanceStore()),
+        snapStore=if(testing) sle.editor.viewport.SnapSettingsStore(java.nio.file.Files.createTempDirectory("sle-smoke-snap")) else sle.editor.viewport.SnapSettingsStore()) }
     remember { if(!testing || dockingSmoke || layoutPhase) workspace.startLayoutPersistence();true }
     val appearance=workspace.appearance.value
-    SideEffect { workspace.engineSession.owner.editorSelectionColor=sle.editor.ui.theme.editorColors(appearance.mode).selectionOutline }
+    SideEffect {
+        val colors=sle.editor.ui.theme.editorColors(appearance.mode)
+        workspace.engineSession.owner.editorSelectionColor=colors.selectionOutline
+        workspace.engineSession.owner.editorAxisColors=colors.viewportXAxis to colors.viewportYAxis
+    }
     LaunchedEffect(appearance) { sle.editor.ui.theme.applyEditorSwingAppearance(appearance) }
     val appIcon=androidx.compose.ui.res.painterResource("sle/editor/branding/sle-256.png")
     val project=workspace.project
@@ -171,6 +177,7 @@ private fun launchEditor(args: Array<String>) = application {
     DisposableEffect(engineSession) { onDispose { java.awt.EventQueue.invokeLater { workspace.close() } } }
     var saveActive by remember { mutableStateOf<(() -> Unit)?>(null) }
     var canvas by remember { mutableStateOf<EngineCanvas?>(null) }
+    var snapDialog by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Preparing engine viewport…") }
 
     var ready by remember { mutableStateOf(false) }
@@ -218,7 +225,7 @@ private fun launchEditor(args: Array<String>) = application {
                     state.addSprite(path.toAbsolutePath().toString().replace('\\','/'),name.substringBeforeLast('.'),
                         sle.editor.viewport.Vec2((image?.width ?: 32).toDouble(),(image?.height ?: 32).toDouble()),world)
                 }
-                else -> { state.error="Drop a prefab or an image into the scene";return }
+                else -> { state.error="Drop an entity template or an image into the scene";return }
             }
         } catch(failure: Exception) { state.error=failure.message ?: "Could not add $name";return }
         if(mode!=ViewportMode.Scene) { editingSceneKey=null;showScene(false) }
@@ -227,10 +234,10 @@ private fun launchEditor(args: Array<String>) = application {
     fun dropEntity(folder: java.nio.file.Path,payload: sle.editor.ui.EntityDragPayload) {
         val state=scene.getOrNull() ?: return
         when {
-            !scenePlayback.editing -> state.error="Stop the game before creating prefabs"
+            !scenePlayback.editing -> state.error="Stop the game before creating entity templates"
             state.key!=payload.sceneKey || state.file!=payload.file || state.entities.none { it.document.key==payload.entityKey } ->
                 state.error="The scene changed during the drag; drag the entity again"
-            else -> { canvas?.finishGesture();state.projectCreatePrefab?.invoke(payload.entityKey,folder) ?: run { state.error="Open a project to create prefabs" } }
+            else -> { canvas?.finishGesture();state.projectCreatePrefab?.invoke(payload.entityKey,folder) ?: run { state.error="Open a project to create entity templates" } }
         }
     }
     fun entityPayload(key: String)=scene.getOrNull()?.let { state ->
@@ -259,7 +266,7 @@ private fun launchEditor(args: Array<String>) = application {
         }
     }
     val watchdog=remember {
-        if (testing) Timer(if(documentSmoke) 150_000 else if(distributionSmoke || dockingSmoke || appearanceSmoke) 90_000 else 30_000) {
+        if (testing) Timer(if(documentSmoke || walkSmoke) 150_000 else if(distributionSmoke || dockingSmoke || appearanceSmoke) 90_000 else 30_000) {
             System.err.println("EDITOR_SMOKE_FAIL: viewport timed out")
             exitProcess(1)
         }.apply { isRepeats=false; start() } else null
@@ -304,7 +311,7 @@ private fun launchEditor(args: Array<String>) = application {
                     window.isAlwaysOnTop=true;window.toFront()
                     while(readyFrames<5 || projectActions==null) delay(30)
                     sle.editor.smoke.runProjectRuntimeSmoke(window,{canvas ?: error("Viewport missing")},project,projectActions!!,
-                        {observedAssets},assetBounds,projectFields,scene.getOrThrow(),scenePlayback,distributionSmoke)
+                        {observedAssets},assetBounds,projectFields,scene.getOrThrow(),scenePlayback,workspace.notices,distributionSmoke)
                     watchdog?.stop();exitApplication()
                 } catch(failure: Throwable) { canvas?.stopRendering();failure.printStackTrace();exitProcess(1) }
             }
@@ -313,7 +320,7 @@ private fun launchEditor(args: Array<String>) = application {
                     window.isAlwaysOnTop=true;window.toFront()
                     while(readyFrames<5 || projectActions==null) delay(30)
                     sle.editor.smoke.runEditorAppearanceSmoke(window,{canvas ?: error("Viewport missing")},project,projectActions!!,
-                        {observedAssets},scene.getOrThrow(),scenePlayback,workspace,::editSceneEntity,::showScene)
+                        {observedAssets},scene.getOrThrow(),scenePlayback,workspace,::editSceneEntity,::showScene) { shellBounds["StatusBar"] }
                     watchdog?.stop();exitApplication()
                 } catch(failure: Throwable) { canvas?.stopRendering();failure.printStackTrace();exitProcess(1) }
             }
@@ -322,7 +329,7 @@ private fun launchEditor(args: Array<String>) = application {
                     window.isAlwaysOnTop=true;window.toFront()
                     while(readyFrames<5 || projectActions==null) delay(30)
                     sle.editor.smoke.runProjectDocumentsSmoke(window,{canvas ?: error("Viewport missing")},project,projectActions!!,
-                        {observedDocumentCommands},{observedAssets},assetBounds,scene.getOrThrow(),authoring.getOrThrow(),scenePlayback)
+                        {observedDocumentCommands},{observedAssets},assetBounds,scene.getOrThrow(),authoring.getOrThrow(),scenePlayback,workspace.notices)
                     sle.editor.smoke.runPrefabWorkflowSmoke(window,{canvas ?: error("Viewport missing")},project,{observedDocumentCommands},
                         assetBounds,treeNodeBounds,scene.getOrThrow(),authoring.getOrThrow(),workspace)
                     watchdog?.stop();exitApplication()
@@ -340,7 +347,7 @@ private fun launchEditor(args: Array<String>) = application {
                 try {
                     window.isAlwaysOnTop=true;window.toFront()
                     while(readyFrames<5 || projectActions==null) delay(30)
-                    runProjectSmoke(window,project,projectActions!!,scene.getOrThrow(),projectFields,{observedDocumentCommands}) { mode -> workspace.appearance.update(workspace.appearance.value.copy(mode=mode)) }
+                    runProjectSmoke(window,project,projectActions!!,scene.getOrThrow(),projectFields,{observedDocumentCommands},{ mode -> workspace.appearance.update(workspace.appearance.value.copy(mode=mode)) },workspace.notices)
                     watchdog?.stop();exitApplication()
                 } catch(failure: Throwable) { canvas?.stopRendering();failure.printStackTrace();exitProcess(1) }
             }
@@ -349,6 +356,14 @@ private fun launchEditor(args: Array<String>) = application {
                     window.isAlwaysOnTop=true;window.toFront()
                     while(readyFrames<5) delay(50)
                     runContextMenuSmoke(window,{canvas ?: error("Viewport missing")},scene.getOrThrow(),treeNodeBounds,{entityMenuBounds[0]},shellBounds,workspace)
+                    watchdog?.stop();exitApplication()
+                } catch(failure: Throwable) { canvas?.stopRendering();failure.printStackTrace();exitProcess(1) }
+            }
+            if(walkSmoke) {
+                try {
+                    window.isAlwaysOnTop=true;window.toFront()
+                    while(readyFrames<5) delay(50)
+                    sle.editor.smoke.runL1WalkSmoke(window,scene.getOrThrow(),workspace,treeNodeBounds,shellBounds)
                     watchdog?.stop();exitApplication()
                 } catch(failure: Throwable) { canvas?.stopRendering();failure.printStackTrace();exitProcess(1) }
             }
@@ -387,9 +402,9 @@ private fun launchEditor(args: Array<String>) = application {
                     }
                     ImageIO.write(Robot().createScreenCapture(Rectangle(window.locationOnScreen,window.size)),"png",
                         File(System.getProperty("sle.smokeReport")).parentFile.resolve("scene-tree-window.png"))
-                    runSceneSmoke(canvas ?: error("Viewport missing"),scene.getOrThrow()) { key ->
+                    runSceneSmoke(canvas ?: error("Viewport missing"),scene.getOrThrow(),workspace.notices,{ key ->
                         clickUi(treeNodeBounds[key] ?: error("Tree node not laid out: $key"))
-                    }
+                    },workspace.tools,workspace.snap)
                     val beforeScale=scene.getOrThrow().serialize()
                     for(value in listOf(1.0f,0.75f,0.85f)) {
                         val frame=readyFrames
@@ -449,7 +464,11 @@ private fun launchEditor(args: Array<String>) = application {
                 try {
                     window.isAlwaysOnTop=true; window.toFront()
                     while (readyFrames < 5) delay(50)
-                    runGizmoSmoke(canvas ?: error("Viewport missing"),authoring.getOrThrow())
+                    runGizmoSmoke(canvas ?: error("Viewport missing"),authoring.getOrThrow(),workspace.snap)
+                    // Rotate and Scale are Scene view tools (the prefab tab keeps its shape handles).
+                    selectedTab=2
+                    while(lastRenderedMode!=ViewportMode.Scene || canvas?.authoringReady()!=true) delay(30)
+                    sle.editor.smoke.runTransformToolsSmoke(canvas ?: error("Viewport missing"),scene.getOrThrow(),workspace.tools,workspace.snap)
                     watchdog?.stop(); exitApplication()
                 } catch (failure: Throwable) { canvas?.stopRendering(); failure.printStackTrace(); exitProcess(1) }
             }
@@ -507,17 +526,65 @@ private fun launchEditor(args: Array<String>) = application {
                     else { editingSceneKey=null;switchTab(0) }
                 })
             SideEffect { if(documentSmoke || projectSmoke) observedDocumentCommands=documents }
-            val distribution=sle.editor.project.projectDistributionControls(project)
+            val notices=workspace.notices
+            val distribution=sle.editor.project.projectDistributionControls(project,notices)
             val runProject=sle.editor.project.projectRunAction(project,scenePlayback) { canvas?.finishGesture();editingSceneKey=null;showScene(true) }
             val assetCommands=projectAssetControls(project,assets,window,canMutate={
                 scenePlayback.editing && scene.getOrNull()?.let { it.file==null && !it.dirty && it.entities.isEmpty() && it.allAssets().isEmpty() }!=false &&
                     authoring.getOrNull()?.let { it.file==null && !it.dirty && it.assets.isEmpty() }!=false
             })
             SideEffect { if(assetSmoke) observedAssetCommands=assetCommands }
-            CompositionLocalProvider(LocalProjectAssets provides assetCommands) {
+            CompositionLocalProvider(LocalProjectAssets provides assetCommands,sle.editor.ui.LocalEditorNotices provides notices) {
             val editorMenuHandler=editorMenuLauncher {
                 if(mode==ViewportMode.Scene) scene.getOrNull()?.let { sceneCreationMenu(it,scenePlayback.editing,onEditEntity={ key -> editSceneEntity(key) },position=engineSession.owner.contextPosition) } ?: emptyList()
                 else activeEntity?.let { entityCreationMenu(it,linkedEntity!=null,assetCommands) } ?: emptyList()
+            }
+            // One command context for menus, toolbar actions and the keyboard dispatcher.
+            val showSceneView: (Boolean)->Unit=::showScene
+            val editorActions=remember { object: sle.editor.command.EditorActions {
+                var projectCommands: ProjectCommands?=null
+                var run: ()->Unit={}
+                override val project get()=projectCommands
+                override fun showScene(game: Boolean)=showSceneView(game)
+                override fun openPrefabWorkspace() { editingSceneKey=null;switchTab(0) }
+                override fun editEntity(key: String)=editSceneEntity(key)
+                override fun showPanel(panel: PanelId)=manager.showPanel(panel)
+                override fun finishGesture() { canvas?.finishGesture() }
+                override fun fit() { canvas?.fitEntity() }
+                override fun frameSelected() {
+                    val state=scene.getOrNull() ?: return
+                    val bounds=state.selection.keys.filter { state.entity(it)!=null }
+                        .mapNotNull { sle.editor.viewport.entityWorldBounds(state.worldDocument(it)) }.reduceOrNull { a,b -> a.union(b) } ?: return
+                    canvas?.frameBounds(bounds)
+                }
+                override fun configureSnap() { snapDialog=true }
+                override fun runProject()=run()
+                override fun showKeyboardShortcuts()=sle.editor.ui.showKeyboardShortcuts()
+            } }
+            SideEffect { editorActions.projectCommands=commands;editorActions.run=runProject }
+            val commandContext={ sle.editor.command.CommandContext(
+                mode=mode,linked=linkedEntity!=null,scene=scene.getOrNull(),entity=inspector,prefab=authoring.getOrNull(),
+                playback=scenePlayback,editable=scenePlayback.editing,projectOpen=project.opened!=null,projectBusy=project.busy,
+                viewportFailed=failed,
+                gameRunning=(mode==ViewportMode.Scene && scenePlayback.playback!=Playback.Stopped) || (mode==ViewportMode.Sandbox && playback!=Playback.Stopped),
+                tools=workspace.tools,snap=workspace.snap,actions=editorActions) }
+            sle.editor.ui.EditorShortcuts(manager,sle.editor.command.standardKeymap,commandContext)
+            // Every delete path records through the scene; the notice offers the registered Undo.
+            val liveCommandContext by rememberUpdatedState(commandContext)
+            SideEffect { scene.getOrNull()?.let { state -> state.onDeleted={ subject -> sle.editor.ui.reportDeletion(notices,state,subject) { liveCommandContext() } } } }
+            // Document, project, appearance and layout results go to the status bar, not panel text.
+            sle.editor.ui.ReportNotices(notices) {
+                fun document(key: String,error: ()->String?,clearError: ()->Unit,message: ()->String?,clearMessage: ()->Unit)=listOf(
+                    sle.editor.ui.NoticeSource("$key/error",{ sle.editor.ui.NoticeLevel.Error },error,clearError),
+                    sle.editor.ui.NoticeSource("$key/message",{ sle.editor.ui.documentMessageLevel(it) },message,clearMessage))
+                fun entity(state: EntityWorkspaceState)=document("entity/"+System.identityHashCode(state),{state.error},{state.error=null},{state.message},{state.message=null})
+                val sceneState=scene.getOrNull()
+                (sceneState?.let { document("scene",{it.error},{it.error=null},{it.message},{it.message=null}) } ?: emptyList())+
+                    (sceneState?.entities ?: emptyList()).flatMap(::entity)+
+                    (authoring.getOrNull()?.let(::entity) ?: emptyList())+listOf(
+                    sle.editor.ui.NoticeSource("project",{ sle.editor.ui.NoticeLevel.Error },{project.error},{project.error=null}),
+                    sle.editor.ui.NoticeSource("appearance",{ sle.editor.ui.NoticeLevel.Warning },{workspace.appearance.notice},null),
+                    sle.editor.ui.NoticeSource("layout",{ sle.editor.ui.NoticeLevel.Warning },{manager.layoutNotice},null))
             }
             val desiredProject=scenePlayback.project
             val desiredPlayback=if(mode==ViewportMode.Scene) scenePlayback.playback else playback
@@ -585,20 +652,20 @@ private fun launchEditor(args: Array<String>) = application {
                 val m=LocalEditorMetrics.current
                 Column(Modifier.fillMaxSize()) {
                     if(entity && mode!=ViewportMode.Entity) {
-                        sle.editor.ui.controls.EditorEmptyState("Entity component preview","Open the Entity Editor to preview prefab components.") {
+                        sle.editor.ui.controls.EditorEmptyState("Entity component preview","Open the Entity Editor to preview entity template components.") {
                             EditorButton("Open Entity Editor",{switchTab(0)})
                         }
                     } else if(!entity && mode==ViewportMode.Entity) {
-                        sle.editor.ui.controls.EditorEmptyState(if(game) "Game view" else "Scene view","The prefab workspace is active.") {
+                        sle.editor.ui.controls.EditorEmptyState(if(game) "Game view" else "Scene view","The entity template workspace is active.") {
                             EditorButton(if(game) "Show Game" else "Show Scene",{showScene(game)})
                         }
                     } else {
                         sle.editor.ui.controls.EditorToolbar {
                             if(project.opened!=null && !entity) EditorButton("Run Project",runProject,enabled=!project.busy && scenePlayback.editing && !failed,
+                                help=sle.editor.command.standardKeymap.hint(sle.editor.command.PlayCommands.runProject.id),
                                 modifier=Modifier.onGloballyPositioned { if(documentSmoke || runtimeSmoke) assetBounds["RunProject"]=it.boundsInWindow() })
                             if(mode==ViewportMode.Scene) SceneViewControls(scenePlayback,!failed,onPlay={
-                                try { canvas?.finishGesture();scenePlayback.play(scene.getOrThrow());scene.getOrNull()?.error=null;manager.showPanel(PanelId("game")) }
-                                catch(failure: Exception) { scene.getOrNull()?.error=failure.message }
+                                sle.editor.command.PlayCommands.play.run(commandContext())
                             },onStop={scenePlayback.stop()})
                             if(mode==ViewportMode.Sandbox) SandboxControls(playback,!failed) { playback=it }
                             if(!game) Row(horizontalArrangement=Arrangement.spacedBy(m.borderWidth)) {
@@ -608,6 +675,12 @@ private fun launchEditor(args: Array<String>) = application {
                                 sle.editor.ui.controls.EditorGlyphButton("Zoom out",{panelCanvas?.zoomEntity(1.25f)}) { tint ->
                                     sle.editor.ui.controls.EditorGlyphIcon(sle.editor.ui.controls.EditorGlyph.Minus,tint) }
                                 EditorButton("Fit",{panelCanvas?.fitEntity()},help="Fit content",style=sle.editor.ui.controls.EditorButtonStyle.Ghost)
+                            }
+                            if(!game) {
+                                // Scene tools (Q/W) in the Scene view; snapping also applies to the prefab workspace's handles.
+                                sle.editor.ui.controls.EditorToolbarDivider()
+                                sle.editor.ui.ViewportToolControls(if(!entity && mode==ViewportMode.Scene) workspace.tools else null,workspace.snap,
+                                    onConfigure={ snapDialog=true },onToolBounds={ id,bounds -> if(sceneSmoke) shellBounds["Tool"+id.name]=bounds })
                             }
                             if(!game && scenePlayback.editing) inspector?.let {
                                 sle.editor.ui.controls.EditorToolbarDivider()
@@ -626,12 +699,17 @@ private fun launchEditor(args: Array<String>) = application {
                             }) { path,point ->
                                 val origin=view.locationOnScreen
                                 val world=view.previewCamera()?.world(sle.editor.viewport.Vec2((point.x-origin.x).toDouble(),(point.y-origin.y).toDouble()))
-                                dropAsset(path,world?.let { sle.editor.viewport.Vec2(Math.round(it.x).toDouble(),Math.round(it.y).toDouble()) })
+                                // Snapping places the drop on the move step; otherwise on whole units as before.
+                                dropAsset(path,world?.let { if(workspace.snap.active()) workspace.snap.placement(it) else sle.editor.viewport.Vec2(Math.round(it.x).toDouble(),Math.round(it.y).toDouble()) })
                             })
                             onDispose { sle.editor.ui.AssetDrag.unregister(key) }
                         }
                         androidx.compose.ui.awt.SwingPanel(modifier=Modifier.weight(1f).fillMaxWidth(),
-                            factory={EngineCanvas(engineSession,if(entity) ViewId.Entity else if(game || mode==ViewportMode.Sandbox) ViewId.Game else ViewId.Scene).also { panelCanvas=it;canvas=it }},
+                            factory={EngineCanvas(engineSession,if(entity) ViewId.Entity else if(game || mode==ViewportMode.Sandbox) ViewId.Game else ViewId.Scene).also {
+                                panelCanvas=it;canvas=it
+                                // The heavyweight canvas owns AWT focus; scoped shortcuts need its panel.
+                                manager.focus.register(it,PanelId(if(entity) "entity" else if(game) "game" else "scene"))
+                            }},
                             update={ view -> if((entity && mode==ViewportMode.Entity) || (!entity && game==scenePlayback.gameView)) canvas=view },
                         )
                     }
@@ -639,31 +717,23 @@ private fun launchEditor(args: Array<String>) = application {
             }
             Surface(Modifier.fillMaxSize(),color=sle.editor.ui.theme.LocalEditorColors.current.background) {
                 Column {
-                    val applicationMenus=editorApplicationMenus(
-                        scene.getOrNull(),inspector,authoring.getOrNull(),mode==ViewportMode.Entity,linkedEntity!=null,scenePlayback.editing,
-                        onScene={showScene(it)},onEntity={key -> if(key==null) { editingSceneKey=null;switchTab(0) } else editSceneEntity(key) },
-                        onFit={canvas?.fitEntity()},onScale={uiScale=it},
+                    val applicationMenus=editorApplicationMenus(commandContext(),onScale={uiScale=it},
                         onTheme={ workspace.appearance.update(appearance.copy(mode=it)) },
                         onDensity={ workspace.appearance.update(appearance.copy(density=it)) },
                         onExit={if(manager.requestExit { !project.busy && confirmDiscard(authoring.getOrNull()) && confirmDiscardScene(scene.getOrNull()) && workspace.saveProjectEditorState() }) exitApplication()},
                         projectEntries=projectFileMenu(project,commands,scenePlayback.editing)+listOf(
                             sle.editor.ui.EditorMenuEntry("Export Game…",project.opened!=null && !project.busy,action=distribution.exportGame)),
-                        projectAssets=assetCommands,projectDocuments=documents,projectCommands=commands,projectBusy=project.busy,
+                        projectAssets=assetCommands,projectDocuments=documents,
                         assetEntries=assetBrowserMenu(assets,assetBrowserVisible) { if(assetBrowserVisible) manager.hidePanel(PanelId("assets")) else manager.showPanel(PanelId("assets")) },
                     ) + windowsMenu(manager) { workspace.prefabSession }
                     SideEffect { saveActive=applicationMenus.first { it.first=="File" }.second.first { it.label=="Save" }.action }
-                    EditorMenuStrip(applicationMenus,window=window,shortcutWindows={manager.boundWindows().values},onMenuBounds={label,bounds -> if(menuSmoke) shellBounds[label]=bounds},title=(if(project.busy) "Project busy… — " else project.opened?.let { "${it.document.name} — " } ?: "")+
-                        if(mode==ViewportMode.Entity) (activeEntity?.document?.name ?: "Prefab")+(if(activeEntity?.dirty==true) " *" else "")
+                    EditorMenuStrip(applicationMenus,window=window,onMenuBounds={label,bounds -> if(menuSmoke || walkSmoke) shellBounds[label]=bounds},title=(if(project.busy) "Project busy… — " else project.opened?.let { "${it.document.name} — " } ?: "")+
+                        if(mode==ViewportMode.Entity) (activeEntity?.document?.name ?: "Entity Template")+(if(activeEntity?.dirty==true) " *" else "")
                         else (scene.getOrNull()?.name ?: "Scene")+(if(scene.getOrNull()?.dirty==true) " *" else ""))
-                    val notice=Modifier.padding(horizontal=LocalEditorMetrics.current.panelPadding,vertical=LocalEditorMetrics.current.gap/2)
-                    workspace.appearance.notice?.let { Text(it,notice,color=MaterialTheme.colors.error) }
-                    manager.layoutNotice?.let { Text(it,notice,color=MaterialTheme.colors.error) }
-                    project.error?.let { Text(it,notice,color=MaterialTheme.colors.error) }
-                    distribution.message?.let { Text(it,notice,style=MaterialTheme.typography.caption) }
                     val panels=WorkspacePanels(mapOf(
                         PanelId("hierarchy") to { Box(Modifier.fillMaxSize().assetDropTarget { path,_ -> dropAsset(path,null) }) {
                             if(mode==ViewportMode.Scene) scene.getOrNull()?.let { state ->
-                                SceneWorkspace(state,onEditEntity={editSceneEntity(it)},onEntityBounds={key,bounds -> if(sceneSmoke || menuSmoke || documentSmoke) treeNodeBounds[key]=bounds},editable=scenePlayback.editing)
+                                SceneWorkspace(state,onEditEntity={editSceneEntity(it)},onEntityBounds={key,bounds -> if(sceneSmoke || menuSmoke || documentSmoke || walkSmoke) treeNodeBounds[key]=bounds},editable=scenePlayback.editing)
                             } else if(linkedEntity!=null) SceneTree(scene.getOrThrow(),Modifier.fillMaxSize(),onEditEntity={editSceneEntity(it)})
                             else activeEntity?.let { EntityOutline(it,Modifier.fillMaxSize()) }
                         } },
@@ -688,7 +758,24 @@ private fun launchEditor(args: Array<String>) = application {
                         PanelId("entity") to { viewportPanel(false,true) },
                     ), manager.registry)
                     DockSurface(manager.layout.hosts.single { it.id==manager.layout.mainHost },manager,uiScale,Modifier.weight(1f).fillMaxWidth(),
-                        onBounds={id,bounds -> if(menuSmoke || cameraSmoke) shellBounds[when(id.value) { "scene" -> "SceneTab"; "game" -> "GameTab"; else -> id.value }]=bounds}) { panels.Render(it) }
+                        onBounds={id,bounds -> if(menuSmoke || cameraSmoke || walkSmoke) shellBounds[when(id.value) { "scene" -> "SceneTab"; "game" -> "GameTab"; else -> id.value }]=bounds}) { panels.Render(it) }
+                    // Main window only: detached windows report through this bar too.
+                    val sceneState=scene.getOrNull()
+                    sle.editor.ui.EditorStatusBar(notices,sle.editor.ui.EditorStatus(
+                        hint=when {
+                            mode==ViewportMode.Entity -> "Entity template workspace: drag a handle to edit a shape; Esc cancels the drag"
+                            mode==ViewportMode.Sandbox -> "Sandbox: the game view receives keys while it has focus"
+                            scenePlayback.editing && scenePlayback.gameView -> "Game view: "+sle.editor.command.standardKeymap.hint(sle.editor.command.PlayCommands.play.id,"play")+" to run the scene"
+                            !scenePlayback.editing -> "Play mode: scene edits are disabled; "+sle.editor.command.standardKeymap.hint(sle.editor.command.PlayCommands.stop.id,"stop")+" to edit"
+                            else -> workspace.tools.gestureHint ?: sle.editor.viewport.tools.toolHint(workspace.tools.active,
+                                sle.editor.viewport.tools.ToolHintContext(workspace.snap.settings,sceneState?.selection?.size ?: 0,workspace.tools.pivot))
+                        },
+                        progress=if(distribution.exporting) "Exporting game�" else if(project.busy) "Working�" else null,
+                        selectionCount=if(mode==ViewportMode.Scene) sceneState?.selection?.size ?: 0 else 0,
+                        playState=when(desiredPlayback) { Playback.Running -> "Playing"; Playback.Paused -> "Paused"; else -> if(mode==ViewportMode.Scene) "Editing" else null },
+                        dirty=if(mode==ViewportMode.Entity) activeEntity?.dirty==true else sceneState?.dirty==true,
+                    ),Modifier.onGloballyPositioned { if(appearanceSmoke || menuSmoke || dockingSmoke || walkSmoke) shellBounds["StatusBar"]=it.boundsInWindow() })
+                    if(snapDialog) sle.editor.ui.SnapSettingsDialog(workspace.snap.settings,onDismiss={ snapDialog=false }) { workspace.snap.update(it);snapDialog=false }
                     manager.layout.hosts.filter { it.id!=manager.layout.mainHost }.forEach { host ->
                         key(host.id) {
                             Window(icon=appIcon,visible=!manager.loading,onCloseRequest={manager.closeHost(host.id)},title="SLE — "+host.root?.let { root -> root.tabs().flatMap { it.panels }.joinToString(" / ") { manager.registry.byId.getValue(it).title } },

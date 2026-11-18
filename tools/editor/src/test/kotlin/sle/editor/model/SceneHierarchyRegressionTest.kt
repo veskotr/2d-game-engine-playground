@@ -44,23 +44,24 @@ class SceneHierarchyRegressionTest {
     @Test fun transparentReparentPreservesInheritedPoseAndUndoRemovesOnlyInsertedTransform() {
         val scene=scene();val parent=add(scene,ScenePose(Vec2(12.0,8.0),0.4,Vec2(-2.0,3.0)))
         scene.addEntity();val child=scene.selectedKey!!;val state=scene.selected!!
+        // An earlier component edit survives undoing the reparent (one timeline: it precedes it).
+        state.rename("Keep name")
         scene.reparent(child,parent);assertPose(ScenePose(),ScenePose.from(scene.worldDocument(child)))
         assertTrue("Transform" in state.document.components)
-        state.rename("Keep name")
-        scene.undoStructure();assertFalse("Transform" in state.document.components);assertEquals("Keep name",state.document.name)
-        scene.redoStructure();assertPose(ScenePose(),ScenePose.from(scene.worldDocument(child)))
+        scene.undo();assertFalse("Transform" in state.document.components);assertEquals("Keep name",state.document.name)
+        scene.redo();assertPose(ScenePose(),ScenePose.from(scene.worldDocument(child)))
     }
     @Test fun worldEditsBecomeLocalAndTopologyUndoRestoresOnlyOperationTransform() {
         val scene=scene();val parent=add(scene,ScenePose(Vec2(10.0,0.0),0.0,Vec2(2.0,2.0)))
         val child=add(scene,ScenePose(Vec2(4.0,3.0)));scene.reparent(child,parent)
         val state=scene.selected!!
         state.document=state.document.addComponent("SpriteRenderer",buildJsonObject { put("visible",false) })
-        scene.undoStructure();assertPose(ScenePose(Vec2(4.0,3.0)),ScenePose.from(state.document))
+        scene.undo();assertPose(ScenePose(Vec2(4.0,3.0)),ScenePose.from(state.document))
         assertEquals(false,state.document.components.getValue("SpriteRenderer").jsonObject.getValue("visible").jsonPrimitive.boolean)
-        scene.redoStructure();scene.applyWorldDocument(child,scene.worldDocument(child).withPose(ScenePose(Vec2(20.0,8.0))))
+        scene.redo();scene.applyWorldDocument(child,scene.worldDocument(child).withPose(ScenePose(Vec2(20.0,8.0))))
         assertPose(ScenePose(Vec2(5.0,4.0),0.0,Vec2(0.5,0.5)),ScenePose.from(state.document))
         scene.addEntity();state.document=state.document.withPose(ScenePose(Vec2(99.0,88.0)))
-        scene.undoStructure();assertPose(ScenePose(Vec2(99.0,88.0)),ScenePose.from(state.document))
+        scene.undo();assertPose(ScenePose(Vec2(99.0,88.0)),ScenePose.from(state.document))
     }
     @Test fun subtreeCopiesRemapInternalReferencesAndDeleteUndoRetainsTopology() {
         val scene=scene();val external=add(scene);val root=add(scene);scene.addChild();val child=scene.selectedKey!!
@@ -69,7 +70,7 @@ class SceneHierarchyRegressionTest {
         val copiedChild=scene.parents.entries.single { it.value==copiedRoot }.key
         val targets=scene.entities.first { it.document.key==copiedChild }.document.components.getValue("Animator").jsonObject.getValue("targetEntities").jsonObject
         assertEquals(copiedRoot,targets.getValue("root").jsonPrimitive.content);assertEquals(external,targets.getValue("external").jsonPrimitive.content)
-        scene.removeSelected();assertFalse(scene.entities.any { it.document.key==copiedChild });scene.undoStructure()
+        scene.removeSelected();assertFalse(scene.entities.any { it.document.key==copiedChild });scene.undo()
         assertEquals(copiedRoot,scene.parents[copiedChild]);assertEquals(root,scene.parents[child])
     }
     @Test fun explicitReparentEndsOldLocalGestureAndEscapePreservesWorldPose() {
@@ -93,8 +94,8 @@ class SceneHierarchyRegressionTest {
         assertFalse("Transform/position/x" in state.drafts)
         assertEquals("-",state.drafts["Transform/position/y"])
         assertTrue("Transform/position/y" in state.fieldErrors)
-        scene.undoStructure();assertEquals(5.0,ScenePose.from(state.document).position.x)
-        scene.redoStructure();assertEquals(-5.0,ScenePose.from(state.document).position.x)
+        scene.undo();assertEquals(5.0,ScenePose.from(state.document).position.x)
+        scene.redo();assertEquals(-5.0,ScenePose.from(state.document).position.x)
         assertEquals("-",state.drafts["Transform/position/y"])
     }
     @Test fun removedEntityControllerIgnoresFramesAndInputBeforeUiRebinds() {
@@ -111,7 +112,7 @@ class SceneHierarchyRegressionTest {
     @Test fun activeCameraFlagsUndoAndGeometryIgnoresTransformScale() {
         val scene=scene();scene.addCamera();val first=scene.selectedKey!!;scene.addCamera();val second=scene.selectedKey!!
         scene.setActiveCamera(second);assertEquals(second,scene.activeCamera!!.document.key)
-        scene.undoStructure();assertEquals(first,scene.activeCamera!!.document.key);scene.redoStructure();assertEquals(second,scene.activeCamera!!.document.key)
+        scene.undo();assertEquals(first,scene.activeCamera!!.document.key);scene.redo();assertEquals(second,scene.activeCamera!!.document.key)
         val document=scene.worldDocument(second).withPose(ScenePose(Vec2(3.0,4.0),PI/2,Vec2(-20.0,0.0)))
         val outline=cameraOutline(document);assertEquals(5,outline.size)
         assertEquals(138.0,outline.first().x,1e-8);assertEquals(-236.0,outline.first().y,1e-8)

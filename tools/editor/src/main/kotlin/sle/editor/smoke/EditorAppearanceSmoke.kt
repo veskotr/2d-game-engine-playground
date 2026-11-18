@@ -30,7 +30,8 @@ import javax.swing.JFrame
 /**
  * Finite Little Forest acceptance capture (session 6). One representative project
  * fixture is captured in both themes: Scene and Entity inspectors, a validation
- * state, read-only fields during Play, and a detached Inspector window. It then
+ * state, the status bar (a Delete notice with Undo, and a sticky error), read-only
+ * fields during Play, and a detached Inspector window. It then
  * proves that a theme switch during paused Play changes only editor chrome.
  *
  * System properties: sle.appearance.window=WxH (logical window size),
@@ -41,6 +42,7 @@ internal suspend fun runEditorAppearanceSmoke(
     window: JFrame, canvas: ()->EngineCanvas, project: ProjectWorkspaceState, projects: ProjectCommands,
     browser: ()->AssetBrowserState?, scene: SceneWorkspaceState, playback: ScenePlaybackState,
     workspace: EditorWorkspace, editEntity: (String)->Unit, showScene: (Boolean)->Unit,
+    statusBar: ()->androidx.compose.ui.geometry.Rect?,
 ) {
     suspend fun await(message: String,condition: ()->Boolean) {
         repeat(240) { if(condition()) { delay(120);return };delay(25) }
@@ -59,6 +61,16 @@ internal suspend fun runEditorAppearanceSmoke(
         ImageIO.write(robot.createScreenCapture(Rectangle(target.locationOnScreen,target.size)),"png",file.toFile())
         log.appendLine("$name window=${target.width}x${target.height} uiScale=${target.graphicsConfiguration.defaultTransform.scaleX} density=$density")
     }
+    // The status bar is the main window's last row; its Compose bounds are in device pixels.
+    fun captureStatusBar(name: String) {
+        val bar=statusBar() ?: error("Status bar was not laid out")
+        val pane=window.contentPane
+        val height=kotlin.math.ceil(bar.height/window.graphicsConfiguration.defaultTransform.scaleX).toInt()
+        val origin=pane.locationOnScreen
+        ImageIO.write(robot.createScreenCapture(Rectangle(origin.x,origin.y+pane.height-height,pane.width,height)),"png",out.resolve("$name.png").toFile())
+        log.appendLine("$name status-bar=${pane.width}x$height notice=${workspace.notices.current?.level}:${workspace.notices.current?.text}")
+    }
+    val notices=workspace.notices
 
     // Representative fixture: imported texture and script, a Player with Transform + Sprite, and a camera.
     val fixture=withContext(Dispatchers.IO) {
@@ -92,6 +104,21 @@ internal suspend fun runEditorAppearanceSmoke(
         check(scene.selected!!.fieldErrors.isNotEmpty() && scene.document()==before) { "Invalid draft changed the scene" }
         scene.selected!!.editField("Transform",listOf("rotation"),JsonPrimitive(0.0),"0.0")
         await("Draft did not clear") { scene.selected!!.fieldErrors.isEmpty() }
+        // Status bar: a Delete posts "Deleted <name>" whose Undo runs the registered Undo command.
+        val beforeDelete=scene.document()
+        scene.addEntity();val crate=scene.selected!!.document.name
+        check(sle.editor.ui.deleteSceneSelection(scene)) { "Delete failed: ${scene.error}" }
+        await("Delete notice did not appear") { notices.current?.text=="Deleted $crate" && notices.current?.action?.available()==true }
+        delay(300);captureStatusBar("status-bar-undo-$m")
+        check(notices.invoke(notices.current!!)) { "Undo action did not run" }
+        check(scene.entities.any { it.document.name==crate } && notices.current?.action==null) { "Undo notice did not restore the entity" }
+        scene.undo()
+        check(scene.document()==beforeDelete) { "Undoing the delete and the create did not restore the fixture" }
+        // A document error is consumed into a sticky error notice with Dismiss.
+        scene.error="Could not save Forest Scene: the folder is read-only (sample)"
+        await("Scene error did not reach the status bar") { scene.error==null && notices.current?.level==sle.editor.ui.NoticeLevel.Error }
+        delay(300);captureStatusBar("status-bar-error-$m")
+        notices.dismiss();scene.select(key);delay(200)
         // Entity tab: prefab-style inspector with Transform and Sprite Renderer sections.
         editEntity(key);delay(700);capture(window,"entity-$m")
         showScene(false);scene.select(key);delay(300)
@@ -99,7 +126,7 @@ internal suspend fun runEditorAppearanceSmoke(
 
     // Detached Inspector: theme switch reaches the second window and its caption.
     workspace.windows.detachPanel(PanelId("inspector"))
-    await("Inspector did not detach") { Window.getWindows().count { it is JFrame && it.isShowing }>=2 }
+    await("Details did not detach") { Window.getWindows().count { it is JFrame && it.isShowing }>=2 }
     val detached=Window.getWindows().filterIsInstance<JFrame>().first { it.isShowing && it!==window }
     // The harness keeps the main window on top; lift the detached window above it for capture.
     window.isAlwaysOnTop=false;detached.isAlwaysOnTop=true;detached.setBounds(window.x+window.width/3,window.y+60,420,640);detached.toFront();delay(400)

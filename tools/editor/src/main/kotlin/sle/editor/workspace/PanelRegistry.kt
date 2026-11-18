@@ -25,9 +25,9 @@ class PanelRegistry(val panels: List<PanelDescriptor>) {
 
 fun standardPanels(): List<PanelDescriptor> = listOf(
     PanelDescriptor(PanelId("hierarchy"), "Hierarchy", PanelMinimum(200f, 160f)),
-    PanelDescriptor(PanelId("inspector"), "Inspector", PanelMinimum(260f, 200f)),
+    PanelDescriptor(PanelId("inspector"), "Details", PanelMinimum(260f, 200f)),
     PanelDescriptor(PanelId("assets"), "Assets", PanelMinimum(360f, 180f)),
     PanelDescriptor(PanelId("scene"), "Scene", PanelMinimum(320f, 200f)),
     PanelDescriptor(PanelId("game"), "Game", PanelMinimum(320f, 200f)),
-    PanelDescriptor(PanelId("entity"), "Prefab", PanelMinimum(320f, 240f), temporary = true),
+    PanelDescriptor(PanelId("entity"), "Entity Template", PanelMinimum(320f, 240f), temporary = true),
 )

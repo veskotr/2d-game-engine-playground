@@ -14,9 +14,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun SceneViewControls(state: ScenePlaybackState,enabled: Boolean,onPlay: ()->Unit,onStop: ()->Unit) {
     Row(horizontalArrangement=Arrangement.spacedBy(LocalEditorMetrics.current.gap/2)) {
+        val keys=sle.editor.command.standardKeymap
         EditorButton(if(state.playback==Playback.Paused) "Resume" else "Play",onPlay,
-            enabled=enabled && state.playback!=Playback.Running,primary=true)
-        EditorButton("Pause",{state.pause()},enabled=enabled && state.playback==Playback.Running)
-        EditorButton("Stop",onStop,enabled=enabled && state.playback!=Playback.Stopped)
+            enabled=enabled && state.playback!=Playback.Running,primary=true,help=keys.hint(sle.editor.command.PlayCommands.play.id))
+        EditorButton("Pause",{state.pause()},enabled=enabled && state.playback==Playback.Running,help=keys.hint(sle.editor.command.PlayCommands.pause.id))
+        EditorButton("Stop",onStop,enabled=enabled && state.playback!=Playback.Stopped,help=keys.hint(sle.editor.command.PlayCommands.stop.id))
     }
 }

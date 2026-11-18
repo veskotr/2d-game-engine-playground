@@ -44,6 +44,37 @@ internal class EditorMenuItemUI(private val theme: MenuAppearance) : BasicMenuIt
         super.installDefaults()
         selectionBackground=theme.selection;selectionForeground=theme.foreground;disabledForeground=theme.disabled
     }
+    private fun shortcut(component: javax.swing.JComponent)=component.getClientProperty(SHORTCUT) as? String
+    private fun gap()=(24*theme.scale).roundToInt()
+    /** Room for the right-aligned shortcut. Not a Swing accelerator: those would also bind the key. */
+    override fun getPreferredSize(component: javax.swing.JComponent): Dimension {
+        val size=super.getPreferredSize(component)
+        val text=shortcut(component) ?: return size
+        return Dimension(size.width+gap()+component.getFontMetrics(theme.secondaryFont).stringWidth(text),size.height)
+    }
+    override fun paint(graphics: Graphics, component: javax.swing.JComponent) {
+        super.paint(graphics,component)
+        val text=shortcut(component) ?: return
+        val g=graphics.create() as Graphics2D
+        try {
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+            g.font=theme.secondaryFont;g.color=if(component.isEnabled) theme.secondary else theme.disabled
+            val metrics=g.fontMetrics
+            g.drawString(text,component.width-component.insets.right-metrics.stringWidth(text),(component.height-metrics.height)/2+metrics.ascent)
+        } finally { g.dispose() }
+    }
+    companion object { const val SHORTCUT="sle.menu.shortcut" }
+}
+
+/** A themed 1px rule between menu groups. */
+internal class EditorMenuSeparator(theme: MenuAppearance) : javax.swing.JPopupMenu.Separator() {
+    var theme: MenuAppearance=theme
+        set(value) { field=value;repaint() }
+    override fun getPreferredSize()=Dimension(0,(9*theme.scale).roundToInt().coerceAtLeast(5))
+    override fun paintComponent(graphics: Graphics) {
+        graphics.color=theme.surface;graphics.fillRect(0,0,width,height)
+        graphics.color=theme.separator;graphics.fillRect(0,height/2,width,1)
+    }
 }
 
 internal class EditorSubmenuUI(private val theme: MenuAppearance) : BasicMenuUI() {
@@ -71,7 +102,7 @@ internal class MenuGlyph(private val label: String, private val theme: MenuAppea
                 label.contains("Camera") || label=="Rendering" -> {
                     g.drawRoundRect(2,5,14,10,2,2);g.drawOval(7,7,5,5);line(5,5,6,3);line(6,3,11,3)
                 }
-                label=="Import" || label.contains("Assets") || label.contains("Prefab") -> {
+                label=="Import" || label.contains("Assets") || label.contains("Entity Template") -> {
                     val path=Path2D.Double().apply { moveTo(2.0,6.0);lineTo(2.0,14.0);lineTo(16.0,14.0);lineTo(16.0,5.0);lineTo(9.0,5.0);lineTo(7.0,3.0);lineTo(2.0,3.0);lineTo(2.0,6.0) }
                     g.draw(path);line(9,6,9,11);line(6,9,9,12);line(9,12,12,9)
                 }

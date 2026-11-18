@@ -522,6 +522,15 @@ sle_add_integration_test(
 set_tests_properties(integration_embedded_multiview_path PROPERTIES SKIP_RETURN_CODE 125)
 
 sle_add_integration_test(
+    integration_editor_grid_path
+    systems/integration_editor_grid_path.cpp
+    "systems;renderer;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+set_tests_properties(integration_editor_grid_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
     integration_entity_authoring_path
     systems/integration_entity_authoring_path.cpp
     "systems;scene"

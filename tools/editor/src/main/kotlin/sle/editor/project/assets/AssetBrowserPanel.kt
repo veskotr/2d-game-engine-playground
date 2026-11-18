@@ -120,7 +120,7 @@ internal fun AssetBrowserPanel(
                 // The entity-drag hint replaces the count in place: inserting a line would shift the
                 // folder rows under the pointer mid-drag and drop into the wrong folder.
                 val entityDrag=EntityDrag.dragging.takeIf { folderTargets }
-                Text(entityDrag?.let { "Drop ${it.label} on a folder to save it as a linked prefab · Esc cancels" }
+                Text(entityDrag?.let { "Drop ${it.label} on a folder to save it as a linked entity template · Esc cancels" }
                     ?: "${children.size} ${if(children.size==1) "item" else "items"}",color=if(entityDrag!=null) tokens.focusRing else tokens.textSecondary,style=MaterialTheme.typography.caption)
             }
             EditorSeparator()
@@ -192,8 +192,8 @@ internal fun AssetBrowserPanel(
 private fun type(entry: AssetEntry): String = when(entry.kind) {
     AssetKind.Directory -> "Folder"
     AssetKind.Link -> "Link"
-    AssetKind.File -> if(entry.name.endsWith(".scene.json",true)) "Scene" else if(entry.name.endsWith(".prefab.json",true)) "Prefab" else when(entry.name.substringAfterLast('.').lowercase()) {
-        "lua" -> "Script";"slescene" -> "Scene";"sleprefab" -> "Prefab";"json" -> "JSON"
+    AssetKind.File -> if(entry.name.endsWith(".scene.json",true)) "Scene" else if(entry.name.endsWith(".prefab.json",true)) "Entity Template" else when(entry.name.substringAfterLast('.').lowercase()) {
+        "lua" -> "Script";"slescene" -> "Scene";"sleprefab" -> "Entity Template";"json" -> "JSON"
         "png","jpg","jpeg","bmp","tga","gif","psd","hdr" -> "Image"
         "ogg","wav","mp3","flac" -> "Audio";"xml" -> "UI / XML"
         else -> "File"

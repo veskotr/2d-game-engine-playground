@@ -56,23 +56,55 @@ void EntityPreviewSystem::frameCamera(entity::Scene& scene, core::Camera2D& came
     camera.setPosition(origin);
 }
 
-void EntityPreviewSystem::submitOverlay(entity::Scene& scene, renderer::Renderer& renderer, const core::Camera2D& camera)
+bool EditorGrid::valid() const
+{
+    return std::isfinite(spacing) && spacing >= 0.0f && majorEvery >= 0 && majorEvery <= 1000;
+}
+
+std::vector<EditorGridLine> EntityPreviewSystem::gridLines(const core::Camera2D& camera, const EditorGrid& grid)
+{
+    std::vector<EditorGridLine> lines;
+    const auto origin = camera.getPosition();
+    const auto size = camera.getViewportSize();
+    const float extent = std::max(size.x,size.y);
+    if (!std::isfinite(extent) || extent <= 0.0f || !std::isfinite(origin.x) || !std::isfinite(origin.y)) return lines;
+    double cell = std::pow(10.0, std::floor(std::log10(extent/8.0)));
+    int major = 0;
+    if (grid.valid() && grid.spacing > 0.0f)
+    {
+        cell = grid.spacing;
+        major = grid.majorEvery > 1 ? grid.majorEvery : 0;
+        // Too fine for the view: step up by the major interval (or 10) so lines stay readable.
+        const double factor = major > 1 ? major : 10.0;
+        for (int guard = 0; guard < 64 && extent/cell > 100.0; ++guard) cell *= factor;
+    }
+    if (!std::isfinite(cell) || cell <= 0.0) return lines;
+    auto isMajor = [&](double index) { return major > 1 && std::fmod(index, static_cast<double>(major)) == 0.0; };
+    const double firstX = std::floor(origin.x/cell), firstY = std::floor(origin.y/cell);
+    // Fixed iteration bounds avoid loss-of-float-precision loops at extreme authored positions.
+    for (int i=0;i<102;++i)
+    {
+        const float x = static_cast<float>((firstX+i)*cell);
+        const float y = static_cast<float>((firstY+i)*cell);
+        if (x <= origin.x+size.x) lines.push_back({{x,origin.y},{x,origin.y+size.y},isMajor(firstX+i)});
+        if (y <= origin.y+size.y) lines.push_back({{origin.x,y},{origin.x+size.x,y},isMajor(firstY+i)});
+    }
+    return lines;
+}
+
+void EntityPreviewSystem::submitOverlay(entity::Scene& scene, renderer::Renderer& renderer, const core::Camera2D& camera,
+    const EditorGrid& grid)
 {
     const auto origin = camera.getPosition();
     const auto size = camera.getViewportSize();
-    const float cell = std::pow(10.0f, std::floor(std::log10(std::max(size.x,size.y)/8.0f)));
-    auto line = [&](glm::vec2 a, glm::vec2 b, glm::vec4 color) {
+    auto line = [&](glm::vec2 a, glm::vec2 b, glm::vec4 color, uint32_t layer = 90000) {
         if (std::isfinite(a.x) && std::isfinite(a.y) && std::isfinite(b.x) && std::isfinite(b.y))
-            renderer.submit(renderer::LineCommand{a,b,color,1.0f,0.0f,90000});
+            renderer.submit(renderer::LineCommand{a,b,color,1.0f,0.0f,layer});
     };
-    // Fixed iteration bounds avoid loss-of-float-precision loops at extreme authored positions.
-    for (int i=0;i<100;++i)
-    {
-        const float x = std::floor(origin.x/cell)*cell+i*cell;
-        const float y = std::floor(origin.y/cell)*cell+i*cell;
-        if (x <= origin.x+size.x) line({x,origin.y},{x,origin.y+size.y},{0.18f,0.20f,0.23f,1});
-        if (y <= origin.y+size.y) line({origin.x,y},{origin.x+size.x,y},{0.18f,0.20f,0.23f,1});
-    }
+    // Grid lines sit below the axes and entity marks; major lines above minor ones.
+    for (const auto& gridLine : gridLines(camera,grid))
+        line(gridLine.from,gridLine.to,gridLine.major ? glm::vec4{0.27f,0.30f,0.34f,1} : glm::vec4{0.18f,0.20f,0.23f,1},
+            gridLine.major ? 89999 : 89998);
     line({origin.x,0},{origin.x+size.x,0},{0.65f,0.25f,0.25f,1});
     line({0,origin.y},{0,origin.y+size.y},{0.25f,0.65f,0.35f,1});
     auto& registry=scene.getRegistry();

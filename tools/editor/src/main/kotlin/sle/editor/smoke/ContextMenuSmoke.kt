@@ -100,8 +100,18 @@ internal suspend fun runContextMenuSmoke(
     repeat(3) { robot.keyPress(KeyEvent.VK_DELETE);delay(60) }
     robot.keyRelease(KeyEvent.VK_DELETE);delay(160)
     check(scene.entities.size==originalCount && scene.selectedKey==null) { "Canvas Delete/repeat removed the wrong selection" }
-    scene.undoStructure();check(scene.selectedKey==created && scene.entities.size==originalCount+1)
-    scene.undoStructure()
+    scene.undo();check(scene.selectedKey==created && scene.entities.size==originalCount+1)
+    suspend fun ctrlD() {
+        // Held D auto-repeats; Duplicate is not repeatable, so one press makes one copy.
+        robot.keyPress(KeyEvent.VK_CONTROL);repeat(3) { robot.keyPress(KeyEvent.VK_D);delay(60) }
+        robot.keyRelease(KeyEvent.VK_D);robot.keyRelease(KeyEvent.VK_CONTROL);delay(160)
+    }
+    check(canvas().isFocusOwner) { "Native canvas lost focus before Ctrl+D" }
+    ctrlD()
+    check(scene.entities.size==originalCount+2 && scene.selectedKey!=created) { "Canvas Ctrl+D/repeat did not make exactly one copy: ${scene.entities.size}" }
+    scene.undo();check(scene.entities.size==originalCount+1)
+    println("SHORTCUT_SMOKE_STAGE canvas-delete-duplicate")
+    scene.select(created);scene.undo()
     check(scene.entities.size==originalCount)
     val parent=scene.entities.last().document.key
     await("Missing tree node bounds") { parent in bounds }
@@ -123,7 +133,12 @@ internal suspend fun runContextMenuSmoke(
     repeat(3) { robot.keyPress(KeyEvent.VK_DELETE);delay(60) }
     robot.keyRelease(KeyEvent.VK_DELETE);delay(150)
     check(scene.entities.size==count && scene.selectedKey==null) { "Hierarchy Delete/repeat removed another entity" }
-    scene.undoStructure();check(scene.selectedKey==child && scene.parents[child]==parent)
+    scene.undo();check(scene.selectedKey==child && scene.parents[child]==parent)
+    ctrlD()
+    check(scene.entities.size==count+2 && scene.selectedKey!=child && scene.parents[scene.selectedKey]==parent) { "Hierarchy Ctrl+D/repeat did not make exactly one copy: ${scene.entities.size}" }
+    scene.undo();check(scene.entities.size==count+1)
+    scene.select(child)
+    println("SHORTCUT_SMOKE_STAGE hierarchy-delete-duplicate")
     delay(200) // wait for the restored entity Inspector to replace the scene-root Inspector
     await("Missing scene name input bounds") { "SceneNameField" in shellBounds }
     val namePoint=shellBounds.getValue("SceneNameField").center
@@ -144,7 +159,7 @@ internal suspend fun runContextMenuSmoke(
     dialog.dispose();delay(100)
     open(origin.x+childPoint.x.toInt(),origin.y+childPoint.y.toInt())
     println("MENU_SMOKE_STAGE duplicate")
-    choose("Entity","Duplicate Subtree")
+    choose("Duplicate")
     check(scene.entities.size==count+2)
     // Ordinary entities are edited in the Inspector: the scene context menu adds components directly.
     val editPoint=bounds.getValue(child).center
@@ -183,18 +198,49 @@ internal suspend fun runContextMenuSmoke(
     clickShell("GameTab")
     await("Game tab not applied") { canvas().gameViewActive() }
     clickShell("SceneTab")
-    clickShell("View");choose("Prefab Workspace")
-    await("Prefab workspace not ready") { canvas().authoringReady() }
+    clickShell("View");choose("Entity Template Workspace")
+    await("Entity template workspace not ready") { canvas().authoringReady() }
     open(canvas().locationOnScreen.x+canvas().width-20,canvas().locationOnScreen.y+canvas().height-20)
-    check(popup()!!.components.filterIsInstance<JMenuItem>().any { it.text=="New" }) { "Prefab navigation retained the scene entity context" }
+    check(popup()!!.components.filterIsInstance<JMenuItem>().any { it.text=="New" }) { "Entity template navigation retained the scene entity context" }
     MenuSelectionManager.defaultManager().clearSelectedPath()
     clickShell("View");choose("Scene")
     await("Scene authoring not restored") { canvas().authoringReady() }
     clickShell("File");choose("Save")
     check(!scene.dirty && scene.error==null) { "File menu failed to save scene: ${scene.error}" }
     clickShell("File")
-    check(popup()!!.components.filterIsInstance<JMenuItem>().map { it.text }.containsAll(listOf("New","Open","Save","Save As…","Exit")))
+    val fileItems=popup()!!.components.filterIsInstance<JMenuItem>()
+    check(fileItems.map { it.text }.containsAll(listOf("New","Open","Save","Save As…","Exit")))
+    check(fileItems.single { it.text=="Save" }.getClientProperty(sle.editor.ui.EditorMenuItemUI.SHORTCUT)=="Ctrl+S") { "File → Save does not show its shortcut" }
     MenuSelectionManager.defaultManager().clearSelectedPath()
+    delay(120)
+    // One timeline (L1 S2): Edit → Undo names the latest step; Scene Undo/Redo are gone.
+    val menuName=scene.name
+    scene.rename("$menuName edit-menu");delay(200)
+    clickShell("Edit")
+    val editItems=popup()!!.components.filterIsInstance<JMenuItem>()
+    check(editItems.any { it.text=="Undo Rename Scene" } && editItems.none { it.text.startsWith("Scene ") }) { "Edit menu lacks the labelled Undo: ${editItems.map { it.text }}" }
+    check(editItems.single { it.text=="Undo Rename Scene" }.getClientProperty(sle.editor.ui.EditorMenuItemUI.SHORTCUT)=="Ctrl+Z") { "Edit → Undo does not show Ctrl+Z" }
+    choose("Undo Rename Scene")
+    await("Edit → Undo did not undo the scene rename") { scene.name==menuName }
+    check(scene.history.redoLabel=="Rename Scene") { "Undo did not move the step to redo" }
+    MenuSelectionManager.defaultManager().clearSelectedPath()
+    delay(120)
+    println("SHORTCUT_SMOKE_STAGE edit-menu-labelled-undo")
+    // Ctrl+S is a Global command: it saves from the Hierarchy and from the native canvas.
+    val savedName=scene.name
+    for((label,focus) in listOf<Pair<String,suspend ()->Unit>>(
+        "hierarchy" to { val p=bounds.getValue(child).center;robot.mouseMove(origin.x+p.x.toInt(),origin.y+p.y.toInt())
+            robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);delay(120) },
+        "canvas" to { canvas().requestFocusInWindow();await("Canvas focus for Ctrl+S") { canvas().isFocusOwner } })) {
+        focus()
+        scene.rename("$savedName $label");check(scene.dirty)
+        robot.keyPress(KeyEvent.VK_CONTROL);robot.keyPress(KeyEvent.VK_S);robot.keyRelease(KeyEvent.VK_S);robot.keyRelease(KeyEvent.VK_CONTROL)
+        await("Ctrl+S from $label did not save: ${scene.error}") { !scene.dirty }
+    }
+    scene.rename(savedName)
+    robot.keyPress(KeyEvent.VK_CONTROL);robot.keyPress(KeyEvent.VK_S);robot.keyRelease(KeyEvent.VK_S);robot.keyRelease(KeyEvent.VK_CONTROL)
+    await("Ctrl+S did not restore the scene name") { !scene.dirty }
+    println("SHORTCUT_SMOKE_STAGE ctrl-s hierarchy/canvas")
     val manager=workspace.windows
     val scenePanel=sle.editor.workspace.PanelId("scene")
     manager.movePanel(scenePanel,sle.editor.workspace.DockTarget.Detached(sle.editor.workspace.LogicalBounds(80f,80f,700f,540f)))
@@ -210,7 +256,7 @@ internal suspend fun runContextMenuSmoke(
     await("Detached native canvas did not gain focus") { detached.isFocusOwner }
     robot.keyPress(KeyEvent.VK_DELETE);robot.keyRelease(KeyEvent.VK_DELETE);delay(160)
     check(scene.entities.size==detachedCount-1 && scene.selectedKey==null) { "Detached canvas Delete failed" }
-    scene.undoStructure();check(scene.selectedKey==detachedKey)
+    scene.undo();check(scene.selectedKey==detachedKey)
     await("Detached undo preview not ready") { detached.authoringReady() }
     workspace.scenePlayback.play(scene)
     await("Playback did not start") { detached.scenePlayback()==sle.editor.viewport.Playback.Running }
@@ -226,9 +272,9 @@ internal suspend fun runContextMenuSmoke(
     }
     workspace.scenePlayback.stop()
     await("Stop did not restore detached authoring") { detached.authoringReady() }
-    scene.undoStructure() // remove the temporary entity creation after undoing its deletion
+    scene.undo() // remove the temporary entity creation after undoing its deletion
     check(!scene.dirty)
     manager.resetLayout()
     println("DETACHED_DELETE_PLAYBACK_SMOKE_PASS detached-delete/undo/running/paused/no-authoring-menu")
-    println("CONTEXT_MENU_SMOKE_PASS positioned-creation/canvas-delete-repeat/hierarchy-delete-repeat/text-delete/modal-delete/viewport/right-click/select/cascading/child-camera/duplicate/component/attached-filter/no-entity-editor/top-menu/save/prefab-navigation/scene-game-tabs")
+    println("CONTEXT_MENU_SMOKE_PASS positioned-creation/canvas-delete-repeat/canvas-ctrl-d/hierarchy-delete-repeat/hierarchy-ctrl-d/ctrl-s/text-delete/modal-delete/viewport/right-click/select/cascading/child-camera/duplicate/component/attached-filter/no-entity-editor/top-menu/save/prefab-navigation/scene-game-tabs")
 }

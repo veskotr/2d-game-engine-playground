@@ -153,6 +153,11 @@ internal suspend fun runAssetBrowserSmoke(
             Thread.sleep(200)
         }
     }.apply { isDaemon=true;start() }
+    // Opening a project opens its saved Main scene. Managed operations require New in both
+    // workspaces (docs/topics/Projects.md, Managed assets), so start a scene draft as a user would.
+    check(scene.file!=null) { "Project open did not restore its saved scene" }
+    scene.newScene()
+    await("Scene draft did not replace the saved scene") { scene.file==null && !scene.dirty }
     click("AssetFolder:Data")
     answerPrompts("Managed");click("AssetNewFolder")
     await("Managed folder missing") { has("Data/Managed") && assetCommands()?.busy==false }

@@ -15,6 +15,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.*
 import sle.editor.ui.EditorTheme
 import sle.editor.ui.EditorIcons
+import sle.editor.ui.EditorNotices
+import sle.editor.ui.EditorStatus
+import sle.editor.ui.EditorStatusBar
+import sle.editor.ui.NoticeAction
+import sle.editor.ui.NoticeLevel
 import sle.editor.ui.controls.*
 import sle.editor.model.*
 import kotlinx.serialization.json.*
@@ -153,4 +158,26 @@ private fun CompactControlsGallery() {
         }
     }
     EditorTreeRow("Selected tree row (Tab shows independent focus)",selected,{selected=!selected},depth=1)
+    StatusBarGallery()
+}
+
+/** One status bar per notice level: icon, colour, action, Dismiss for sticky levels, and the right-hand facts. */
+@Composable
+private fun StatusBarGallery() {
+    val samples=remember { listOf(
+        Triple(NoticeLevel.Info,"Deleted 3 entities",true),
+        Triple(NoticeLevel.Success,"Saved forest.scene.json",false),
+        Triple(NoticeLevel.Warning,"Undo history cleared after entity template update",false),
+        Triple(NoticeLevel.Error,"Could not save forest.scene.json: the folder is read-only",false),
+    ).map { (level,text,undo) -> EditorNotices().also { notices ->
+        // Long-lived specimens: the gallery never expires them.
+        notices.post(level,text,ttlMillis=Long.MAX_VALUE/2,action=if(undo) NoticeAction("Undo") {} else null)
+    } } }
+    Column(verticalArrangement=Arrangement.spacedBy(LocalEditorMetrics.current.gap)) {
+        samples.forEachIndexed { index,notices ->
+            EditorStatusBar(notices,EditorStatus(hint="Click to select; Ctrl+click adds; drag to move",
+                progress=if(index==0) "Exporting game…" else null,selectionCount=if(index<2) 3 else 0,
+                playState=if(index==3) "Paused" else "Editing",dirty=index%2==0))
+        }
+    }
 }

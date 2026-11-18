@@ -46,9 +46,9 @@ internal data class EntityDocument(
     companion object {
         fun parse(source: String): EntityDocument {
             val document = Json.parseToJsonElement(source).jsonObject
-            require(document.keys.all { it in setOf("root", "entities") }) { "Unsupported prefab metadata; no content was discarded" }
+            require(document.keys.all { it in setOf("root", "entities") }) { "Unsupported entity template metadata; no content was discarded" }
             val entities = document.getValue("entities").jsonArray
-            require(entities.size == 1) { "Open a single-entity prefab; hierarchies are not supported yet" }
+            require(entities.size == 1) { "Open an entity template with a single entity; hierarchies are not supported yet" }
             val entity = entities.single().jsonObject
             require(entity.keys.all { it in setOf("key", "name", "components") }) { "Unsupported entity fields; parent links are not supported yet" }
             fun string(value: JsonElement): String {
@@ -57,7 +57,7 @@ internal data class EntityDocument(
                 return primitive.content
             }
             val key = string(entity.getValue("key"))
-            require(key.isNotBlank() && key == string(document.getValue("root"))) { "Entity key must match the nonempty prefab root" }
+            require(key.isNotBlank() && key == string(document.getValue("root"))) { "Entity key must match the nonempty entity template root" }
             return EntityDocument(key, entity["name"]?.let(::string) ?: "", entity.getValue("components").jsonObject)
         }
     }

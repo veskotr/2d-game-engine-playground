@@ -64,6 +64,10 @@ internal class EngineCanvas(
     fun gameViewport() = engine.latestFrame(viewId)?.gameRect?.toFloatArray() ?: floatArrayOf()
     fun finishGesture() = engine.finishGesture()
     fun fitEntity() { activate();engine.fitEntity() }
+    /** Frame Selected: fits the Scene view to [bounds] in world units. */
+    fun frameBounds(bounds: Bounds) { activate();engine.frameBounds(bounds) }
+    /** The active Scene tool's handles in this canvas's pixels (smokes aim at them). */
+    fun toolHandles() = run { activate();owner.toolHandles() }
     fun zoomEntity(factor: Float) { activate();engine.zoomEntity(factor) }
     fun authoringReady() = owner.authoringReady() && engine.latestFrame(viewId)!=null
     fun stopRendering() = engine.close()

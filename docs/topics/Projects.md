@@ -25,7 +25,7 @@ accessible to VS Code and other tools.
   saving so stale settings do not overwrite them.
 - **File → Close Project** closes the project context and returns to an empty
   standalone workspace. Switching projects or closing one confirms unsaved scene
-  and prefab changes before resetting those documents. Failed opens keep the
+  and entity template changes before resetting those documents. Failed opens keep the
   current workspace. Edits made during background loading are checked again.
 
 Default structure:
@@ -127,18 +127,18 @@ malformed sidecar by selecting the affected asset and assigning a new UUID. Orph
 sidecars can be inspected/removed in Explorer. Existing metadata is never silently
 rewritten to resolve ambiguity.
 
-## Scene and prefab editing
+## Scene and entity template editing
 
 With a project open, **File → New → Scene/Prefab** creates a draft. **Save** and
 **Save As** default to `.scene.json` and `.prefab.json` beneath Assets. The initial
 Scenes/Prefabs folders are suggestions; other existing asset folders work too.
 Double-click either source file in the asset dock to open its workspace. Scene
-**Import → Prefab…** inserts a linked subtree instance for a project prefab,
+**Import → Entity Template…** inserts a linked subtree instance for a project entity template,
 retaining shared assets and scene undo history. Legacy/package imports remain
-independent. Saving the prefab refreshes linked instances in the open scene;
-reopening other scenes resolves the latest saved prefab without rewriting them.
+independent. Saving the entity template refreshes linked instances in the open scene;
+reopening other scenes resolves the latest saved entity template without rewriting them.
 Placement and explicit component overrides remain local. See
-[linked prefab semantics and current editing limits](Prefabs.md#desktop-entity-authoring).
+[linked entity template semantics and current editing limits](Prefabs.md#desktop-entity-authoring).
 
 Project sources are readable JSON envelopes with `format: sle-project-scene` or
 `sle-project-prefab`, `version: 1`, `document` (the ordinary scene/prefab schema),
@@ -183,7 +183,7 @@ sidecars; folder moves carry all contents, preserving UUID references without
 rewriting saved documents. A failed sidecar move attempts to roll back the payload;
 a process crash during a two-file move can require manual sidecar recovery.
 
-Save your drafts, stop playback and choose New in both scene and prefab workspaces
+Save your drafts, stop playback and choose New in both scene and entity template workspaces
 before moving, deleting or recovering assets. Open documents retain resolved paths,
 so this prevents managed operations from invalidating their authoring state. The
 editor temporarily blocks input while those operations run on a worker.
@@ -249,7 +249,7 @@ asset-root-relative paths or `project-asset://<UUID>` references. Raw Lua file I
 and nested XML/animation/state-machine path syntax retain their loader contracts;
 use their supported document-relative paths or explicit resolved resources.
 
-Runtime prefab instances use derived ordinary JSON in a unique `.sle/runtime/`
+Runtime entity template instances use derived ordinary JSON in a unique `.sle/runtime/`
 folder owned by the launch context. The context removes its folder when released;
 a crash can leave disposable cache folders. Project source files remain
 filesystem-authoritative. Runnable folder export is documented below and tracked in the
@@ -317,7 +317,7 @@ unresolved UUIDs, source/runtime changes during export, damaged bundle files,
 links, case-insensitive name collisions and occupied destinations are rejected.
 The exporter never assigns source UUIDs; Refresh Assets first if metadata is
 missing. Source `.sle` caches/editor state/recovery trash are excluded and retained
-in place. Native validation's staged prefab caches are removed before publishing.
+in place. Native validation's staged entity template caches are removed before publishing.
 A running delivery may later create its own `.sle/runtime` derivatives, so keep
 its game directory writable. An interrupted export can leave a sibling
 `.sle-export-*` staging folder; the final destination appears only after validation.
@@ -356,7 +356,7 @@ commands, background scanning while gameplay runs, and project switch/close/reop
 and temporary projects beneath `build/reports/asset-browser-*`.
 
 `gradlew.bat run --args=--project-documents-smoke` checks actual project Save and
-browser double-clicks, scene/prefab sharing, prefab insertion and undo, dirty
+browser double-clicks, scene/prefab sharing, entity template insertion and undo, dirty
 cancellation, external conflicts and reopen, Lua Play, unchanged running snapshots,
 package export, full-project relocation and relocated script/texture loading.
 It writes `build/reports/project-documents-editor.png`. Persistence tests also
@@ -373,7 +373,7 @@ and windowed `integration_project_play_path` cover resolver failures and actual
 Lua gameplay after relocation.
 
 `gradlew.bat run --args=--project-distribution-smoke` extends the project runtime
-fixture with actual Export Game menu/choosers, saved-source copies, native prefab
+fixture with actual Export Game menu/choosers, saved-source copies, native entity template
 cache cleanup, source trash preservation, dirty-draft/context preservation,
 collision failure and a relocated Release no-config launch from an unrelated cwd.
 It changes the original script temporarily to prove delivery independence and

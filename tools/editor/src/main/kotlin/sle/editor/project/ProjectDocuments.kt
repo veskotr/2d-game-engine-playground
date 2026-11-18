@@ -70,8 +70,8 @@ internal class ProjectDocuments(val project: OpenedProject) {
     private fun open(path: Path,expectedKind: ProjectDocumentKind?): OpenedProjectDocument = synchronized(AssetIdentity) {
         val file=target(path);val bytes=read(file);val envelope=Json.parseToJsonElement(bytes.toString(Charsets.UTF_8)).jsonObject
         require(envelope.keys==setOf("format","version","document","assets")) { "Unsupported project document fields" }
-        val kind=ProjectDocumentKind.entries.firstOrNull { it.format==envelope["format"]?.jsonPrimitive?.content } ?: error("Not a project scene or prefab; use standalone Open for packages")
-        require(expectedKind==null || kind==expectedKind) { "Instance asset is not a prefab" }
+        val kind=ProjectDocumentKind.entries.firstOrNull { it.format==envelope["format"]?.jsonPrimitive?.content } ?: error("Not a project scene or entity template; use standalone Open for packages")
+        require(expectedKind==null || kind==expectedKind) { "Instance asset is not an entity template" }
         require(envelope["version"]?.jsonPrimitive?.intOrNull==1) { "Unsupported project document version" }
         val snapshot=scan()
         fun pathFor(text: String): String {
@@ -85,19 +85,19 @@ internal class ProjectDocuments(val project: OpenedProject) {
         val links=mutableListOf<PrefabInstance>()
         if(kind==ProjectDocumentKind.Scene && "prefabs" in document) {
             val raw=document.getValue("prefabs").jsonArray
-            require(raw.size<=MAX_SCENE_ENTITIES) { "Too many prefab instances" }
+            require(raw.size<=MAX_SCENE_ENTITIES) { "Too many entity template instances" }
             val expandedEntities=document.getValue("entities").jsonArray.toMutableList()
             for(item in raw) {
                 val declaration=item.jsonObject
-                require(declaration.keys.all { it in setOf("file","key","parent","overrides") }) { "Unsupported prefab instance field" }
+                require(declaration.keys.all { it in setOf("file","key","parent","overrides") }) { "Unsupported entity template instance field" }
                 val prefabPath=Path.of(declaration.getValue("file").jsonPrimitive.content)
                 val opened=open(prefabPath,ProjectDocumentKind.Prefab)
-                require(opened.kind==ProjectDocumentKind.Prefab) { "Instance asset is not a prefab" }
+                require(opened.kind==ProjectDocumentKind.Prefab) { "Instance asset is not an entity template" }
                 val prefab=PrefabDocument.parse(opened.source)
                 val id=AssetIdentity.read(AssetIdentity.sidecar(prefabPath))
                 val link=PrefabInstance(id,declaration.getValue("key").jsonPrimitive.content,prefab,
                     declaration["overrides"]?.jsonObject ?: JsonObject(emptyMap()),declaration["parent"]?.jsonPrimitive?.content)
-                require(expandedEntities.size+prefab.entities.size<=MAX_SCENE_ENTITIES) { "Too many scene entities after prefab expansion" }
+                require(expandedEntities.size+prefab.entities.size<=MAX_SCENE_ENTITIES) { "Too many scene entities after entity template expansion" }
                 val expanded=prefab.instantiate(link.key,link.parent,link.overrides)
                 expandedEntities+=expanded.entities.map { entity ->
                     val json=Json.parseToJsonElement(entity.serialize()).jsonObject.getValue("entities").jsonArray.single().jsonObject
@@ -135,9 +135,9 @@ internal class ProjectDocuments(val project: OpenedProject) {
     fun saveLinked(path: Path,scene: SceneDocument,instances: List<PrefabInstance>,assets: Map<Path,String>,
         expected: OpenedProjectDocument?,validate: (String)->Unit): OpenedProjectDocument = synchronized(AssetIdentity) {
         val links=instances.map { it.copy(parent=scene.parents[it.key]).capture(scene) }
-        require(links.map { it.key }.distinct().size==links.size) { "Duplicate prefab instance key" }
+        require(links.map { it.key }.distinct().size==links.size) { "Duplicate entity template instance key" }
         val owned=links.flatMap { it.entityKeys }
-        require(owned.distinct().size==owned.size) { "Overlapping prefab instances" }
+        require(owned.distinct().size==owned.size) { "Overlapping entity template instances" }
         val snapshot=scan()
         val expanded=scene.serialize()
         val ordinary=Json.parseToJsonElement(expanded).jsonObject

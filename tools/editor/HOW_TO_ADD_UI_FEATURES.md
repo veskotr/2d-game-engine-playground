@@ -50,24 +50,53 @@ EditorVectorField("Offset", listOf(
 Group rows in `EditorInspectorSection(title, expanded, onExpandedChange, actions = { … })`
 and keep expansion in `state.inspectorSections`, not in a local `remember`.
 
-## Example 2: a command button, menu entry and confirmation
+## Example 2: register a command, then show it in a menu, toolbar and confirmation
 
-The viewport toolbar (`app/Main.kt`, `viewportPanel`) shows the pattern: one strip, Primary
-only for the main action, Ghost for frequent tools, dividers between groups.
+Every editor action is an `EditorCommand` registered once in `command/` (`DocumentCommands`,
+`EditCommands`, `PlayCommands`, `ViewCommands`). Its enabled rule and action read a
+`CommandContext`; window-level operations go through `ctx.actions` (`EditorActions`).
+
+```kotlin
+// command/ViewCommands.kt
+val fit = EditorCommand(CommandId("view.fit"), "Fit", enabled = { it.editable }) { it.actions.fit() }
+// With a shortcut: chords are display text everywhere and run only through the dispatcher.
+val duplicate = EditorCommand(CommandId("edit.duplicate"), "Duplicate",
+    defaultChords = listOf(KeyChord.ctrl(KeyEvent.VK_D)),
+    scopes = setOf(CommandScope.Hierarchy, CommandScope.SceneViewport),  // panel focus required
+    enabled = { it.editable && it.sceneDocument && it.selection != null }) { ctx -> sceneAttempt(ctx) { it.duplicateSelected() } }
+```
+
+Add it to the object's `all` list. `CommandRegistry` rejects duplicate ids and chords that
+conflict in overlapping scopes. The one `ShortcutDispatcher` (installed by `EditorShortcuts`
+in `Main.kt`) runs the key, so never add `onKeyEvent`/`KeyListener` shortcut handling to a
+widget. Widget keys such as tree arrows, Enter or Escape-cancels-drag stay local. The
+dispatcher rules (modal, Game view passthrough, text input, panel scope, repeat) are the
+`shortcutRules` table, unit-tested in `ShortcutDispatcherTest`.
+
+Show the command in menus and context menus with `menuEntry`, which brings the label, enabled
+state and right-aligned shortcut. **Help → Keyboard Shortcuts** picks the command up
+automatically when it has a chord:
+
+```kotlin
+// ui/EditorMenuStrip.kt, editorApplicationMenus
+entry(ViewCommands.fit)              // = ViewCommands.fit.menuEntry(ctx, keymap)
+EditorMenuEntry.Separator            // groups; leading/trailing/doubled separators are dropped
+```
+
+Toolbar buttons call the same command and show the chord in their tooltip:
 
 ```kotlin
 EditorToolbar {
-    SceneViewControls(scenePlayback, enabled, onPlay = { … }, onStop = { … })   // Play is Primary
+    SceneViewControls(scenePlayback, enabled, onPlay = { PlayCommands.play.run(commandContext()) }, onStop = { … })
     EditorToolbarDivider()
     EditorGlyphButton("Zoom in", { panelCanvas?.zoomEntity(.8f) }) { tint -> EditorGlyphIcon(EditorGlyph.Plus, tint) }
-    EditorButton("Fit", { panelCanvas?.fitEntity() }, help = "Fit content", style = EditorButtonStyle.Ghost)
+    EditorButton("Fit", { panelCanvas?.fitEntity() }, help = standardKeymap.hint(ViewCommands.fit.id), style = EditorButtonStyle.Ghost)
 }
 ```
 
-Expose the same command in the menu bar with an `EditorMenuEntry` in
-`editorApplicationMenus` (`ui/EditorMenuStrip.kt`), for example
-`EditorMenuEntry("Fit", editable, action = onFit)`, so it gets keyboard access, disabled
-state and themed Swing rendering for free.
+The toolbar uses one strip, Primary only for the main action, Ghost for frequent tools and
+dividers between groups. Test a new command's enabled rule with a plain `CommandContext`. If
+it has a chord, add a dispatcher case for its scope.
 
 Confirm destructive actions with the shared dialogs. Pass `null`; the active editor window
 becomes the owner:
@@ -79,6 +108,30 @@ if (EditorDialogs.showConfirmDialog(null, "Delete $name?", "Delete project asset
 
 Use `EditorFileChooser(folder)` instead of `JFileChooser`. Empty panels use
 `EditorEmptyState(title, message) { optional action }`.
+
+## Example 3: report a result
+
+Results and failures go to the status bar through `EditorNotices`; never add a red `Text`
+line to a panel. Field validation stays inline next to the field.
+
+```kotlin
+// A composable outside Main: the service is provided to every editor window.
+LocalEditorNotices.current?.warning("Select a single entity to save it as a prefab")
+
+// Work that has the workspace: info/success clear after ~6 s, warnings/errors are sticky.
+notices.success("Saved ${path.fileName}")
+notices.post(NoticeLevel.Success, "Exported to $folder", ttlMillis = 15_000)  // longer to read a path
+notices.error(failure.message ?: "Export failed")
+
+// An action button: hide it once it no longer applies.
+notices.info("Deleted $subject", NoticeAction("Undo", available = { stillLatest() }) { undo() })
+```
+
+Model and project code keeps reporting through its existing fields (`scene.error`,
+`scene.message`, `entity.error`, `project.error`); `ReportNotices` in `Main.kt` posts and clears
+them, so a model never depends on UI. A new long-lived owner of a notice (like the appearance
+store) adds a watched `NoticeSource` there. Test the result with an `EditorNotices` whose
+`clock` you control (see `EditorNoticesTest`).
 
 ## Keyboard and accessibility
 
@@ -93,9 +146,11 @@ Use `EditorFileChooser(folder)` instead of `JFileChooser`. Empty panels use
 - [ ] Dark and Light: open View → Appearance and check hover, focus, disabled, invalid.
 - [ ] Compact and Comfortable density; UI scale 75/85/100%.
 - [ ] A narrow dock (inspector < 240 dp stacks labels) and a detached window.
-- [ ] Keyboard: Tab/Shift-Tab, Enter/Escape in fields, Alt menu mnemonics.
+- [ ] Keyboard: Tab/Shift-Tab, Enter/Escape in fields, Alt menu mnemonics; new shortcuts
+  are registered commands, not widget key handlers.
 - [ ] Undo/redo and file integrity unchanged; no document dirty flag from presentation.
 - [ ] New reusable pattern? Add it to `ui/theme/EditorThemeGallery.kt` and UI_DESIGN.md.
+- [ ] Results and failures are posted to `EditorNotices`, not shown as panel text.
 
 ## Testing commands (from `tools/editor`)
 

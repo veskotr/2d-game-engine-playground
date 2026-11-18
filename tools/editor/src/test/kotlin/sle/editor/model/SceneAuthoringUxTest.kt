@@ -33,10 +33,10 @@ class SceneAuthoringUxTest {
         assertNull(scene.selectedKey);assertNull(scene.selected)
         scene.removeSelected()
         assertEquals(listOf(survivor),scene.entities.map { it.document.key })
-        scene.undoStructure()
+        scene.undo()
         assertEquals(before,scene.document());assertEquals(root,scene.selectedKey)
         assertEquals(root,scene.parents[child]);assertEquals(child,scene.parents[grandchild])
-        scene.redoStructure();assertNull(scene.selectedKey)
+        scene.redo();assertNull(scene.selectedKey)
         scene.select("missing");assertNull(scene.selectedKey)
     }
 
@@ -93,7 +93,7 @@ class SceneAuthoringUxTest {
         assertTrue(sle.editor.ui.deleteSceneSelection(scene,editable=true,modal=false))
         assertNull(scene.selectedKey);assertTrue(scene.entities.isEmpty())
         assertFalse(sle.editor.ui.deleteSceneSelection(scene,editable=true,modal=false))
-        scene.undoStructure();assertEquals(before,scene.document())
+        scene.undo();assertEquals(before,scene.document())
     }
 
     @Test fun droppedPrefabIsPlacedAtTheDropPointAndDeletable() {
@@ -106,7 +106,7 @@ class SceneAuthoringUxTest {
         assertEquals(Vec2(5.0,6.0),position(scene.selected!!))
         scene.removeSelected()
         assertEquals(1,scene.entities.size)
-        scene.undoStructure()
+        scene.undo()
         assertEquals(2,scene.entities.size)
     }
 
@@ -119,7 +119,7 @@ class SceneAuthoringUxTest {
         assertEquals("C:/project/Assets/Textures/hero.png",sprite.getValue("texture").jsonPrimitive.content)
         assertEquals(48.0,sprite.getValue("size").jsonObject.getValue("x").jsonPrimitive.double)
         assertEquals(Vec2(10.0,20.0),position(scene.selected!!))
-        assertTrue(scene.canUndoStructure)
+        assertTrue(scene.canUndo)
     }
 
     @Test fun projectSaveAdoptsAssetsFromExtractedPackagesWithoutDuplicates() {
@@ -200,6 +200,180 @@ class SceneAuthoringUxTest {
         assertEquals(3.0,position(state).x,0.2)
         drag(Vec2(3.0,0.0),Vec2(5.0,0.0)) // center still moves the entity while the collider is edited
         assertEquals(5.0,position(state).x,0.2)
+    }
+
+    // Undo characterization: written against the two-history editor before L1 S2 unified it.
+    // Each case orders its steps so "undo the latest step" gives the same answer in both models.
+    private fun rotation(state: EntityWorkspaceState)=state.document.components.getValue("Transform").jsonObject.getValue("rotation").jsonPrimitive.double
+
+    @Test fun undoCharacterizationEntityEditsSurviveDeleteAndRestore() {
+        val scene=scene();scene.addEntity();val state=scene.selected!!
+        state.setValue("Transform",listOf("rotation"),JsonPrimitive(1.5))
+        scene.removeSelected();assertTrue(scene.entities.isEmpty())
+        scene.undo()
+        assertSame(state,scene.selected);assertEquals(1.5,rotation(state))
+        state.undo();assertEquals(0.0,rotation(state))
+        state.redo();assertEquals(1.5,rotation(state))
+    }
+
+    @Test fun undoCharacterizationOpenGestureIsCancelledBeforeAnyRecordedStep() {
+        val scene=scene();scene.addEntity();val state=scene.selected!!;val key=state.document.key
+        state.setValue("Transform",listOf("rotation"),JsonPrimitive(1.0))
+        state.beginGesture()
+        for(x in 1..3) scene.applyWorldDocument(key,scene.worldDocument(key).withPose(ScenePose(Vec2(x.toDouble(),0.0),1.0)))
+        assertTrue(state.gestureActive)
+        state.undo()
+        assertFalse(state.gestureActive);assertEquals(Vec2(0.0,0.0),position(state));assertEquals(1.0,rotation(state))
+        state.undo();assertEquals(0.0,rotation(state))
+    }
+
+    @Test fun undoCharacterizationDragIsOneStepAndNewEditsDiscardRedo() {
+        val scene=scene();scene.addEntity();val state=scene.selected!!;val key=state.document.key
+        state.beginGesture()
+        for(x in 1..3) scene.applyWorldDocument(key,scene.worldDocument(key).withPose(ScenePose(Vec2(x.toDouble(),0.0))))
+        state.endGesture()
+        state.undo();assertEquals(Vec2(0.0,0.0),position(state))
+        state.redo();assertEquals(Vec2(3.0,0.0),position(state))
+        state.undo();state.rename("Renamed");assertFalse(state.canRedo)
+        scene.rename("One");scene.undo();assertTrue(scene.canRedo)
+        scene.rename("Two");assertFalse(scene.canRedo)
+    }
+
+    @Test fun undoCharacterizationKeepsTheLatestHundredSteps() {
+        val scene=scene()
+        for(index in 0 until 105) scene.rename("Scene $index")
+        repeat(100) { assertTrue(scene.canUndo);scene.undo() }
+        assertFalse(scene.canUndo);assertEquals("Scene 4",scene.document().name)
+        val entity=EntityWorkspaceState(catalog)
+        for(index in 0 until 105) entity.rename("Entity $index")
+        repeat(100) { assertTrue(entity.canUndo);entity.undo() }
+        assertFalse(entity.canUndo);assertEquals("Entity 4",entity.document.name)
+    }
+
+    @Test fun undoCharacterizationLinkedSceneReplacementClearsSceneHistoryAndKeepsSelection() {
+        val scene=scene();scene.addEntity();scene.addEntity();val key=scene.selectedKey
+        assertTrue(scene.canUndo)
+        assertTrue(scene.replaceLinkedScene(scene.document()))
+        assertFalse(scene.canUndo);assertFalse(scene.canRedo);assertEquals(key,scene.selectedKey)
+        assertEquals(HISTORY_CLEARED_NOTICE,scene.message)
+        scene.message=null;assertFalse(scene.replaceLinkedScene(scene.document()));assertNull(scene.message)
+    }
+
+    // One undo timeline per document (L1 S2).
+    @Test fun timelineUndoesInterleavedStructureAndComponentEditsInReverseOrder() {
+        val scene=scene()
+        scene.addEntity();val a=scene.selected!!;val aKey=a.document.key
+        a.setValue("Transform",listOf("rotation"),JsonPrimitive(1.0))
+        scene.addEntity();val b=scene.selected!!;val bKey=b.document.key
+        b.rename("B")
+        scene.reparent(bKey,aKey)
+        a.setValue("Transform",listOf("rotation"),JsonPrimitive(2.0))
+        val final=scene.document()
+        assertEquals(listOf("Create New Entity","Edit Transform rotation","Create New Entity","Rename New Entity","Reparent B","Edit Transform rotation"),
+            scene.history.undoLabels)
+        scene.undo();assertEquals(1.0,rotation(a));assertEquals(aKey,scene.selectedKey) // undo selects the edited entity
+        scene.undo();assertNull(scene.parents[bKey]);assertEquals(bKey,scene.selectedKey)
+        scene.undo();assertEquals("New Entity",b.document.name)
+        scene.undo();assertEquals(listOf(aKey),scene.entities.map { it.document.key });assertEquals(aKey,scene.selectedKey)
+        scene.undo();assertEquals(0.0,rotation(a))
+        scene.undo();assertTrue(scene.entities.isEmpty());assertNull(scene.selectedKey);assertFalse(scene.canUndo)
+        repeat(6) { scene.redo() }
+        assertEquals(final,scene.document());assertFalse(scene.canRedo)
+    }
+
+    @Test fun timelineUndoesAnEditOnADeletedAndRestoredEntityAndSelectsIt() {
+        val scene=scene()
+        scene.addEntity();val a=scene.selected!!;val aKey=a.document.key
+        scene.addEntity();val bKey=scene.selectedKey!!
+        a.setValue("Transform",listOf("rotation"),JsonPrimitive(1.5)) // edited while B is selected
+        scene.select(aKey);scene.removeSelected()
+        assertEquals("Delete New Entity",scene.history.undoLabel)
+        scene.undo();assertEquals(aKey,scene.selectedKey);assertEquals(1.5,rotation(scene.selected!!))
+        scene.select(bKey) // selection changes alone are not steps
+        assertEquals("Edit Transform rotation",scene.history.undoLabel)
+        scene.undo();assertEquals(0.0,rotation(scene.entity(aKey)!!));assertEquals(aKey,scene.selectedKey)
+        scene.redo();assertEquals(1.5,rotation(scene.entity(aKey)!!));assertEquals(aKey,scene.selectedKey)
+        scene.redo();assertNull(scene.entity(aKey));assertNull(scene.selectedKey)
+        scene.undo();scene.undo();scene.undo() // restore A, revert its edit, then remove B
+        assertEquals(listOf(aKey),scene.entities.map { it.document.key });assertEquals(0.0,rotation(scene.entity(aKey)!!))
+    }
+
+    @Test fun timelineLabelsNameTheOperationAndItsSubject() {
+        val scene=scene()
+        scene.addEntity();val parent=scene.selected!!;parent.rename("Player")
+        scene.addChild();scene.selected!!.rename("Hand")
+        scene.select(parent.document.key);scene.duplicateSelected()
+        scene.removeSelected()
+        scene.rename("Level")
+        scene.select(parent.document.key);parent.addComponent("SpriteRenderer")
+        assertEquals(listOf("Create New Entity","Rename New Entity","Create New Entity","Rename New Entity","Duplicate 2 entities",
+            "Delete 2 entities","Rename Scene","Add SpriteRenderer"),scene.history.undoLabels)
+        val ctx=sle.editor.command.CommandContext(scene=scene)
+        assertEquals("Undo Add SpriteRenderer",sle.editor.command.EditCommands.undoLabel(ctx))
+        scene.undo();assertEquals("Redo Add SpriteRenderer",sle.editor.command.EditCommands.redoLabel(ctx))
+        val key=parent.document.key
+        parent.beginGesture();scene.applyWorldDocument(key,scene.worldDocument(key).withPose(ScenePose(Vec2(3.0,0.0))));parent.endGesture()
+        assertEquals("Move Player",scene.history.undoLabel)
+        parent.beginGesture();scene.applyWorldDocument(key,scene.worldDocument(key).withPose(ScenePose(Vec2(3.0,0.0),0.5)))
+        assertEquals("Undo",sle.editor.command.EditCommands.undoLabel(ctx)) // an open drag is cancelled, not undone
+        parent.endGesture();assertEquals("Rotate Player",scene.history.undoLabel)
+    }
+
+    @Test fun timelineMergesArrowNudgeBurstsIntoOneStep() {
+        val scene=scene();scene.addEntity();val state=scene.selected!!;state.rename("Crate")
+        var now=10_000L;scene.history.clock={ now }
+        val gizmos=sle.editor.viewport.ViewportGizmos(state,true,scene)
+        val canvas=java.awt.Canvas()
+        fun press(code: Int) = gizmos.key(java.awt.event.KeyEvent(canvas,java.awt.event.KeyEvent.KEY_PRESSED,0,0,code,java.awt.event.KeyEvent.CHAR_UNDEFINED))
+        val steps=scene.history.undoLabels.size
+        repeat(3) { press(java.awt.event.KeyEvent.VK_RIGHT);now+=300 }
+        assertEquals(0.3,position(state).x,1e-9)
+        assertEquals(steps+1,scene.history.undoLabels.size);assertEquals("Move Crate",scene.history.undoLabel)
+        now+=History.MERGE_WINDOW_MILLIS
+        press(java.awt.event.KeyEvent.VK_UP)
+        assertEquals(steps+2,scene.history.undoLabels.size)
+        scene.undo();assertEquals(0.0,position(state).y,1e-9);assertEquals(0.3,position(state).x,1e-9)
+        scene.undo();assertEquals(0.0,position(state).x,1e-9);assertEquals("Crate",state.document.name)
+    }
+
+    @Test fun timelineKeepsTheNumericEditContract() {
+        val scene=scene();scene.addEntity();val state=scene.selected!!
+        val edit=state.numberEdit("Transform",listOf("rotation"))
+        val steps=scene.history.undoLabels
+        edit.focus();edit.input("2");edit.input("2.5");assertEquals(2.5,rotation(state));assertTrue(scene.gestureActive)
+        scene.undo() // cancels the open edit; no recorded step is consumed
+        assertEquals(0.0,rotation(state));assertFalse(scene.gestureActive);assertEquals(steps,scene.history.undoLabels)
+        edit.input("9");edit.blur();assertEquals(0.0,rotation(state)) // the cancelled presenter is stale
+        edit.focus();edit.input("3");assertTrue(edit.commit())
+        assertEquals(steps+"Edit Transform rotation",scene.history.undoLabels)
+        scene.undo();assertEquals(0.0,rotation(state));assertEquals(steps,scene.history.undoLabels)
+        scene.redo();assertEquals(3.0,rotation(state))
+        edit.focus();edit.input("4");scene.redo() // redo during an open edit cancels it too
+        assertEquals(3.0,rotation(state));assertFalse(scene.gestureActive)
+    }
+
+    @Test fun timelinePrefabWorkspaceKeepsItsOwnHistory() {
+        val scene=scene();scene.addEntity();val entity=scene.selected!!
+        val prefab=EntityWorkspaceState(catalog)
+        prefab.rename("Crate");entity.rename("Player")
+        assertEquals(listOf("Rename New Entity"),prefab.history.undoLabels)
+        assertSame(scene.history,entity.history);assertSame(scene,entity.timeline);assertSame(prefab,prefab.timeline)
+        val prefabCtx=sle.editor.command.CommandContext(mode=sle.editor.viewport.ViewportMode.Entity,scene=scene,entity=prefab,prefab=prefab)
+        val linkedCtx=prefabCtx.copy(linked=true,entity=entity)
+        assertSame(prefab,prefabCtx.document);assertSame(scene,linkedCtx.document)
+        sle.editor.command.EditCommands.undo.run(prefabCtx)
+        assertEquals("New Entity",prefab.document.name);assertEquals("Player",entity.document.name)
+        sle.editor.command.EditCommands.undo.run(linkedCtx)
+        assertEquals("New Entity",entity.document.name);assertEquals(listOf("Create New Entity"),scene.history.undoLabels)
+        assertTrue(prefab.canRedo);assertFalse(prefab.canUndo)
+    }
+
+    @Test fun timelineUndoThatWouldBreakAnAnimatorTargetStaysAndBecomesTheNotice() {
+        val scene=SceneWorkspaceState(emptyMap()) { it }
+        scene.addEntity();val first=scene.selected!!;scene.addEntity();val last=scene.selectedKey!!
+        first.document=first.document.addComponent("Animator",buildJsonObject { put("targetEntities",buildJsonObject { put("other",last) }) })
+        sle.editor.command.EditCommands.undo.run(sle.editor.command.CommandContext(scene=scene))
+        assertEquals(2,scene.entities.size);assertTrue(scene.canUndo);assertNotNull(scene.error)
     }
 
     @Test fun dialogsNeverStartInTemporaryPackageFolders() {

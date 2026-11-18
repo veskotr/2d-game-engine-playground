@@ -172,7 +172,7 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
         val chooser=EditorFileChooser(start.toFile())
         val suffix=if(export) { if(kind==ProjectDocumentKind.Scene) ".slescene" else ".sleprefab" } else kind.suffix
         chooser.fileFilter=if(export) FileNameExtensionFilter("Portable package (*$suffix)",suffix.drop(1))
-            else FileNameExtensionFilter("Project ${kind.name.lowercase()} (*$suffix)","json")
+            else FileNameExtensionFilter("Project ${if(kind==ProjectDocumentKind.Scene) "scene" else "entity template"} (*$suffix)","json")
         if(!save) chooser.addChoosableFileFilter(FileNameExtensionFilter("Portable packages","slescene","sleprefab"))
         if(save) {
             val name=if(kind==ProjectDocumentKind.Scene) scene?.name else prefab?.document?.name
@@ -193,7 +193,7 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
             val imported=withContext(Dispatchers.IO) {
                 if(path.fileName.toString().endsWith(".prefab.json",true) && Json.parseToJsonElement(Files.readString(path)).jsonObject.containsKey("format")) {
                     val value=ProjectDocuments(opened!!).open(path)
-                    require(value.kind==ProjectDocumentKind.Prefab) { "Select a project prefab" }
+                    require(value.kind==ProjectDocumentKind.Prefab) { "Select a project entity template" }
                     value.copy(source=canonical(value.kind,value.source))
                 } else if(path.fileName.toString().endsWith(".sleprefab",true)) PrefabPackages.openTree(path).let {
                     OpenedProjectDocument(path,ProjectDocumentKind.Prefab,canonical(ProjectDocumentKind.Prefab,it.first.serialize()),it.second,"")
@@ -203,15 +203,15 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
                 val tree=PrefabDocument.parse(imported.source)
                 if(imported.revision.isNotEmpty()) scene?.insertLinkedPrefab(tree,sle.editor.project.assets.AssetIdentity.read(sle.editor.project.assets.AssetIdentity.sidecar(imported.path)),imported.assets,position)
                 else scene?.insertPrefabTree(tree,imported.assets,position)
-            } else failure(ProjectDocumentKind.Scene,"Scene changed during prefab import; try again")
+            } else failure(ProjectDocumentKind.Scene,"Scene changed during entity template import; try again")
         }
     }
     /** Apply Changes to Prefab: the same validated update as a prefab Save, built from one instance. */
     val applyPrefab: (String)->Unit=apply@{ key ->
         val state=scene ?: return@apply
         if(opened==null) return@apply
-        if(project.busy || !canEdit()) return@apply failure(ProjectDocumentKind.Scene,if(project.busy) "The project is busy; try again when it finishes" else "Stop the game before changing prefabs")
-        val link=state.linkedInstance(key) ?: return@apply failure(ProjectDocumentKind.Scene,"Select a linked prefab instance")
+        if(project.busy || !canEdit()) return@apply failure(ProjectDocumentKind.Scene,if(project.busy) "The project is busy; try again when it finishes" else "Stop the game before changing entity templates")
+        val link=state.linkedInstance(key) ?: return@apply failure(ProjectDocumentKind.Scene,"Select a linked entity template instance")
         if(state.entities.any { it.document.key in link.entityKeys && it.fieldErrors.isNotEmpty() }) return@apply failure(ProjectDocumentKind.Scene,"Correct invalid fields before applying")
         val captured=state.document()
         val (applied,rebased)=try { applyInstanceToPrefab(captured,link.key) }
@@ -232,9 +232,9 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
             }
             if(!sameProject()) return@launch
             if(revision(ProjectDocumentKind.Scene)==before) {
-                state.replaceLinkedScene(update.scene ?: rebased)
+                val cleared=state.replaceLinkedScene(update.scene ?: rebased)
                 state.relocateAssets(adopted.moved)
-                state.message="Applied instance changes to ${path.fileName}"
+                state.message="Applied instance changes to ${path.fileName}"+if(cleared) ". ${sle.editor.model.HISTORY_CLEARED_NOTICE}" else ""
             } else failure(ProjectDocumentKind.Scene,"Applied to ${path.fileName}; the scene changed meanwhile, so reopen it to refresh instances")
             if(openPrefab && prefab?.dirty==false) {
                 val reloaded=withContext(Dispatchers.IO) { store.open(path).let { it.copy(source=canonical(it.kind,it.source)) } }
@@ -246,11 +246,11 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
     val createPrefab: (String,Path)->Unit=create@{ key,folder ->
         val state=scene ?: return@create
         if(opened==null) return@create
-        if(project.busy || !canEdit()) return@create failure(ProjectDocumentKind.Scene,if(project.busy) "The project is busy; try again when it finishes" else "Stop the game before changing prefabs")
-        if(state.entities.any { it.fieldErrors.isNotEmpty() }) return@create failure(ProjectDocumentKind.Scene,"Correct invalid fields before creating a prefab")
+        if(project.busy || !canEdit()) return@create failure(ProjectDocumentKind.Scene,if(project.busy) "The project is busy; try again when it finishes" else "Stop the game before changing entity templates")
+        if(state.entities.any { it.fieldErrors.isNotEmpty() }) return@create failure(ProjectDocumentKind.Scene,"Correct invalid fields before creating an entity template")
         val captured=state.document()
         val created=try { prefabFromSceneSubtree(captured,key) }
-            catch(failure: Exception) { return@create failure(ProjectDocumentKind.Scene,failure.message ?: "Cannot create a prefab from this entity") }
+            catch(failure: Exception) { return@create failure(ProjectDocumentKind.Scene,failure.message ?: "Cannot create an entity template from this entity") }
         val assets=state.assetsOf(created.renamed.values.toSet())
         val name=captured.entities.first { it.key==key }.name
         val before=revision(ProjectDocumentKind.Scene)
@@ -268,7 +268,7 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
             if(revision(ProjectDocumentKind.Scene)!=before) return@launch failure(ProjectDocumentKind.Scene,"Saved ${saved.path.fileName}, but the scene changed meanwhile, so the entity was not linked")
             state.linkSubtree(captured,created.withSource(PrefabDocument.parse(saved.source)),id)
             state.relocateAssets(adopted.moved)
-            state.message="Saved prefab ${saved.path.fileName} and linked ${name.ifBlank { "the entity" }}"
+            state.message="Saved entity template ${saved.path.fileName} and linked ${name.ifBlank { "the entity" }}"
         }
     }
     SideEffect {

@@ -1,5 +1,6 @@
 package sle.editor.smoke
 
+import sle.editor.ui.postedAfter
 import androidx.compose.ui.geometry.Rect
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
@@ -16,14 +17,14 @@ import javax.swing.*
 
 internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineCanvas,project: ProjectWorkspaceState,
     projects: ProjectCommands,documents: ()->ProjectDocumentCommands?,browser: ()->AssetBrowserState?,bounds: Map<String,Rect>,
-    scene: SceneWorkspaceState,prefab: EntityWorkspaceState,playback: ScenePlaybackState,
+    scene: SceneWorkspaceState,prefab: EntityWorkspaceState,playback: ScenePlaybackState,notices: sle.editor.ui.EditorNotices,
 ) {
     val robot=Robot().apply { autoDelay=12 }
     suspend fun await(message: String,condition: ()->Boolean) {
         repeat(240) { if(condition()) { delay(100);return };delay(25) }
         runCatching { ImageIO.write(robot.createScreenCapture(Rectangle(Toolkit.getDefaultToolkit().screenSize)),"png",
             Path.of(System.getProperty("sle.smokeReport")).parent.resolve("project-documents-failure.png").toFile()) }
-        error("$message; scene=${scene.error}; prefab=${prefab.error}; project=${project.error}")
+        error("$message; scene=${scene.error}; prefab=${prefab.error}; project=${project.error}; notice=${notices.current?.text}")
     }
     suspend fun click(id: String,double: Boolean=false) {
         await("Missing browser control $id") { id in bounds }
@@ -101,23 +102,26 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     scene.addCamera()
     val scenePath=first.assets.resolve("Scenes/shared.scene.json")
     // Real Ctrl+S from native viewport focus uses the project JSON Save chooser.
-    canvas().requestFocusInWindow()
-    delay(250)
+    // Click empty canvas space as a user would: requestFocusInWindow alone does not activate the
+    // window, and an inactive editor would send Ctrl+S to whichever app owns the keyboard.
+    canvas().let { view -> val at=view.locationOnScreen;robot.mouseMove(at.x+view.width-12,at.y+view.height-12) }
+    robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+    await("Native canvas did not gain focus for Ctrl+S") { canvas().isFocusOwner }
     choose(scenePath)
     robot.keyPress(java.awt.event.KeyEvent.VK_CONTROL);robot.keyPress(java.awt.event.KeyEvent.VK_S)
     robot.keyRelease(java.awt.event.KeyEvent.VK_S);robot.keyRelease(java.awt.event.KeyEvent.VK_CONTROL)
     await("Project scene Save failed") { !project.busy && scene.file==scenePath && !scene.dirty }
     val source=withContext(Dispatchers.IO) { Files.readString(scenePath) }
     check(source.contains("project-asset://") && !source.contains(first.root.toString().replace('\\','/')))
-    prefab.rename("Shared Prefab");prefab.addComponent("SpriteRenderer")
+    prefab.rename("Shared Entity Template");prefab.addComponent("SpriteRenderer")
     prefab.setValue("SpriteRenderer",listOf("texture"),JsonPrimitive(first.assets.resolve("Textures/tile2.png").toString().replace('\\','/')))
     val prefabPath=first.assets.resolve("Prefabs/shared.prefab.json")
     documents()!!.savePath(ProjectDocumentKind.Prefab,prefabPath)
-    await("Project prefab save failed") { !project.busy && prefab.file==prefabPath && !prefab.dirty }
+    await("Project entity template save failed") { !project.busy && prefab.file==prefabPath && !prefab.dirty }
     scene.importPrefab(prefabPath)
-    await("Project prefab insertion failed") { !project.busy && scene.entities.size==3 }
+    await("Project entity template insertion failed") { !project.busy && scene.entities.size==3 }
     check(scene.selected!!.document.components.getValue("SpriteRenderer").jsonObject.getValue("texture").jsonPrimitive.content==first.assets.resolve("Textures/tile2.png").toString().replace('\\','/'))
-    scene.undoStructure();check(scene.entities.size==2 && !scene.dirty)
+    scene.undo();check(scene.entities.size==2 && !scene.dirty)
     check(withContext(Dispatchers.IO) { Files.list(first.assets.resolve("Textures")).use { it.count() } }==2L)
     // A clean New document during loading is a switch, not permission to replace it.
     val locked=CompletableDeferred<Unit>()
@@ -138,8 +142,9 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     answer(JOptionPane.NO_OPTION);click("AssetFile:Scenes/shared.scene.json",true)
     check(scene.name=="Retain dirty draft" && scene.dirty)
     withContext(Dispatchers.IO) { Files.writeString(scenePath,source.replace("Shared Scene","External Scene")) }
+    val beforeConflict=notices.recent.firstOrNull()
     menu("Save")
-    await("External conflict not surfaced") { !project.busy && scene.error?.contains("changed")==true }
+    await("External conflict not surfaced") { !project.busy && notices.postedAfter(beforeConflict).any { it.level==sle.editor.ui.NoticeLevel.Error && "changed" in it.text } }
     check(scene.name=="Retain dirty draft" && scene.dirty)
     check(withContext(Dispatchers.IO) { Files.readString(scenePath) }.contains("External Scene"))
     answer(JOptionPane.YES_OPTION);click("AssetFile:Scenes/shared.scene.json",true)
@@ -163,7 +168,7 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     val standalone=SceneWorkspaceState(prefab.catalog);withContext(Dispatchers.IO) { standalone.open(packagePath) }
     check(standalone.entities.size==2 && standalone.entities.any { "Script" in it.document.components })
     click("AssetFolder:Prefabs");click("AssetFile:Prefabs/shared.prefab.json",true)
-    await("Browser prefab open failed") { !project.busy && prefab.projectDocument!=null && prefab.document.name=="Shared Prefab" }
+    await("Browser entity template open failed") { !project.busy && prefab.projectDocument!=null && prefab.document.name=="Shared Entity Template" }
     projects.close();await("Project close failed") { !project.busy && project.opened==null }
     val moved=withContext(Dispatchers.IO) { first.root.resolveSibling("Relocated Game").also { Files.move(first.root,it) } }
     projects.openPath(moved.resolve(first.file.fileName))
@@ -186,17 +191,17 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     val linkedPath=moved.resolve(first.document.assetRoot).resolve("Prefabs/shared.prefab.json")
     val linkedScenePath=moved.resolve(first.document.assetRoot).resolve("Scenes/shared.scene.json")
     scene.importPrefab(linkedPath)
-    await("Linked prefab import failed") { !project.busy && scene.document().prefabInstances.size==1 }
+    await("Linked entity template import failed") { !project.busy && scene.document().prefabInstances.size==1 }
     val linkedKey=scene.selectedKey!!
     documents()!!.savePath(ProjectDocumentKind.Scene,linkedScenePath)
     await("Linked scene save failed") { !project.busy && !scene.dirty }
     prefab.setValue("SpriteRenderer",listOf("size"),vector(96,96))
     documents()!!.savePath(ProjectDocumentKind.Prefab,linkedPath)
-    await("Prefab save did not refresh linked scene") {
+    await("Entity template save did not refresh linked scene") {
         !project.busy && !prefab.dirty && scene.dirty &&
             scene.entities.first { it.document.key==linkedKey }.document.components["SpriteRenderer"]!!.jsonObject["size"]!!.jsonObject["x"]?.jsonPrimitive?.doubleOrNull==96.0
     }
-    check(scene.selectedKey==linkedKey && !scene.canUndoStructure)
+    check(scene.selectedKey==linkedKey && !scene.canUndo)
     documents()!!.savePath(ProjectDocumentKind.Scene,linkedScenePath)
     await("Refreshed linked scene save failed") { !project.busy && !scene.dirty }
     documents()!!.openPath(linkedScenePath)
@@ -210,7 +215,7 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
             PrefabDocument("root",listOf(EntityDocument(key="root"))).serialize(),emptyMap(),null) {}
     }
     documents()!!.openPath(linkedPath)
-    await("Linked prefab reopen failed") { !project.busy && prefab.file?.toAbsolutePath()==linkedPath.toAbsolutePath() }
+    await("Linked entity template reopen failed") { !project.busy && prefab.file?.toAbsolutePath()==linkedPath.toAbsolutePath() }
     scene.rename("Switch Scene");prefab.setValue("SpriteRenderer",listOf("size"),vector(128,128))
     check(scene.dirty && prefab.dirty)
     documents()!!.openPath(otherPrefab)

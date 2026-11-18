@@ -362,6 +362,14 @@ extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_panPreview
     JNIEnv* env,jobject,jlong token,jfloat dx,jfloat dy) {
     guarded(env,[&] { validate(token); session->panEntityPreview({dx,dy}); });
 }
+// Editor grid spacing and major-line interval; affects Scene/Entity preview drawing only.
+extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_setEditorGrid(
+    JNIEnv* env,jobject,jlong token,jfloat spacing,jint majorEvery) {
+    guarded(env,[&] {
+        validate(token);
+        if (!session->setEditorGrid({spacing,majorEvery})) throw std::runtime_error("Invalid editor grid");
+    });
+}
 extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_sceneTransforms(JNIEnv* env,jobject,jlong token) {
     jbyteArray result=nullptr;
     guarded(env,[&] {

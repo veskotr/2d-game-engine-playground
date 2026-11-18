@@ -34,15 +34,27 @@ portable `.slescene` workflow.
   Inspector shows "N entities selected" with Duplicate and Delete only (editing several
   entities at once is a later roadmap item); Edit Entity, Apply Changes to Prefab, Add
   Component, Parent and dragging to Assets work on one entity and say so when disabled.
-- **Tools and snapping:** **Q** Select and **W** Move tools (viewport toolbar and the Tools
-  menu; they work while the Scene view or the Hierarchy has focus). Select draws a box on
-  empty space to select by selection bounds (Shift/Ctrl adds). Move shows X/Y arrows and a
-  free-move square on the active entity; body drags still move the selection. **F** frames
-  the selection. Snapping (toolbar magnet, **Configure Snap…**) is per user and per project
+- **Tools and snapping:** **Q** Select, **W** Move, **E** Rotate and **R** Scale tools
+  (viewport toolbar and the Tools menu; the keys work while the Scene view or the Hierarchy
+  has focus). Select draws a box on empty space to select by selection bounds (Shift/Ctrl
+  adds). Move shows X/Y arrows and a free-move square on the active entity; body drags still
+  move the selection in every tool. Rotate shows a ring: dragging it turns the selection,
+  and with several entities selected their positions orbit the pivot. Scale shows X/Y handles
+  along the active entity's rotation and a uniform centre box; Shift makes any scale drag
+  uniform. Scale changes Transform scale only (never sprite size), never crosses zero
+  (minimum magnitude 0.001, or one scale step while snapping) and keeps mirrored signs.
+  The **Pivot/Center** toggle in the toolbar (also Tools menu) picks what Rotate and Scale
+  turn around: the active entity's position or the centre of the selection bounds. Each
+  drag is one undo step ("Rotate Player", "Scale 3 entities"); Esc cancels it. Rotation
+  stays stored in radians; the status-bar hints show degrees. **F** frames the selection.
+  Snapping (toolbar magnet, **Configure Snap…**) is per user and per project
   (`.sle/editor-state.json`): Ctrl inverts it during a drag or nudge, Shift keeps a move on
-  its dominant axis, positions snap in world space before conversion to local, and
-  right-click creation and Assets drops use the move step. The grid follows the move step
-  through the editor-only `Runtime::setEditorGrid`. Rotate (E) and Scale (R) come later.
+  its dominant axis, and positions, rotations (rotate step, degrees) and scales (scale
+  step) snap the active entity's world value before conversion to local through the parent
+  pose; the rest of the selection follows by the same amount. Right-click creation and
+  Assets drops use the move step. The grid follows the move step through the editor-only
+  `Runtime::setEditorGrid`. The Prefab tab keeps its own shape handles; there is no Rect
+  tool yet.
 - The default layout places the tree on the left, viewport in the center, and selected
   entity inspector on the right. Entity properties contain name, parent, Transform
   and Camera2D when present. **Fit** frames all entities;

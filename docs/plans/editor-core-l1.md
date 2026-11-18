@@ -1,6 +1,6 @@
 # L1 — Editor core: commands, history, selection, status bar, viewport tools
 
-**Status:** Planned 2026-11-17. Sessions 1–5 implemented and validated (see Progress); sessions 6–7 not started.
+**Status:** Planned 2026-11-17. Sessions 1–6 implemented and validated (see Progress); session 7 not started.
 **Parent:** [editor-game-workflows.md](editor-game-workflows.md) §5, base layer
 **L1** (roadmap items 0.1, 0.2, 0.4, 1.1, 1.2 and rule R3).
 **Request:** Plan L1 only. Tilemaps and the other layers come later.
@@ -314,23 +314,23 @@ is shippable alone.
 
 ### Session 6: Rotate and Scale tools
 
-- [ ] Add a Pivot/Center toggle: rotate and scale around the active entity's
+- [x] Add a Pivot/Center toggle: rotate and scale around the active entity's
   pivot or the selection bounds centre.
-- [ ] **Rotate (E):** a ring handle. Dragging changes the angle, which is
+- [x] **Rotate (E):** a ring handle. Dragging changes the angle, which is
   stored in radians as today; the hint and status bar show degrees. Snapping
   uses the rotate step. With multiple entities selected, their positions orbit
   the pivot.
-- [ ] **Scale (R):** X/Y axis handles and a uniform centre handle; Shift forces
+- [x] **Scale (R):** X/Y axis handles and a uniform centre handle; Shift forces
   uniform. Snapping uses the scale step. Never cross zero (clamp to a minimum
   magnitude). Mirrored scale is preserved. Scales Transform only; sprite size
   is unchanged.
-- [ ] Tests:
+- [x] Tests:
   - rotate and scale math for children of rotated or scaled parents
   - mirrored and zero-scale guards
   - multi-entity orbit
   - one undo step per drag
-- [ ] Smokes: `--gizmo-smoke` gains rotate/scale drags and undo.
-- [ ] Docs: SceneEditor topic (tools, snapping, shortcuts) and README Viewport
+- [x] Smokes: `--gizmo-smoke` gains rotate/scale drags and undo.
+- [x] Docs: SceneEditor topic (tools, snapping, shortcuts) and README Viewport
   controls.
 
 ### Session 7: Verification and handoff
@@ -1082,3 +1082,128 @@ Desktop smokes need an unlocked interactive Windows session.
   - No editor version bump (planned for S7).
 - Next: Session 6 (Rotate and Scale tools, Pivot/Center), only when requested. `SnapSettings`
   already holds the rotate and scale steps.
+
+### Session 6 handoff — 2026-11-18
+
+- Start state: `feat/project-foundation` at 06afc60 (Session 5). Only the untracked starter-assets
+  zip and `docs/plans/editor-game-workflows.md` were present; both were left alone. S5 had not
+  registered E/R (its handoff says so), so nothing was stubbed. Nothing was committed.
+- Implemented (paths under `tools/editor/src/main/kotlin/sle/editor/`):
+  - `viewport/tools/ViewportTool.kt`: `ViewportToolId` gains Rotate (E) and Scale (R);
+    `PivotMode` (Pivot, Center) and `ViewportToolState.pivot` (per-user, session-only, never an
+    undo step, like the active tool); `ToolHandle.kind` (`Move`, `Ring`, `Scale`) so smokes
+    can find a handle; `ToolHintContext.pivot`; `ToolOverlay.rotateRing/scaleHandles`.
+  - `viewport/tools/TransformTools.kt` (new):
+    - `TransformMath`: `rotateAround` (positions orbit the pivot), `rotationTarget` (snaps the
+      world angle in degrees, returns radians), `scaleValue` (keeps the sign, never crosses zero:
+      the magnitude stops at `MIN_SCALE` 0.001, or one scale step while snapping; a zero scale
+      stays zero), `scaleAround` (offsets scale from the pivot along the frame's axes),
+      `dragFactor`, `wrap`.
+    - `transformFrame(scene, mode)`: the active entity, the pivot (its world position, or the
+      centre of the union of the selected entities' world selection bounds), the active world
+      rotation and scale, and the roots written (top-most selected entities with a Transform).
+    - `RotateHandles` (60 px ring, ±6 px) and `ScaleHandles` (64 px axis lines along the
+      active entity's world rotation, a 7 px centre box, ±7 px).
+    - `TransformDrag`: opens every root's gesture at the press; each update writes world poses
+      through `applyWorldDocument` (which converts through the parent pose); the active entity's
+      world rotation or scale snaps and the others follow by the same delta or factor; commit is
+      one `History.group` ("Rotate Player", "Scale 2 entities"); cancel restores the press; when
+      any root's gesture was ended (Undo mid-drag cancels one open gesture, or a structural
+      change), the rest is cancelled instead of recording a partial step.
+    - `TransformTool` (on `PickingTool`, so clicks, Shift/Ctrl toggles, marquee and body drags
+      work as in Select; arrow nudges wait until a handle drag ends), `RotateTool`, `ScaleTool`
+      (hidden for a zero world scale).
+  - `viewport/tools/SceneTools.kt`: hints for E/R with the rotate step in degrees and the pivot;
+    `ToolHost` maps E/R to the new tools.
+  - `viewport/SnapService.kt`: `rotateStep(invert)` and `scaleStep(invert)`.
+  - `viewport/GizmoOverlay.kt`: `rotateRing` (idle ring in the blended axis colour, the dragged
+    ring and its start/current spokes in `selectionOutline`) and `scaleHandles` (axis lines with
+    end boxes in `viewportXAxis`/`viewportYAxis`, the centre box blended; the dragged handle in
+    `selectionOutline`; the handles stretch with the drag). `NativeViewportOwner` wires both and
+    hides the entity cross for W/E/R (they draw their own handles).
+  - Commands: `ToolCommands.rotate/scale` (E/R, Scene view and Hierarchy scopes, disabled outside
+    the Scene view like Q/W) and `togglePivot` (no chord) with a Tools-menu label that names the
+    action ("Rotate and Scale Around the Selection Center" / "… Around the Pivot"). The Tools
+    menu and Help → Keyboard Shortcuts pick them up from the registry; Help's mouse section adds
+    rotate, scale and pivot rows.
+  - UI: glyphs `ToolRotate`, `ToolScale`, `PivotActive`, `PivotCenter`; the Scene toolbar shows
+    Q/W/E/R, then the Pivot/Center pair (`EditorIconToggle`, tooltips explain each), then the
+    magnet, whose tooltip now lists all three steps. The status bar passes the pivot into the
+    idle hint; during a drag it shows e.g. "Rotating Crate A by +45° to 45° (snapping to 15°):
+    Ctrl rotates freely; Esc cancels" or "Scaling Crate A along X to 1.3 × 1 …".
+- Deliberate choices (correct them if wrong):
+  - Snapping uses the absolute world value of the active entity (rotation lands on 0°, 15°, 30°
+    …; scale on multiples of 0.1), as S5 does for positions, not the delta. Local values under a
+    rotated or scaled parent are therefore generally off-step.
+  - Scale handles follow the active entity's world rotation (scale is a local-axis quantity;
+    Move arrows stay world-aligned). Other selected entities multiply their own scale axes by
+    the same factor, and their offsets from the pivot scale along the active entity's axes. A
+    selected child whose ancestor is selected is not written; it follows the ancestor through
+    the parent pose.
+  - The axis factor is 1 + (pixels along the handle) / 64; the centre box uses the right-and-up
+    diagonal. Shift turns an axis drag uniform; in a uniform drag each axis snaps separately.
+  - The pivot is captured at the press. In Center mode with a single entity, the pivot is its
+    bounds centre, so its position can change.
+  - The Pivot/Center choice is not saved (like the active tool) and has no chord.
+  - Ctrl+Z during a Rotate/Scale drag cancels the whole drag (see `TransformDrag.finish`).
+    Resizing the viewport mid-drag does not cancel it (Move drags do cancel); the drag keeps the
+    press-time camera.
+- Tests: `viewport/tools/TransformToolsTest` (8):
+  - scale math: mirrored growth, the minimum and step clamps, zero stays zero, offsets in a
+    turned frame, snapped and free rotation targets, angle wrap
+  - a child of a parent turned 30° with scale (2, −1): a ring drag snaps the world angle to 75°
+    and stores 45° (radians) locally, keeps its position, is one step "Rotate …"; Ctrl rotates
+    freely; undo restores
+  - a child of a parent turned 90° with scale (2, −1): handles follow the child's rotation; an X
+    drag snaps world X to 2.6 (local 1.3) and leaves Y; Shift scales uniformly and keeps the
+    mirrored sign; a drag far past the pivot stops at one step
+  - unsnapped: a mirrored X stops at −0.001; a zero world scale hides the handles
+  - multi-entity rotate orbits the active pivot and then the selection centre, one step each;
+    Undo mid-drag leaves no partial step
+  - multi-entity scale doubles offsets from the pivot and writes only top-most roots
+  - Esc cancels; switching tools mid-drag commits one step and ignores later events; gesture
+    hints show degrees; rotation is stored in radians; clicking empty space still clears
+  - hints, E/R chords, toolbar order, the Scene-view rule and the pivot toggle label
+- Smoke changes: `--gizmo-smoke` now also opens the starter scene and, after the existing prefab
+  stages, switches to the Scene view and runs `runTransformToolsSmoke` (printing
+  `VIEWPORT_TRANSFORM_TOOLS_SMOKE_PASS`): a click on Crate A, **E** by Robot with the canvas
+  focused, a ring drag that snaps to 45° as one step "Rotate Crate A" (`gizmo-rotate-tool.png`),
+  Ctrl+Z; **R**, a snapped X drag that leaves Y and the sprite size alone as one step "Scale
+  Crate A", a Shift-held Y drag that scales both axes (`gizmo-scale-tool.png`), an Esc-cancelled
+  drag, Ctrl+Z ×2; Ctrl-click Crate B, Center pivot, a ring drag that turns both 90° and orbits
+  them around the selection centre as one step "Rotate 2 entities" (`gizmo-rotate-center.png`),
+  Ctrl+Z.
+- Commands run (Windows; Gradle from `tools/editor` through `gradle.ps1`, JDK 21; smokes from Git
+  Bash with `powershell -File gradle.ps1 run --args=--<smoke>`). The desktop was unlocked:
+  LogonUI was not running (only a LockApp process from 2026-11-11), and the captures show the
+  editor, not the lock screen.
+  - `compileKotlin`: passed on the first attempt.
+  - `test --tests sle.editor.viewport.tools.TransformToolsTest --tests sle.editor.viewport.tools.ViewportToolsTest`:
+    passed, `TransformToolsTest` 8/8.
+  - `run --args=--gizmo-smoke`: `VIEWPORT_GIZMO_SMOKE_PASS … handles=176` and
+    `VIEWPORT_TRANSFORM_TOOLS_SMOKE_PASS e-key/rotate-snap/one-step/undo/r-key/scale-axis-snap/
+    sprite-size-kept/shift-uniform/esc-cancel/center-orbit/multi-one-step`, first run. The three
+    captures show the ring on Crate A turned 45°, the red X / green Y scale handles and centre
+    box, and both crates turned 90° around the ring at their common centre.
+  - `build`: passed, 328 tests, 0 failures, 2 existing skips.
+  - `run --args=--scene-smoke`: `SCENE_TOOLS_SMOKE_PASS`, `SCENE_MULTI_SELECT_SMOKE_PASS`,
+    `SCENE_EDITOR_SMOKE_PASS`, `EDITOR_UI_SCALE_PASS`, `SCENE_TREE_COMPONENT_HANDOFF_PASS`,
+    `SANDBOX_DESKTOP_PASS`, `SCENE_ENTITY_SANDBOX_SWITCH_PASS`, first run. Its window capture
+    (`scene-tree-window.png`) shows the Q/W/E/R group, the Pivot/Center pair and the magnet.
+  - `run --args=--context-menu-smoke`: `CONTEXT_MENU_SMOKE_PASS`,
+    `DETACHED_DELETE_PLAYBACK_SMOKE_PASS`, `MENU_KEYBOARD_SMOKE_PASS`,
+    `AUXILIARY_APPEARANCE_SMOKE_PASS`, first run.
+  - After the partial-step fix in `TransformDrag.finish` and the Help text: `build` again (328
+    tests, 0 failures, 2 skips; the new Undo-mid-drag check included) and `run
+    --args=--gizmo-smoke` again (both PASS lines). The scene and context-menu smokes were not
+    re-run after that change, which touches neither of their paths.
+- Docs: SceneEditor topic (tools and snapping bullet), editor README (shortcut row, snapping
+  bullet, "Scene view tools and snapping"), UI_DESIGN (glyphs, overlay tokens), Help → Keyboard
+  Shortcuts (registry plus mouse rows).
+- Not done:
+  - No manual walk; the Light theme look of the ring, handles and new glyphs was not checked
+    (all captures are Dark).
+  - `--editor-appearance-smoke`, `--docking-workspace-smoke` and `--project-documents-smoke`
+    were not run in this session (S7 runs the full list).
+  - No editor version bump (planned for S7).
+- Next: Session 7 (verification and handoff), only when requested.

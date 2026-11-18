@@ -140,6 +140,7 @@ internal fun editorApplicationMenus(
             EditorMenuEntry.Separator,
             sle.editor.command.ToolCommands.toggleSnap.menuEntry(ctx,keymap,sle.editor.command.ToolCommands.toggleSnapLabel(ctx)),
             entry(sle.editor.command.ToolCommands.configureSnap),
+            sle.editor.command.ToolCommands.togglePivot.menuEntry(ctx,keymap,sle.editor.command.ToolCommands.togglePivotLabel(ctx)),
         ),
         "Help" to listOf(
             entry(ViewCommands.keyboardShortcuts),

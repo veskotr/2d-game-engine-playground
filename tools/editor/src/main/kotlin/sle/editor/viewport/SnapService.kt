@@ -82,6 +82,10 @@ internal class SnapService(initial: SnapSettings = SnapSettings()) {
     fun active(invert: Boolean = false) = settings.enabled != invert
     /** The move step while snapping applies, else null. */
     fun moveStep(invert: Boolean = false): Double? = settings.move.takeIf { active(invert) }
+    /** The rotate step in degrees while snapping applies, else null. */
+    fun rotateStep(invert: Boolean = false): Double? = settings.rotateDegrees.takeIf { active(invert) }
+    /** The scale step while snapping applies, else null. */
+    fun scaleStep(invert: Boolean = false): Double? = settings.scale.takeIf { active(invert) }
     /** Where click-to-create and asset drops place a new entity. */
     fun placement(world: Vec2, invert: Boolean = false): Vec2 = moveStep(invert)?.let { SnapMath.point(world, it) } ?: world
     val gridSpacing get() = settings.move

@@ -116,10 +116,17 @@ internal fun formatStep(value: Double): String =
 private fun snapHint(ctx: ToolHintContext) =
     if(ctx.snap.enabled) "snapping to ${formatStep(ctx.snap.move)} (Ctrl moves freely)" else "Ctrl snaps to ${formatStep(ctx.snap.move)}"
 
-/** The status-bar hint of a tool while no gesture runs. */
+private fun pivotHint(ctx: ToolHintContext) =
+    if(ctx.pivot == PivotMode.Pivot) "around the active entity's pivot" else "around the selection center"
+
+/** The status-bar hint of a tool while no gesture runs. Rotation steps are shown in degrees. */
 internal fun toolHint(id: ViewportToolId, ctx: ToolHintContext) = when(id) {
     ViewportToolId.Select -> "Select: click picks; Shift/Ctrl+click adds or removes; drag empty space to box-select; drag a selection to move it; ${snapHint(ctx)}"
     ViewportToolId.Move -> "Move: drag an arrow for one axis or the square to move freely; Shift locks the main axis; ${snapHint(ctx)}"
+    ViewportToolId.Rotate -> "Rotate: drag the ring to turn the selection ${pivotHint(ctx)}; " +
+        if(ctx.snap.enabled) "snapping to ${formatStep(ctx.snap.rotateDegrees)}° (Ctrl rotates freely)" else "Ctrl snaps to ${formatStep(ctx.snap.rotateDegrees)}°"
+    ViewportToolId.Scale -> "Scale: drag an axis handle, or the center box for uniform scale, ${pivotHint(ctx)}; Shift scales uniformly; " +
+        if(ctx.snap.enabled) "snapping to ${formatStep(ctx.snap.scale)} (Ctrl scales freely)" else "Ctrl snaps to ${formatStep(ctx.snap.scale)}"
 }
 
 /** Q: pick, toggle, box-select, and drag a selection by its body. */

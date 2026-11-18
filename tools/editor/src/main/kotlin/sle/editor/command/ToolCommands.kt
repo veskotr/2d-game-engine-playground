@@ -2,10 +2,12 @@ package sle.editor.command
 
 import java.awt.event.KeyEvent
 import sle.editor.viewport.ViewportMode
+import sle.editor.viewport.tools.PivotMode
 import sle.editor.viewport.tools.ViewportToolId
 
 /**
- * Scene view tools (Q Select, W Move), Frame Selected (F) and snapping. Tool keys work while the
+ * Scene view tools (Q Select, W Move, E Rotate, R Scale), the Rotate/Scale pivot, Frame Selected
+ * (F) and snapping. Tool keys work while the
  * Scene view or the Hierarchy has focus, as in Unity; the active tool is never an undo step.
  */
 internal object ToolCommands {
@@ -18,8 +20,10 @@ internal object ToolCommands {
         enabled = { sceneView(it) && it.tools != null }, disabledReason = ::sceneReason) { ctx -> ctx.tools?.activate(id) }
     val select = tool(ViewportToolId.Select)
     val move = tool(ViewportToolId.Move)
+    val rotate = tool(ViewportToolId.Rotate)
+    val scale = tool(ViewportToolId.Scale)
     /** Every tool command, in toolbar order. */
-    val tools = listOf(select, move)
+    val tools = listOf(select, move, rotate, scale)
     fun command(id: ViewportToolId) = tools.first { it.id.value == "tools.${id.name.lowercase()}" }
 
     /** Fits the Scene view to the selection; View → Fit still frames everything. */
@@ -33,5 +37,14 @@ internal object ToolCommands {
     /** Menu label for [toggleSnap]: the action it takes now. */
     fun toggleSnapLabel(ctx: CommandContext) = if(ctx.snap?.settings?.enabled == true) "Turn Snapping Off" else "Turn Snapping On"
 
-    val all = tools + listOf(frameSelected, toggleSnap, configureSnap)
+    /** Switches what Rotate and Scale turn around: the active entity's pivot or the selection center. */
+    val togglePivot = EditorCommand(CommandId("tools.togglePivot"), "Pivot/Center",
+        enabled = { it.tools != null && it.mode == ViewportMode.Scene }) { ctx ->
+        ctx.tools?.let { it.pivot = if(it.pivot == PivotMode.Pivot) PivotMode.Center else PivotMode.Pivot }
+    }
+    /** Menu label for [togglePivot]: the action it takes now. */
+    fun togglePivotLabel(ctx: CommandContext) =
+        if(ctx.tools?.pivot == PivotMode.Center) "Rotate and Scale Around the Pivot" else "Rotate and Scale Around the Selection Center"
+
+    val all = tools + listOf(frameSelected, toggleSnap, configureSnap, togglePivot)
 }

@@ -20,7 +20,10 @@ internal class ToolHost(val state: ViewportToolState, val snap: SnapService) {
     /** Called after a tool changed the selection, so the owner re-targets [gizmos]. */
     var selectionChanged: () -> Unit = {}
     private val tools: Map<ViewportToolId, ViewportTool> = ViewportToolId.entries.associateWith { id ->
-        when(id) { ViewportToolId.Select -> SelectTool(); ViewportToolId.Move -> MoveTool() }
+        when(id) {
+            ViewportToolId.Select -> SelectTool(); ViewportToolId.Move -> MoveTool()
+            ViewportToolId.Rotate -> RotateTool(); ViewportToolId.Scale -> ScaleTool()
+        }
     }
     val tool: ViewportTool get() = tools.getValue(state.active)
     private var gesture: ViewportTool? = null

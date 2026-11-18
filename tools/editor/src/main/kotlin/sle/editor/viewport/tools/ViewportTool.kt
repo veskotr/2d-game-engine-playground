@@ -10,14 +10,19 @@ import sle.editor.viewport.Vec2
 import java.awt.event.KeyEvent
 
 /**
- * Scene view tools. Rotate (E) and Scale (R) join this list with their own handles; the Rect
- * tool is deferred (see docs/plans/editor-core-l1.md).
+ * Scene view tools, Unity style: Q Select, W Move, E Rotate, R Scale. The Rect tool is deferred
+ * (see docs/plans/editor-core-l1.md).
  */
 internal enum class ViewportToolId(val label: String, val keyCode: Int) {
     Select("Select", KeyEvent.VK_Q),
-    Move("Move", KeyEvent.VK_W);
+    Move("Move", KeyEvent.VK_W),
+    Rotate("Rotate", KeyEvent.VK_E),
+    Scale("Scale", KeyEvent.VK_R);
     val chord get() = KeyChord.plain(keyCode)
 }
+
+/** What Rotate and Scale turn around: the active entity's position, or the centre of the selection bounds. */
+internal enum class PivotMode(val label: String) { Pivot("Pivot"), Center("Center") }
 
 /**
  * The active Scene view tool: per-user editor state, never an undo step. Switching tools
@@ -29,6 +34,8 @@ internal class ViewportToolState(initial: ViewportToolId = ViewportToolId.Select
     /** Describes the gesture in progress for the status bar; null when idle. */
     var gestureHint by mutableStateOf<String?>(null)
         internal set
+    /** Rotate and Scale pivot; like the active tool, per-user editor state and never an undo step. */
+    var pivot by mutableStateOf(PivotMode.Pivot)
     internal var onSwitch: () -> Unit = {}
     fun activate(id: ViewportToolId) {
         if(id == active) return
@@ -43,16 +50,23 @@ internal data class ToolPointer(val point: Vec2, val shift: Boolean = false, val
 /** What a press started: [dragEntity] is the one picked entity, which may be dragged out onto an Assets folder. */
 internal data class ToolPress(val dragEntity: String? = null) { companion object { val None = ToolPress() } }
 
-/** A tool handle in viewport pixels, for hit tests and drawing. */
-internal data class ToolHandle(val axis: DragAxis, val from: Vec2, val to: Vec2)
+internal enum class ToolHandleKind { Move, Ring, Scale }
+
+/** A tool handle in viewport pixels, for hit tests and drawing. A [ToolHandleKind.Ring] runs
+ * from its centre [from] to the point [to] on the ring. */
+internal data class ToolHandle(val axis: DragAxis, val from: Vec2, val to: Vec2, val kind: ToolHandleKind = ToolHandleKind.Move)
 
 /** Facts a tool hint depends on. */
-internal data class ToolHintContext(val snap: SnapSettings, val selectionCount: Int)
+internal data class ToolHintContext(val snap: SnapSettings, val selectionCount: Int, val pivot: PivotMode = PivotMode.Pivot)
 
 /** Editor drawing a tool may add after the engine frame (implemented by the GL overlay). */
 internal interface ToolOverlay {
     fun moveHandles(origin: Vec2, active: DragAxis?)
     fun marquee(from: Vec2, to: Vec2)
+    /** Rotate ring around [center]; while dragging, spokes at the [sweep] start and current screen angles. */
+    fun rotateRing(center: Vec2, radius: Double, active: Boolean, sweep: Pair<Double, Double>?)
+    /** Scale handles: axis lines towards [xTip]/[yTip] with end boxes, and the uniform centre box. */
+    fun scaleHandles(origin: Vec2, xTip: Vec2, yTip: Vec2, active: DragAxis?)
 }
 
 /**

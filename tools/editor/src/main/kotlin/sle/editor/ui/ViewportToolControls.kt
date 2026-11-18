@@ -6,6 +6,7 @@ import sle.editor.ui.controls.*
 import sle.editor.ui.theme.*
 import sle.editor.viewport.SnapSettings
 import sle.editor.viewport.SnapService
+import sle.editor.viewport.tools.PivotMode
 import sle.editor.viewport.tools.ViewportToolId
 import sle.editor.viewport.tools.ViewportToolState
 import sle.editor.viewport.tools.formatStep
@@ -24,15 +25,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
 
-private fun ViewportToolId.glyph() = when(this) { ViewportToolId.Select -> EditorGlyph.ToolSelect; ViewportToolId.Move -> EditorGlyph.ToolMove }
+private fun ViewportToolId.glyph() = when(this) {
+    ViewportToolId.Select -> EditorGlyph.ToolSelect; ViewportToolId.Move -> EditorGlyph.ToolMove
+    ViewportToolId.Rotate -> EditorGlyph.ToolRotate; ViewportToolId.Scale -> EditorGlyph.ToolScale
+}
+private fun PivotMode.glyph() = if(this == PivotMode.Pivot) EditorGlyph.PivotActive else EditorGlyph.PivotCenter
+private fun PivotMode.help() = if(this == PivotMode.Pivot) "Pivot: Rotate and Scale turn around the active entity's position"
+    else "Center: Rotate and Scale turn around the center of the selection bounds"
 
 /**
- * Viewport toolbar group: the Scene tools (Q/W) when [tools] is given, the snap toggle and
- * Configure Snap. Tooltips name each command's chord from the keymap.
+ * Viewport toolbar group: the Scene tools (Q/W/E/R) and the Pivot/Center pair when [tools] is
+ * given, the snap toggle and Configure Snap. Tooltips name each command's chord from the keymap.
  */
 @Composable
 internal fun ViewportToolControls(tools: ViewportToolState?, snap: SnapService, onConfigure: () -> Unit,
-    onToolBounds: (ViewportToolId, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> }) {
+    onToolBounds: (ViewportToolId, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
+    onPivotBounds: (PivotMode, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> }) {
     val m = LocalEditorMetrics.current
     Row(horizontalArrangement = Arrangement.spacedBy(m.borderWidth), verticalAlignment = Alignment.CenterVertically) {
         if(tools != null) {
@@ -42,10 +50,16 @@ internal fun ViewportToolControls(tools: ViewportToolState?, snap: SnapService, 
                     help = standardKeymap.hint(ToolCommands.command(id).id, "${id.label} tool"))
             }
             EditorToolbarDivider()
+            PivotMode.entries.forEach { mode ->
+                EditorIconToggle(mode.label, mode.glyph(), tools.pivot == mode, { tools.pivot = mode },
+                    Modifier.onGloballyPositioned { onPivotBounds(mode, it.boundsInWindow()) }, help = mode.help())
+            }
+            EditorToolbarDivider()
         }
         val settings = snap.settings
         EditorIconToggle("Snapping", EditorGlyph.Snap, settings.enabled, { snap.toggle() },
-            help = (if(settings.enabled) "Snapping on" else "Snapping off") + ": move step ${formatStep(settings.move)}; hold Ctrl to invert while dragging")
+            help = (if(settings.enabled) "Snapping on" else "Snapping off") +
+                ": move ${formatStep(settings.move)}, rotate ${formatStep(settings.rotateDegrees)}°, scale ${formatStep(settings.scale)}; hold Ctrl to invert while dragging")
         EditorGlyphButton("Configure Snap…", onConfigure) { tint -> EditorGlyphIcon(EditorGlyph.ChevronDown, tint) }
     }
 }

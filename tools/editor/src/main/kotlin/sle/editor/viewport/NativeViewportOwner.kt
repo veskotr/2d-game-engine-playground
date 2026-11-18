@@ -100,7 +100,7 @@ internal class NativeViewportOwner(
     private var camera: PreviewCamera? = null
     private val overlay = GizmoOverlay()
     var editorSelectionColor = sle.editor.ui.theme.editorColors(sle.editor.ui.theme.EditorThemeMode.Dark).selectionOutline
-    /** Move tool arrows use the viewport axis tokens of the current theme. */
+    /** Move, Rotate and Scale handles use the viewport axis tokens of the current theme. */
     var editorAxisColors = sle.editor.ui.theme.editorColors(sle.editor.ui.theme.EditorThemeMode.Dark).let { it.viewportXAxis to it.viewportYAxis }
     /** Scene view tools: right-click, pan, zoom and entity drags to Assets are handled here first. */
     private val toolHost = sle.editor.viewport.tools.ToolHost(tools,snap).also { host ->
@@ -483,10 +483,11 @@ internal class NativeViewportOwner(
                 if(desiredMode==ViewportMode.Scene) scene?.let { state ->
                     overlay.outline(state.selection.keys.filter { it!=state.selectedKey && state.entity(it)!=null }.map(state::worldDocument),frameCamera!!,editorSelectionColor)
                 }
-                val moveTool=desiredMode==ViewportMode.Scene && tools.active==sle.editor.viewport.tools.ViewportToolId.Move
+                // Move, Rotate and Scale draw their own handles at the entity (or the selection center).
+                val toolHandles=desiredMode==ViewportMode.Scene && tools.active!=sle.editor.viewport.tools.ViewportToolId.Select
                 gizmos?.selected()?.let {
                     val document=if(desiredMode==ViewportMode.Scene) scene?.selectedKey?.let { key -> scene?.worldDocument(key) } else null
-                    overlay.draw(it,frameCamera!!,document,editorSelectionColor,entityHandles=!moveTool)
+                    overlay.draw(it,frameCamera!!,document,editorSelectionColor,entityHandles=!toolHandles)
                 }
                 if(desiredMode==ViewportMode.Scene) {
                     val view=frameCamera!!
@@ -495,6 +496,10 @@ internal class NativeViewportOwner(
                         override fun moveHandles(origin: Vec2, active: DragAxis?) =
                             overlay.moveHandles(origin,view,editorAxisColors.first,editorAxisColors.second,editorSelectionColor,active)
                         override fun marquee(from: Vec2, to: Vec2) = overlay.marquee(from,to,view,editorSelectionColor)
+                        override fun rotateRing(center: Vec2, radius: Double, active: Boolean, sweep: Pair<Double, Double>?) =
+                            overlay.rotateRing(center,radius,view,editorAxisColors.first,editorAxisColors.second,editorSelectionColor,active,sweep)
+                        override fun scaleHandles(origin: Vec2, xTip: Vec2, yTip: Vec2, active: DragAxis?) =
+                            overlay.scaleHandles(origin,xTip,yTip,view,editorAxisColors.first,editorAxisColors.second,editorSelectionColor,active)
                     })
                 }
             }

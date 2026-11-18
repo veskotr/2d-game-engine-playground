@@ -140,3 +140,115 @@ internal fun EntityWorkspaceState.addComponentAtEngineSize(type: String) {
     // whole new component with the native defaults rather than patching individual fields.
     document=document.copy(components=JsonObject(document.components+(type to catalog.getValue(type).defaults)))
 }
+
+/**
+ * L1 session 6 (Scene view): E Rotate and R Scale by Robot with the native canvas focused. A
+ * snapped ring drag and an axis drag are one undo step each; Shift makes a scale drag uniform;
+ * Esc cancels; a two-entity ring drag around the selection center orbits both as one step.
+ */
+internal suspend fun runTransformToolsSmoke(canvas: EngineCanvas, scene: sle.editor.model.SceneWorkspaceState,
+    tools: sle.editor.viewport.tools.ViewportToolState, snap: SnapService) {
+    val robot=Robot()
+    val folder=Path.of(System.getProperty("sle.smokeReport")).parent
+    suspend fun ready() {
+        repeat(120) { if(canvas.authoringReady()) { delay(100);return };delay(30) }
+        error("Scene preview did not catch up")
+    }
+    fun cursor(pixel: Vec2) { val origin=canvas.locationOnScreen;robot.mouseMove(origin.x+pixel.x.roundToInt(),origin.y+pixel.y.roundToInt()) }
+    suspend fun key(code: Int,ctrl: Boolean=false) {
+        if(ctrl) robot.keyPress(KeyEvent.VK_CONTROL)
+        robot.keyPress(code);robot.keyRelease(code)
+        if(ctrl) robot.keyRelease(KeyEvent.VK_CONTROL)
+        delay(160);ready()
+    }
+    suspend fun click(pixel: Vec2,ctrl: Boolean=false) {
+        cursor(pixel)
+        if(ctrl) robot.keyPress(KeyEvent.VK_CONTROL)
+        robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+        if(ctrl) robot.keyRelease(KeyEvent.VK_CONTROL)
+        delay(160);ready()
+    }
+    /** Presses [from], follows [path] and releases; [held] modifiers go down after the press; [cancel] presses Esc first. */
+    suspend fun drag(from: Vec2,path: List<Vec2>,held: List<Int> = emptyList(),cancel: Boolean=false) {
+        cursor(from);robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);delay(80)
+        held.forEach { robot.keyPress(it) }
+        path.forEach { cursor(it);delay(35) }
+        if(cancel) { robot.keyPress(KeyEvent.VK_ESCAPE);robot.keyRelease(KeyEvent.VK_ESCAPE);delay(120) }
+        robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);held.asReversed().forEach { robot.keyRelease(it) };delay(150);ready()
+    }
+    /** A ring drag turning [degrees] counter-clockwise from the ring's right-hand point. */
+    suspend fun turn(degrees: Double) {
+        val ring=canvas.toolHandles().singleOrNull { it.kind==sle.editor.viewport.tools.ToolHandleKind.Ring } ?: error("Rotate ring missing: ${canvas.toolHandles()}")
+        val radius=(ring.to-ring.from).length()
+        drag(ring.to,(1..12).map { i -> Math.toRadians(degrees*i/12).let { ring.from+Vec2(cos(it),-sin(it))*radius } })
+    }
+    fun pose(key: String)=sle.editor.model.ScenePose.from(scene.worldDocument(key))
+    fun scaleHandle(axis: sle.editor.viewport.DragAxis)=canvas.toolHandles().firstOrNull { it.kind==sle.editor.viewport.tools.ToolHandleKind.Scale && it.axis==axis }
+        ?: error("Scale handle $axis missing: ${canvas.toolHandles()}")
+    fun onStep(value: Double,step: Double)=abs(value/step-Math.rint(value/step))<1e-9
+    ready()
+    val crate=scene.entities.first { it.document.name=="Crate A" }.document.key
+    val other=scene.entities.first { it.document.name=="Crate B" }.document.key
+    val camera=canvas.previewCamera()!!
+    fun spriteCenter(key: String)=GizmoShape.from(scene.worldDocument(key),"SpriteRenderer")!!.center.let(camera::screen)
+    // A click on Crate A selects it and gives the native canvas keyboard focus.
+    click(spriteCenter(crate))
+    check(scene.selection.keys==listOf(crate)) { "Click did not select Crate A: ${scene.selection.keys}" }
+    snap.update(SnapSettings(enabled=true,move=8.0,rotateDegrees=15.0,scale=0.1));delay(120);ready()
+    key(KeyEvent.VK_E)
+    check(tools.active==sle.editor.viewport.tools.ViewportToolId.Rotate) { "E did not switch to the Rotate tool with the canvas focused" }
+    val start=pose(crate);val sprite=scene.entity(crate)!!.document.components["SpriteRenderer"]
+    var steps=scene.history.undoLabels.size
+    turn(47.0) // snaps to 45°
+    val turned=pose(crate)
+    check(abs(turned.rotation-(start.rotation+PI/4))<1e-9) { "Ring drag did not snap to 45°: ${Math.toDegrees(turned.rotation)}°" }
+    check((turned.position-start.position).length()<1e-6) { "Rotate moved its own pivot: ${start.position} -> ${turned.position}" }
+    check(scene.history.undoLabels.size==steps+1 && scene.history.undoLabel=="Rotate Crate A") { "Ring drag was not one step: ${scene.history.undoLabels.takeLast(2)}" }
+    ImageIO.write(robot.createScreenCapture(Rectangle(canvas.locationOnScreen,canvas.size)),"png",folder.resolve("gizmo-rotate-tool.png").toFile())
+    key(KeyEvent.VK_Z,ctrl=true)
+    check(pose(crate)==start) { "Undo did not restore the rotation: ${pose(crate)} vs $start" }
+    // R: the X handle scales along X only, snapped, without touching the sprite size.
+    key(KeyEvent.VK_R)
+    check(tools.active==sle.editor.viewport.tools.ViewportToolId.Scale) { "R did not switch to the Scale tool" }
+    steps=scene.history.undoLabels.size
+    val x=scaleHandle(sle.editor.viewport.DragAxis.X);val grab=(x.from+x.to)*0.5
+    drag(grab,(1..6).map { grab+Vec2(22.0*it/6,0.0) })
+    val stretched=pose(crate)
+    check(stretched.scale.y==start.scale.y && stretched.scale.x>start.scale.x && onStep(stretched.scale.x,0.1)) { "X handle did not scale X only, snapped: ${start.scale} -> ${stretched.scale}" }
+    check(scene.entity(crate)!!.document.components["SpriteRenderer"]==sprite) { "Scaling changed the sprite size" }
+    check(scene.history.undoLabels.size==steps+1 && scene.history.undoLabel=="Scale Crate A") { "Scale drag was not one step: ${scene.history.undoLabels.takeLast(2)}" }
+    // Shift held during a Y drag scales uniformly.
+    val y=scaleHandle(sle.editor.viewport.DragAxis.Y);val yGrab=(y.from+y.to)*0.5
+    drag(yGrab,(1..6).map { yGrab+Vec2(0.0,-20.0*it/6) },held=listOf(KeyEvent.VK_SHIFT))
+    val uniform=pose(crate)
+    check(uniform.scale.x>stretched.scale.x && uniform.scale.y>stretched.scale.y && onStep(uniform.scale.x,0.1) && onStep(uniform.scale.y,0.1)) {
+        "Shift did not scale uniformly: ${stretched.scale} -> ${uniform.scale}" }
+    ImageIO.write(robot.createScreenCapture(Rectangle(canvas.locationOnScreen,canvas.size)),"png",folder.resolve("gizmo-scale-tool.png").toFile())
+    // Esc mid-drag restores the scale and records nothing.
+    val beforeCancel=scene.history.undoLabels.size
+    val center=scaleHandle(sle.editor.viewport.DragAxis.Free).let { (it.from+it.to)*0.5 }
+    drag(center,(1..6).map { center+Vec2(5.0*it,-5.0*it) },cancel=true)
+    check(pose(crate)==uniform && scene.history.undoLabels.size==beforeCancel) { "Esc did not cancel the scale drag" }
+    key(KeyEvent.VK_Z,ctrl=true);key(KeyEvent.VK_Z,ctrl=true)
+    check(pose(crate)==start) { "Undo did not restore the scale: ${pose(crate)} vs $start" }
+    // Two entities around the selection center: both turn 90° (snapped) and orbit the center, as one step.
+    click(spriteCenter(other),ctrl=true)
+    check(scene.selection.keys.toSet()==setOf(crate,other) && scene.selectedKey==other) { "Ctrl-click did not add Crate B: ${scene.selection.keys}" }
+    tools.pivot=sle.editor.viewport.tools.PivotMode.Center;delay(120)
+    key(KeyEvent.VK_E)
+    val pivot=sle.editor.viewport.tools.transformFrame(scene,sle.editor.viewport.tools.PivotMode.Center)!!.pivot
+    val before=mapOf(crate to pose(crate),other to pose(other))
+    steps=scene.history.undoLabels.size
+    turn(88.0) // snaps to 90°
+    for((key,was) in before) {
+        val now=pose(key);val expected=pivot+(was.position-pivot).rotate(PI/2)
+        check(abs(now.rotation-(was.rotation+PI/2))<1e-9 && (now.position-expected).length()<1e-6) { "$key did not orbit the center: $was -> $now (expected $expected)" }
+    }
+    check(scene.history.undoLabels.size==steps+1 && scene.history.undoLabel=="Rotate 2 entities") { "Multi rotate was not one step: ${scene.history.undoLabels.takeLast(2)}" }
+    ImageIO.write(robot.createScreenCapture(Rectangle(canvas.locationOnScreen,canvas.size)),"png",folder.resolve("gizmo-rotate-center.png").toFile())
+    key(KeyEvent.VK_Z,ctrl=true)
+    check(before.all { (key,was) -> pose(key)==was }) { "Undo did not restore both entities" }
+    tools.pivot=sle.editor.viewport.tools.PivotMode.Pivot
+    snap.update(SnapSettings())
+    println("VIEWPORT_TRANSFORM_TOOLS_SMOKE_PASS e-key/rotate-snap/one-step/undo/r-key/scale-axis-snap/sprite-size-kept/shift-uniform/esc-cancel/center-orbit/multi-one-step folder=$folder")
+}

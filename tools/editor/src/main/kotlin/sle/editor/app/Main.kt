@@ -130,7 +130,7 @@ private fun launchEditor(args: Array<String>) = application {
     val assetBounds=remember { mutableMapOf<String,androidx.compose.ui.geometry.Rect>() }
     var projectActions by remember { mutableStateOf<ProjectCommands?>(null) }
     val scene=remember { authoring.map { workspace -> SceneWorkspaceState(workspace.catalog).apply {
-        if(sceneSmoke || menuSmoke || dockingSmoke) createStarterScene(this,workspace.catalog,java.nio.file.Path.of(System.getProperty("sle.smokeReport")).parent)
+        if(sceneSmoke || menuSmoke || dockingSmoke || gizmoSmoke) createStarterScene(this,workspace.catalog,java.nio.file.Path.of(System.getProperty("sle.smokeReport")).parent)
         if(cameraSmoke) createCameraScene(this,workspace.catalog,java.nio.file.Path.of(System.getProperty("sle.smokeReport")).parent)
     } } }
     val workspace=remember { EditorWorkspace(authoring,scene,sandboxSmoke,previewSmoke,
@@ -456,6 +456,10 @@ private fun launchEditor(args: Array<String>) = application {
                     window.isAlwaysOnTop=true; window.toFront()
                     while (readyFrames < 5) delay(50)
                     runGizmoSmoke(canvas ?: error("Viewport missing"),authoring.getOrThrow(),workspace.snap)
+                    // Rotate and Scale are Scene view tools (the prefab tab keeps its shape handles).
+                    selectedTab=2
+                    while(lastRenderedMode!=ViewportMode.Scene || canvas?.authoringReady()!=true) delay(30)
+                    sle.editor.smoke.runTransformToolsSmoke(canvas ?: error("Viewport missing"),scene.getOrThrow(),workspace.tools,workspace.snap)
                     watchdog?.stop(); exitApplication()
                 } catch (failure: Throwable) { canvas?.stopRendering(); failure.printStackTrace(); exitProcess(1) }
             }
@@ -755,7 +759,7 @@ private fun launchEditor(args: Array<String>) = application {
                             scenePlayback.editing && scenePlayback.gameView -> "Game view: "+sle.editor.command.standardKeymap.hint(sle.editor.command.PlayCommands.play.id,"play")+" to run the scene"
                             !scenePlayback.editing -> "Play mode: scene edits are disabled; "+sle.editor.command.standardKeymap.hint(sle.editor.command.PlayCommands.stop.id,"stop")+" to edit"
                             else -> workspace.tools.gestureHint ?: sle.editor.viewport.tools.toolHint(workspace.tools.active,
-                                sle.editor.viewport.tools.ToolHintContext(workspace.snap.settings,sceneState?.selection?.size ?: 0))
+                                sle.editor.viewport.tools.ToolHintContext(workspace.snap.settings,sceneState?.selection?.size ?: 0,workspace.tools.pivot))
                         },
                         progress=if(distribution.exporting) "Exporting game…" else if(project.busy) "Working…" else null,
                         selectionCount=if(mode==ViewportMode.Scene) sceneState?.selection?.size ?: 0 else 0,

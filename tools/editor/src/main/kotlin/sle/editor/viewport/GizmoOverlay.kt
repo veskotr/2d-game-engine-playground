@@ -3,6 +3,7 @@ package sle.editor.viewport
 import androidx.compose.ui.graphics.Color
 import sle.editor.model.EntityDocument
 import sle.editor.viewport.tools.MoveHandles
+import sle.editor.viewport.tools.ScaleHandles
 
 import org.lwjgl.opengl.GL11
 import org.lwjgl.opengl.GL15
@@ -81,6 +82,36 @@ internal class GizmoOverlay {
             else draw(GL11.GL_LINES,(corners+corners.first()).zipWithNext().flatMap { (a,b) -> listOf(a,b) })
         }
     }
+    /** Rotate tool: the ring in the blended axis colour (or [highlight] while dragging) and, during a
+     * drag, spokes at the start and current screen angles of [sweep]. */
+    fun rotateRing(center: Vec2, radius: Double, camera: PreviewCamera, xColor: Color, yColor: Color, highlight: Color, active: Boolean,
+        sweep: Pair<Double, Double>?) = render(camera,if(active) highlight else blend(xColor,yColor)) { draw ->
+        val ring=(0..72).map { i -> center+Vec2(cos(i*PI/36),sin(i*PI/36))*radius }
+        val lines=ring.zipWithNext().flatMap { (a,b) -> listOf(a,b) }.toMutableList()
+        // A second ring one pixel in makes the handle easier to see over sprites.
+        (0..72).map { i -> center+Vec2(cos(i*PI/36),sin(i*PI/36))*(radius-1) }.zipWithNext().forEach { (a,b) -> lines.add(a);lines.add(b) }
+        sweep?.let { (from,to) -> for(angle in listOf(from,to)) { lines.add(center);lines.add(center+Vec2(cos(angle),sin(angle))*radius) } }
+        draw(GL11.GL_LINES,lines)
+    }
+    /** Scale tool: axis lines with end boxes in the axis colours and the uniform centre box; the dragged handle uses [highlight]. */
+    fun scaleHandles(origin: Vec2, xTip: Vec2, yTip: Vec2, camera: PreviewCamera, xColor: Color, yColor: Color, highlight: Color, active: DragAxis?) {
+        fun box(center: Vec2, half: Double) = listOf(center+Vec2(-half,-half),center+Vec2(half,-half),center+Vec2(half,half),
+            center+Vec2(-half,-half),center+Vec2(half,half),center+Vec2(-half,half))
+        val uniform=active==DragAxis.Free
+        for((axis,tip,color) in listOf(Triple(DragAxis.X,xTip,xColor),Triple(DragAxis.Y,yTip,yColor))) render(camera,if(active==axis || uniform) highlight else color) { draw ->
+            val direction=(tip-origin).let { it*(1.0/max(it.length(),1e-9)) }
+            val side=Vec2(-direction.y,direction.x)
+            val start=origin+direction*(ScaleHandles.CENTER+2)
+            draw(GL11.GL_TRIANGLES,listOf(start-side,tip-side,tip+side,start-side,tip+side,start+side)+box(tip,5.0))
+        }
+        render(camera,if(uniform) highlight else blend(xColor,yColor)) { draw ->
+            val r=ScaleHandles.CENTER
+            val corners=listOf(origin+Vec2(-r,-r),origin+Vec2(r,-r),origin+Vec2(r,r),origin+Vec2(-r,r))
+            if(uniform) draw(GL11.GL_TRIANGLES,box(origin,r))
+            else draw(GL11.GL_LINES,(corners+corners.first()).zipWithNext().flatMap { (a,b) -> listOf(a,b) })
+        }
+    }
+    private fun blend(a: Color, b: Color) = a.copy(red=(a.red+b.red)/2,green=(a.green+b.green)/2,blue=(a.blue+b.blue)/2)
     /** Box selection rectangle in viewport pixels. */
     fun marquee(from: Vec2, to: Vec2, camera: PreviewCamera, color: Color) = render(camera, color) { draw ->
         val corners=listOf(from,Vec2(to.x,from.y),to,Vec2(from.x,to.y),from)

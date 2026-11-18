@@ -68,7 +68,7 @@ share one baseline. Feature code never sets `fontSize`.
 | Component | Use |
 |---|---|
 | `EditorButton(label, onClick, style=…)` | Commands. `EditorButtonStyle.Primary` (filled green, the main action of a surface), `Secondary` (default; restrained fill + subtle outline), `Ghost` (no resting chrome: toolbars, zoom, navigation, dock actions). `primary=true` maps to Primary. |
-| `EditorToggle`, `EditorIconToggle`, `EditorIconButton`, `EditorGlyphButton` + `EditorGlyphIcon(EditorGlyph.*)` | Toggles and icon-only commands; glyphs are drawn, never text symbols. `EditorIconToggle` is the icon form (viewport tools `ToolSelect`/`ToolMove`, snapping `Snap`); its tooltip names the command's chord from the keymap. |
+| `EditorToggle`, `EditorIconToggle`, `EditorIconButton`, `EditorGlyphButton` + `EditorGlyphIcon(EditorGlyph.*)` | Toggles and icon-only commands; glyphs are drawn, never text symbols. `EditorIconToggle` is the icon form (viewport tools `ToolSelect`/`ToolMove`/`ToolRotate`/`ToolScale`, the Pivot/Center pair `PivotActive`/`PivotCenter`, snapping `Snap`); its tooltip names the command's chord from the keymap. |
 | `EditorTab` | Flat tab: active = surface fill + 2 dp accent underline. |
 | `EditorToolbar`, `EditorToolbarDivider`, `EditorSeparator` | Command strips and 1-hairline separators. |
 | `EditorTextField`, `EditorNumberField`, `EditorVectorField` | Text and numeric input (see contract below). |
@@ -131,9 +131,10 @@ document, dirty flag, render context and game pixels unchanged.
 ## Known exceptions (not themed by the editor)
 
 - Native viewport content, grid and axes (C++ editor bridge). The grid spacing follows the
-  move snap step (`NativeEngine.setEditorGrid`); the Move tool arrows, box selection and
-  selection outlines are editor overlays drawn with `viewportXAxis`, `viewportYAxis` and
-  `selectionOutline`. `NativeViewportOwner`'s
+  move snap step (`NativeEngine.setEditorGrid`); the Move tool arrows, Rotate ring, Scale
+  handles, box selection and selection outlines are editor overlays drawn with
+  `viewportXAxis`, `viewportYAxis` and `selectionOutline` (an idle ring or centre box blends
+  the two axis colours; the dragged handle uses `selectionOutline`). `NativeViewportOwner`'s
   backing fill matches the GL clear color. Game pixels are never themed.
 - Native window captions on Windows before 10 2004; caption colors before Windows 11.
 - Drive/computer icons in file choosers come from the OS shell.

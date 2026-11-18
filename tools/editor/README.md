@@ -84,7 +84,7 @@ detached windows and the native viewport:
 | Undo / Redo | Ctrl+Z / Ctrl+Y or Ctrl+Shift+Z | anywhere (the active document's one timeline) |
 | Delete / Duplicate | Delete or Backspace / Ctrl+D | Hierarchy or Scene view focused |
 | Select All | Ctrl+A | Hierarchy or Scene view focused |
-| Select tool / Move tool | Q / W | Hierarchy or Scene view focused |
+| Select / Move / Rotate / Scale tool | Q / W / E / R | Hierarchy or Scene view focused |
 | Frame Selected | F | Hierarchy or Scene view focused (View → Fit still frames everything) |
 | Play (Resume) / Pause / Stop | F5 / F6 / Shift+F5 | anywhere |
 | Run Project | Ctrl+F5 | anywhere |
@@ -275,12 +275,13 @@ picking, but can still be selected from the menu.
 - **SpriteRenderer:** drag its center to change its local offset; edge/corner
   handles edit its own size. These edits leave Transform and colliders unchanged.
 - **Snapping** (the magnet toggle in the viewport toolbar, or **Tools → Turn Snapping
-  On/Off**) snaps positions, offsets and sizes to the move step; **Configure Snap…** (the
-  arrow beside the magnet, or the Tools menu) sets the move, rotate and scale steps. It is
-  off by default (move 1, rotate 15°, scale 0.1). Hold **Ctrl** during a drag or nudge to
-  invert snapping for that gesture. Hold **Shift** during a move drag to keep it on its
-  dominant axis. Arrow keys move to the next grid line while snapping, else by 0.1 world
-  units (Shift+arrows: 1).
+  On/Off**) snaps positions, offsets and sizes to the move step, and the Scene view's
+  Rotate and Scale drags to the rotate and scale steps; **Configure Snap…** (the arrow
+  beside the magnet, or the Tools menu) sets the three steps. It is off by default (move 1,
+  rotate 15°, scale 0.1). Hold **Ctrl** during a drag or nudge to invert snapping for that
+  gesture. Hold **Shift** during a move drag to keep it on its dominant axis, or during a
+  Scale drag to scale uniformly. Arrow keys move to the next grid line while snapping, else
+  by 0.1 world units (Shift+arrows: 1).
 - **Escape** cancels the current drag. **Undo / Redo** (**Ctrl+Z / Ctrl+Y**, or
   Ctrl+Shift+Z) restore complete edits; pressed during a drag, they cancel it.
 
@@ -305,7 +306,7 @@ Resize during a drag cancels it so picking cannot use stale camera dimensions.
 
 ### Scene view tools and snapping
 
-The Scene view has two tools in its toolbar and in the **Tools** menu:
+The Scene view has four tools in its toolbar and in the **Tools** menu:
 
 - **Select (Q):** click picks; Shift- or Ctrl-click adds or removes; dragging on empty
   space draws a box that selects every entity whose selection bounds it touches (Shift or
@@ -313,12 +314,31 @@ The Scene view has two tools in its toolbar and in the **Tools** menu:
 - **Move (W):** the active entity shows a red X arrow, a green Y arrow and a square. Drag
   an arrow to move along that world axis, or the square to move freely; dragging an
   entity's body still works. The whole selection moves as one undo step.
+- **Rotate (E):** a ring around the pivot. Drag it to turn the selection; with several
+  entities selected, their positions orbit the pivot. Rotation is stored in radians as
+  before; the status bar shows the angle and the change in degrees while dragging.
+- **Scale (R):** a red X handle and a green Y handle along the active entity's rotation,
+  and a centre box. Drag a handle to scale along that axis, or the box (or any handle with
+  **Shift**) to scale uniformly. Scale changes Transform scale only, never sprite size; it
+  never crosses zero (it stops at 0.001, or one scale step while snapping) and keeps a
+  mirrored (negative) scale mirrored. Other selected entities scale by the same factor and
+  their offsets from the pivot scale with them.
+
+The **Pivot/Center** pair beside the tools (also **Tools → Rotate and Scale Around …**)
+chooses what Rotate and Scale turn around: the active entity's position (Pivot) or the
+centre of the selection's bounds (Center). Every Rotate or Scale drag is one undo step
+("Rotate Player", "Scale 2 entities"), and **Esc** cancels it. Clicking, box selection and
+body drags work in all four tools. The Prefab tab keeps its own shape handles; there is no
+Rect tool.
 
 **F** frames the selection; **Fit** still frames everything. The status bar shows the
 active tool's hint, and what Shift and Ctrl do during a drag. Snap settings are saved per
 user: per project in `.sle/editor-state.json`, else beside the standalone layout
-(`snap-settings.json`). Positions snap in world space, also under rotated or mirrored
-parents; right-click creation and Assets drops land on the move step while snapping is on.
+(`snap-settings.json`). Positions, rotations and scales snap in world space, also under
+rotated, scaled or mirrored parents, and are then converted to local values through the
+parent pose; with several entities selected, the active entity's value snaps and the others
+follow by the same amount. Right-click creation and Assets drops land on the move step while
+snapping is on.
 The Scene and Prefab grids follow the move step (every tenth line is a major line; a step
 too fine for the zoom level is drawn coarser).
 

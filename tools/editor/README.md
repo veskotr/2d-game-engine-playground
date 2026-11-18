@@ -2,13 +2,17 @@
 
 Kotlin/JVM Compose Desktop authoring tool using SLE's native renderer and runtime.
 
+Terminology: the editor calls prefabs **Entity Templates** and the Inspector the **Details**
+panel. File formats (`.prefab.json`, `.sleprefab`), the project `Prefabs` folder, scene
+`prefabs` arrays and engine/Lua APIs (`PrefabLoader`, `Engine.instantiatePrefab`) keep their names.
+
 **Scene** arranges entities through an independent editor camera. **Game** shows
 the active scene camera; Play runs the current scene's actual scripts, physics,
 animation, UI and audio. Switching Scene/Game preserves runtime state. Pause
 freezes it; Stop restores authored data. The former Sandbox tab is removed.
 Legacy sandbox smoke commands remain available for runtime regression checks.
 
-Selecting an entity in the Scene shows all of its components in the Inspector, with
+Selecting an entity in the Scene shows all of its components in the Details panel, with
 **Add Component**, **Remove**, and for colliders/sprites/zones **Edit** (resize handles in the
 Scene view) and **Fit** (match the sprite). Sprite colors show as RGBA with a color picker;
 textures show a thumbnail and **Use image size**. The Hierarchy toolbar adds, duplicates and
@@ -16,16 +20,16 @@ deletes entities; **Delete** (or Backspace) and **Ctrl+D** work while the Hierar
 view has focus, and arrow keys move the selection. Ctrl-click and Shift-click select several
 entities in the Hierarchy (Shift selects a range), Shift/Ctrl-click toggles entities in the
 Scene view, **Ctrl+A** selects all and **Esc** in the Hierarchy clears the selection.
-Dragging or nudging any selected entity moves them all as one undo step; the Inspector
-shows "N entities selected" with Duplicate and Delete. Drag a prefab or image from Assets onto the Scene view (placed at
+Dragging or nudging any selected entity moves them all as one undo step; the Details panel
+shows "N entities selected" with Duplicate and Delete. Drag an entity template or image from Assets onto the Scene view (placed at
 the cursor) or the Hierarchy. Saving a project scene copies textures from opened/imported
-packages into `Assets/Textures` instead of failing. Double-clicking a scene or prefab in Assets
+packages into `Assets/Textures` instead of failing. Double-clicking a scene or entity template in Assets
 opens it; in a project, open scenes/prefabs that already have a file are saved automatically
 when you switch documents. File dialogs open in the project's Scenes/Prefabs/Textures folder,
 or the folder you last used.
 
 Delete removes the selected subtrees as one undo step and clears selection,
-so a held key cannot delete the next entity. Delete in Inspector text inputs edits text;
+so a held key cannot delete the next entity. Delete in Details text inputs edits text;
 modal dialogs, Play and Pause block scene deletion. The same command works in detached
 Hierarchy and Scene windows. The status bar then shows "Deleted N entities" with an **Undo**
 button for a few seconds; the button disappears once another edit becomes the latest step.
@@ -35,13 +39,13 @@ latest result or failure (saves, opens, project and export results, layout and a
 problems), background progress, the selection count, the play state and an "Unsaved" marker.
 Info and success messages clear after about six seconds; warnings and errors stay until you
 dismiss them or a newer message replaces them. The arrow button lists recent messages; click
-one to copy it. Field validation stays beside the field in the Inspector.
+one to copy it. Field validation stays beside the field in the Details panel.
 
 Right-click empty Scene space to create an Entity, Sprite, Camera, collider or zone at
 that world position. Right-click an entity to select it and use the same creation menu;
 **As Child** preserves the clicked world position under its parent. Hierarchy creation
 keeps the usual local-origin placement. New sprite/box components start at 64×64 units;
-new circles use radius 32. Adding a collider/zone through the Inspector fits the sprite
+new circles use radius 32. Adding a collider/zone through the Details fits the sprite
 when present. Existing files and image-drop dimensions are preserved.
 
 Right-click an entity in the hierarchy or Scene viewport and choose **Edit** to
@@ -53,13 +57,13 @@ live scene copy, and File → Save saves its containing scene.
 The **File**, **Edit**, **Create**, **View**, **Help**, and **Windows** menu strip contains
 file operations, labelled Undo/Redo, creation/import commands,
 Scene/Game/Prefab navigation, Fit, UI scale and controls/About. Use
-**File → New/Open → Project, Scene, or Prefab** for project and document authoring.
+**File → New/Open → Project, Scene, or Entity Template** for project and document authoring.
 New projects open a saved empty Main scene, configured as startup. Reopening a project
 restores its last successfully opened/saved project scene, falling back to startup
 with a notice if recovery fails. **File → Open Recent** remembers ten projects across
 restarts; missing projects leave the current workspace intact. Project Settings keeps
 scene drafts intact. Local scale saves and normal exit preserve scene recovery state.
-Use **File → New/Open → Prefab** for independent prefab authoring. File operations
+Use **File → New/Open → Entity Template** for independent entity template authoring. File operations
 retain unsaved-change confirmations and portable package validation.
 
 Creation is also available through nested right-click menus. Right-click selects
@@ -95,7 +99,7 @@ function-key shortcuts still work. While the Game view has focus and the game ru
 is paused, every key except the play controls goes to the game.
 
 UI work follows the design system in [UI_DESIGN.md](UI_DESIGN.md); see
-[HOW_TO_ADD_UI_FEATURES.md](HOW_TO_ADD_UI_FEATURES.md) before adding panels, inspector
+[HOW_TO_ADD_UI_FEATURES.md](HOW_TO_ADD_UI_FEATURES.md) before adding panels, Details panel
 rows, dialogs or commands.
 
 The editor defaults to Dark Forest, Compact density and UI 100%. **View → Appearance**
@@ -157,10 +161,10 @@ save-blocking error. JSON decimal syntax is locale independent. Focused undo
 cancels the active edit, following existing gesture semantics. Selection-only and
 read-only events do not start transactions. Hosts must finish edits on tab/target
 changes with the existing `endGesture()` boundary; presenter disposal must not
-unconditionally cancel owner state. Scene and prefab inspectors share these bindings. Component/tool/tab changes and
+unconditionally cancel owner state. Scene and entity template Details panels share these bindings. Component/tool/tab changes and
 playback entry finish owner gestures; panel disposal does not discard drafts.
 
-Inspector fields use `ui/inspector/EditorPropertyDefinition.kt` and the shared
+Details fields use `ui/inspector/EditorPropertyDefinition.kt` and the shared
 renderer: booleans, catalog enums, strings, finite numbers, numeric axis objects,
 resource references and structured JSON. Vectors share one row; other objects
 (including texture regions) retain all keys in a multiline JSON editor. Catalog
@@ -170,12 +174,12 @@ entity identity/component across Scene/Prefab panels and dock remounts. This
 state never enters scene files or undo history. Future component authors should
 reuse `InspectorComponent`/`ComponentField` and native catalog metadata.
 
-Run `.\gradlew.bat run --args=--inspector-gallery` for both real inspector paths
+Run `.\gradlew.bat run --args=--inspector-gallery` for both real Details paths
 without JNI. Add `--capture <directory>` to capture dark/light, 100%/150% font
-scale and 900/540px window widths. Full inspector keyboard, detached window and
+scale and 900/540px window widths. Full Details keyboard, detached window and
 mixed-DPI acceptance remains a manual check.
 
-The default layout places hierarchy left, viewport center, and selected inspector right. The standard window menu bar uses flat headings, Alt mnemonics, a subtle
+The default layout places hierarchy left, viewport center, and selected Details right. The standard window menu bar uses flat headings, Alt mnemonics, a subtle
 bottom border, and the editor surface across its full width. Instructional text
 is available in Help instead of beneath toolbars.
 
@@ -217,9 +221,9 @@ in Project Settings and use Run Project for the saved whole game. Existing stand
 
 ## Create and save an entity
 
-The editor opens on **Scene**. Use **File → New → Prefab** for a standalone entity. A new entity starts with the engine's
+The editor opens on **Scene**. Use **File → New → Entity Template** for a standalone entity. A new entity starts with the engine's
 Transform defaults and an automatically generated UUID key. Enter its **Name**,
-right-click the component outline, inspector, or viewport and choose
+right-click the component outline, Details panel, or viewport and choose
 **Add Component → category → component**, then edit values. Keys stay internal; renaming preserves
 identity, and opening existing files retains their original keys. Booleans use checkboxes, enums use menus, vectors expose their
 coordinates, and maps/arrays use JSON fields. Components can also be removed.
@@ -241,14 +245,14 @@ untouched. New/Open/Close ask before discarding changes. Switching views preserv
 the entity document and unfinished field input. One durable native session survives
 panel changes; presenters can be replaced without rebuilding its graphics owner. Switching Scene/Game keeps the running session. Stop resets that session.
 
-**Open** accepts self-contained subtree packages and JSON prefab files. The
-current prefab Inspector/preview edits the root and preserves descendants;
-project scene imports instantiate the whole subtree. Project prefab imports are
+**Open** accepts self-contained subtree packages and JSON entity template files. The
+current entity template Details/preview edits the root and preserves descendants;
+project scene imports instantiate the whole subtree. Project entity template imports are
 linked by asset UUID; saving the source reconciles open instances while retaining
-placement and explicit component overrides. See [persisted prefab semantics and
+placement and explicit component overrides. See [persisted entity template semantics and
 current editing limits](../../docs/topics/Prefabs.md#desktop-entity-authoring). Engine normalization exposes omitted
 defaults and adapts legacy aliases/vector arrays while preserving their values.
-Unknown components, runtime-only fields, unsupported metadata and nested prefab declarations are
+Unknown components, runtime-only fields, unsupported metadata and nested entity template declarations are
 rejected with an error rather than silently removed. The component catalog and
 validation come from C++, not a second Kotlin schema.
 
@@ -260,7 +264,7 @@ runs gameplay scripts or physics and does not write temporary scene files.
 
 ### Viewport controls
 
-In the **Prefab** tab, choose a component in the left outline or right inspector,
+In the **Entity Template** tab, choose a component in the left outline or right Details panel,
 choose its visual **Tool**, or click a sprite/collider/
 zone to select it. Magenta
 squares are drag handles. The menu lets you select overlapping shapes precisely.
@@ -287,16 +291,16 @@ picking, but can still be selected from the menu.
 
 Each drag is one undo step, and so is a burst of arrow nudges on one shape (keys
 pressed within 0.75 s of each other). With several entities selected, a drag or nudge
-burst moves them all as one step. Inspector, component and imported-asset changes
+burst moves them all as one step. Details panel, component and imported-asset changes
 also enter history; New/Open reset it. In a scene, the toolbar Undo/Redo buttons and
-Ctrl+Z walk the scene's single timeline, structure included; the prefab workspace
+Ctrl+Z walk the scene's single timeline, structure included; the entity template workspace
 keeps its own. Handles account for rotation, mirrored scale
 and viewport DPI. Collapsed shapes with a zero scale must be corrected in the
-inspector before their collider/size handles can be used. Radius follows the
+Details before their collider/size handles can be used. Radius follows the
 engine's maximum-scale circle rendering. Rotation, tint and UV values remain
-editable in the inspector. All edits are saved in the same prefab components.
+editable in the Details panel. All edits are saved in the same entity template components.
 Transform position/scale still affect the whole entity intentionally; use Entity
-or Transform fields for that. Older prefabs default sprite size to (1,1) and
+or Transform fields for that. Older entity templates default sprite size to (1,1) and
 offset to (0,0), retaining their existing appearance.
 
 The camera stays fixed while editing component values. Middle-drag or
@@ -328,7 +332,7 @@ The **Pivot/Center** pair beside the tools (also **Tools → Rotate and Scale Ar
 chooses what Rotate and Scale turn around: the active entity's position (Pivot) or the
 centre of the selection's bounds (Center). Every Rotate or Scale drag is one undo step
 ("Rotate Player", "Scale 2 entities"), and **Esc** cancels it. Clicking, box selection and
-body drags work in all four tools. The Prefab tab keeps its own shape handles; there is no
+body drags work in all four tools. The Entity Template tab keeps its own shape handles; there is no
 Rect tool.
 
 **F** frames the selection; **Fit** still frames everything. The status bar shows the
@@ -339,7 +343,7 @@ rotated, scaled or mirrored parents, and are then converted to local values thro
 parent pose; with several entities selected, the active entity's value snaps and the others
 follow by the same amount. Right-click creation and Assets drops land on the move step while
 snapping is on.
-The Scene and Prefab grids follow the move step (every tenth line is a major line; a step
+The Scene and Entity Template grids follow the move step (every tenth line is a major line; a step
 too fine for the zoom level is drawn coarser).
 
 To run the actual desktop manipulation regression:
@@ -363,13 +367,13 @@ Export format (keys generated automatically by the editor):
 
 Instantiate using `PrefabLoader::instantiate(path, scene, "instanceKey")`, Lua
 `Engine.instantiatePrefab`, or include the file in a scene's `prefabs` array; see
-[engine prefab rules](../../docs/topics/Prefabs.md). Asset paths follow the
+[engine entity template rules](../../docs/topics/Prefabs.md). Asset paths follow the
 existing engine loader rules; repository-root paths such as `assets/scripts/...`
 work when launching from the repo root.
 
-The Prefab tab edits a prefab document (its Inspector edits the root entity);
+The Entity Template tab edits an entity template document (its Details panel edits the root entity);
 Scene Editor assembles entities into hierarchies. Drag a scene entity onto an Assets
-folder to save it as a linked prefab, and use **Apply Changes to Prefab** to write an
+folder to save it as a linked entity template, and use **Apply Changes to Entity Template** to write an
 instance's edits back. Both provide undo/redo and asset browsing. Scene gameplay uses
 a runtime snapshot and Stop restores authoring. Open
 `assets/scenes/editor_camera_demo.slescene` to try a child camera and WASD script.
@@ -378,7 +382,7 @@ a runtime snapshot and Stop restores authoring. Open
 
 With a project open, new scene/prefab Save defaults to ordinary `.scene.json` /
 `.prefab.json` source files beneath Assets. Double-click sources in the asset dock
-to edit them; Scene Import Prefab accepts project prefabs too. Textures/scripts
+to edit them; Scene Import → Entity Template accepts project entity templates too. Textures/scripts
 use shared sidecar UUIDs, resolved before native preview and Play. Moving the
 whole project preserves those references. External changes/deletions block stale
 saves and preserve drafts; Reopen or Save As resolves the conflict. File → Export
@@ -389,7 +393,7 @@ ordinary Play still runs the open scene. Logical dimensions, VSync and FPS apply
 in the viewport. Standalone `engine_app --project <file.sleproject>` also applies
 the game window title and mode, and works from an unrelated working directory.
 Lua require searches the project Scripts folder and asset root. Scenes register
-both document keys and UUID aliases for switching. Project prefabs use disposable
+both document keys and UUID aliases for switching. Project entity templates use disposable
 `.sle/runtime` JSON; sources and metadata are never rewritten by native launch.
 
 Run `gradlew.bat run --args=--project-documents-smoke` for Save/browser/Play/
@@ -530,6 +534,13 @@ JVM's bundled `msvcp140.dll` may predate the compiler's C++ runtime.
 .\gradlew.bat run --args="--asset-browser-smoke"
 ```
 
+`--l1-walk-smoke` drives the editor-core walk (plan `docs/plans/editor-core-l1.md`,
+Session 7) with Robot: selection and marquee, W/E/R drags with snapping and Ctrl inversion,
+undo/redo order, the status-bar Undo button, shortcuts in detached Hierarchy and Scene
+windows, Game keyboard passthrough while playing (W, Delete, F5/F6/Shift+F5), and both themes
+and densities. Captures go to `build/reports/l1-walk-<scale>/`. To check a 150% display from
+a 100% one, set `JAVA_TOOL_OPTIONS=-Dsun.java2d.uiScale=1.5` for the run.
+
 Entity-authoring checks:
 
 ```powershell
@@ -663,7 +674,7 @@ production docking. See [session-1 measurements and limits](../../docs/plans/edi
 See the [workspace operating guide](../../docs/topics/EditorWorkspace.md) for
 arrangement, shared Play, close behavior and layout recovery.
 
-The **Windows** menu manages Hierarchy, Inspector, Assets, Scene, Game and Entity.
+The **Windows** menu manages Hierarchy, Details panel, Assets, Scene, Game and Entity.
 Use Show / Focus to restore a hidden panel, Hide to retain its state, Detach to open
 a native window, or Move to to choose a tab group or edge. Groups can also detach
 or merge through these commands. Restore Default Layout returns panels to the main
@@ -693,9 +704,9 @@ the latest state in order. Failed atomic writes preserve the previous file.
 
 Only the main window owns app menus and project/asset services. Closing an auxiliary
 window hides its panels; Play and document drafts continue. Main exit asks before
-discarding dirty documents and shuts down the shared engine once. The Inspector,
+discarding dirty documents and shuts down the shared engine once. The Details panel,
 Hierarchy and File/Edit commands follow the active authoring mode. Editing a scene
-copy and saving still writes the containing scene; standalone prefab Save writes
+copy and saving still writes the containing scene; standalone entity template Save writes
 its own file. Scene and Game share a simulation. Entity preview is a separate
 editing mode, entered explicitly when playback must stop.
 

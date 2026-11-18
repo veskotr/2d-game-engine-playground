@@ -3,7 +3,7 @@
 The desktop editor's **Scene** tab authors keyed entity hierarchies and saves
 portable `.slescene` packages. A package includes the scene JSON and all recognized
 component assets, using the same bounded ZIP and asset-ID machinery as
-[packaged prefabs](PrefabPackages.md). In an open project, Save defaults to plain
+[packaged entity templates](PrefabPackages.md). In an open project, Save defaults to plain
 `.scene.json` sources with shared UUID asset references; see
 [project editing](Projects.md#scene-and-prefab-editing). Export Package retains the
 portable `.slescene` workflow.
@@ -11,9 +11,9 @@ portable `.slescene` workflow.
 ## Workflow
 
 - Right-click the tree or Scene viewport for **New → Scene**, **Create →
-  Entity → At Scene Root**, or **Import → Prefab…**. Select the scene root to
+  Entity → At Scene Root**, or **Import → Entity Template…**. Select the scene root to
   enter its name. Creation menus replace the former add/import buttons.
-- Prefab imports are editable copies, with new UUIDs and remapped self references.
+- Entity template imports are editable copies, with new UUIDs and remapped self references.
   Editing a scene copy never modifies its source `.sleprefab` or another copy.
 - The expandable scene tree in **Hierarchy** contains the scene root and entity nodes, with
   no component nodes. Select a node or click its geometry/origin in the viewport.
@@ -26,13 +26,13 @@ portable `.slescene` workflow.
   **Ctrl+A** (Edit → Select All) selects every entity and **Esc** in the Hierarchy clears
   the selection. In the Scene view, Shift- or Ctrl-click toggles an entity. The selection
   is ordered and has one *active* entity (the latest one clicked): its Hierarchy row has
-  an accent marker, the Inspector edits it and only it gets handles; every selected entity
+  an accent marker, the Details panel edits it and only it gets handles; every selected entity
   is outlined. Dragging any selected entity moves the whole selection, and arrow nudges
   move it too; each drag, and each nudge burst, is one undo step ("Move 3 entities"). A
   selected entity whose ancestor is also selected follows that ancestor. A plain click on
   a selected entity without dragging selects it alone. With several entities selected the
-  Inspector shows "N entities selected" with Duplicate and Delete only (editing several
-  entities at once is a later roadmap item); Edit Entity, Apply Changes to Prefab, Add
+  Details panel shows "N entities selected" with Duplicate and Delete only (editing several
+  entities at once is a later roadmap item); Edit Entity, Apply Changes to Entity Template, Add
   Component, Parent and dragging to Assets work on one entity and say so when disabled.
 - **Tools and snapping:** **Q** Select, **W** Move, **E** Rotate and **R** Scale tools
   (viewport toolbar and the Tools menu; the keys work while the Scene view or the Hierarchy
@@ -53,23 +53,23 @@ portable `.slescene` workflow.
   step) snap the active entity's world value before conversion to local through the parent
   pose; the rest of the selection follows by the same amount. Right-click creation and
   Assets drops use the move step. The grid follows the move step through the editor-only
-  `Runtime::setEditorGrid`. The Prefab tab keeps its own shape handles; there is no Rect
+  `Runtime::setEditorGrid`. The Entity Template tab keeps its own shape handles; there is no Rect
   tool yet.
 - The default layout places the tree on the left, viewport in the center, and selected
-  entity inspector on the right. Entity properties contain name, parent, Transform
+  entity Details on the right. Entity properties contain name, parent, Transform
   and Camera2D when present. **Fit** frames all entities;
-  edits preserve the camera. Edit the selected entity's components in the Inspector;
+  edits preserve the camera. Edit the selected entity's components in the Details panel;
   **Right-click → Add Component** adds one directly. There is no separate entity tab
   for scene entities. **File → Save** saves the scene.
 - Drag an entity from the Hierarchy or out of the viewport onto an Assets folder to
-  save it as a linked prefab; **Apply Changes to Prefab** writes an instance's edits
-  back. See [Prefabs](Prefabs.md#creating-editing-and-applying-prefabs).
+  save it as a linked entity template; **Apply Changes to Entity Template** writes an instance's edits
+  back. See [Entity Templates](Prefabs.md#creating-editing-and-applying-prefabs).
 - **Create → Entity → As Child** creates a child of the right-clicked selection. **Parent** reparents while
   preserving world pose; cycles and non-invertible parent transforms are rejected.
   **Edit → Duplicate** copies the selected subtrees with independent UUIDs;
   **Edit → Delete** or Delete in the Hierarchy/Scene viewport removes them
   and clears selection, preventing a held Delete from deleting unrelated survivors.
-  **Undo** restores the subtrees and selection. Inspector text fields keep Delete
+  **Undo** restores the subtrees and selection. Details text fields keep Delete
   for text editing; modal dialogs and running/paused playback block scene deletion.
   This also applies to detached windows.
 - Right-click empty Scene space to create at the clicked world position. The shared
@@ -92,9 +92,9 @@ portable `.slescene` workflow.
   selecting alone is never a step. A drag, a committed numeric edit and a burst of arrow
   nudges (within 0.75 s) are one step each. Pressed during a drag or numeric edit, Undo
   and Redo cancel that edit first. The history keeps the latest 100 steps. A step that
-  would break an Animator target is refused and stays. The standalone prefab workspace
-  has its own timeline. Saving a prefab that refreshes linked instances clears the
-  scene's history and reports "Undo history cleared after prefab update".
+  would break an Animator target is refused and stays. The standalone entity template workspace
+  has its own timeline. Saving an entity template that refreshes linked instances clears the
+  scene's history and reports "Undo history cleared after entity template update".
 - In standalone mode, **Save / Save As** writes one `.slescene`. **Open** restores entities and assets.
   Save validates every entity, including hidden selections, before atomically
   replacing the file. Invalid drafts in any entity block saving. The scene dirty
@@ -103,9 +103,9 @@ portable `.slescene` workflow.
 
 The top menu strip groups **File** document operations, **Edit** history and
 entity operations, **Create** entities/components/imports, **View** navigation and
-UI scale, and **Help** controls/About. **File → New/Open → Prefab** switches to a
-separate prefab document, which is preserved during scene component editing.
-Scene copies retain their identities and do not modify their source prefab.
+UI scale, and **Help** controls/About. **File → New/Open → Entity Template** switches to a
+separate entity template document, which is preserved during scene component editing.
+Scene copies retain their identities and do not modify their source entity template.
 Valid external Animator lookups are projected to self only for the isolated
 component preview; authored/saved references remain intact.
 
@@ -129,14 +129,14 @@ Restored windows recover to connected display work areas; reset changes layout o
 Scene and Game share one simulation and durable GL owner; Scene pan/zoom and Game
 dimensions stay independent. Explicitly opening entity editing stops playback;
 focusing its panel during Play preserves the session. Entity preview uses the
-existing separate content mode. Hierarchy, Inspector and File/Edit commands follow
+existing separate content mode. Hierarchy, Details panel and File/Edit commands follow
 the active authoring mode, including Save-to-scene for edited scene copies.
 
 ## Scene cameras and gameplay
 
 **Create → Camera → At Scene Root** creates an entity with Camera2D. Use
 **Create → Camera → As Child** to
-attach one to a selected actor. The inspector edits its logical view size, zoom,
+attach one to a selected actor. The Details panel edits its logical view size, zoom,
 enabled and primary flags; **Make Active** selects the primary camera. Camera
 position is the view center and world rotation is inherited. Transform scale does
 not resize its view. Without a camera entity, legacy scenes retain their runtime
@@ -204,7 +204,7 @@ all entities rather than only the selected entity.
 
 A ready-to-load [starter package](../../assets/scenes/editor_starter.slescene),
 [plain JSON equivalent](../../assets/scenes/editor_starter.json), and
-[crate prefab](../../assets/prefabs/editor_crate.sleprefab) are included. The scene
+[crate entity template](../../assets/prefabs/editor_crate.sleprefab) are included. The scene
 contains ground and two independent crates. Open the package in Scene, or
 run from the repository root with Windows tooling:
 
@@ -228,18 +228,18 @@ Gradle launches the editor from the repository root, so that scene path is corre
 
 The first scene editor supports at most 4096 authored entities and 4 MiB
 scene metadata. It accepts scene JSON with key/name/entities; entity keys must
-exist and be unique. Tiled imports, linked prefab
+exist and be unique. Tiled imports, linked entity template
 instances, scene-root components and unknown metadata are explicitly rejected by
 the editor rather than discarded. Existing engine loaders still support their
 full JSON scene formats. Linked overrides remain later work.
 
-Asset bundling and dynamic dependency limitations are the same as prefabs: known
+Asset bundling and dynamic dependency limitations are the same as entity templates: known
 asset fields/JSON dependencies are imported, but arbitrary Lua expressions and
 XML dependencies are not inferred. Extra imported files retain their bytes.
 
 `gradlew.bat build` runs model/package/selection/history regression coverage.
 `gradlew.bat run --args=--scene-smoke` drives the real desktop viewport, imports a
-prefab twice, selects/moves one copy, exercises undo and structural edits, rejects
+entity template twice, selects/moves one copy, exercises undo and structural edits, rejects
 an invalid hidden draft, relocates/saves/reopens the package, and verifies actual
 rendered texture/collider pixels. Reports are under the editor's `build/reports`.
 

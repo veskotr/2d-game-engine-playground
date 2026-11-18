@@ -15,7 +15,7 @@ internal object ToolCommands {
     private fun sceneView(ctx: CommandContext) = ctx.mode == ViewportMode.Scene && ctx.playback?.gameView != true && !ctx.viewportFailed
     private fun sceneReason(ctx: CommandContext) = if(sceneView(ctx)) null else "Show the Scene view to use its tools"
 
-    private fun tool(id: ViewportToolId) = EditorCommand(CommandId("tools.${id.name.lowercase()}"), "${id.label} Tool",
+    private fun tool(id: ViewportToolId) = EditorCommand(CommandId("tools.${id.name.lowercase()}"), "${id.label} Tool", icon = "tool_${id.name.lowercase()}",
         defaultChords = listOf(id.chord), scopes = sceneScopes,
         enabled = { sceneView(it) && it.tools != null }, disabledReason = ::sceneReason) { ctx -> ctx.tools?.activate(id) }
     val select = tool(ViewportToolId.Select)
@@ -27,10 +27,10 @@ internal object ToolCommands {
     fun command(id: ViewportToolId) = tools.first { it.id.value == "tools.${id.name.lowercase()}" }
 
     /** Fits the Scene view to the selection; View → Fit still frames everything. */
-    val frameSelected = EditorCommand(CommandId("view.frameSelected"), "Frame Selected", defaultChords = listOf(KeyChord.plain(KeyEvent.VK_F)),
+    val frameSelected = EditorCommand(CommandId("view.frameSelected"), "Frame Selected", icon = "frame_selected", defaultChords = listOf(KeyChord.plain(KeyEvent.VK_F)),
         scopes = sceneScopes, enabled = { sceneView(it) && it.selectionCount > 0 },
         disabledReason = { sceneReason(it) ?: if(it.selectionCount == 0) "Select an entity to frame" else null }) { it.actions.frameSelected() }
-    val toggleSnap = EditorCommand(CommandId("tools.toggleSnap"), "Snapping",
+    val toggleSnap = EditorCommand(CommandId("tools.toggleSnap"), "Snapping", icon = "snap",
         enabled = { it.snap != null && it.mode != ViewportMode.Sandbox }) { it.snap?.toggle() }
     val configureSnap = EditorCommand(CommandId("tools.configureSnap"), "Configure Snap…",
         enabled = { it.snap != null && !it.modalOpen }) { it.actions.configureSnap() }
@@ -38,7 +38,7 @@ internal object ToolCommands {
     fun toggleSnapLabel(ctx: CommandContext) = if(ctx.snap?.settings?.enabled == true) "Turn Snapping Off" else "Turn Snapping On"
 
     /** Switches what Rotate and Scale turn around: the active entity's pivot or the selection center. */
-    val togglePivot = EditorCommand(CommandId("tools.togglePivot"), "Pivot/Center",
+    val togglePivot = EditorCommand(CommandId("tools.togglePivot"), "Pivot/Center", icon = "pivot",
         enabled = { it.tools != null && it.mode == ViewportMode.Scene }) { ctx ->
         ctx.tools?.let { it.pivot = if(it.pivot == PivotMode.Pivot) PivotMode.Center else PivotMode.Pivot }
     }

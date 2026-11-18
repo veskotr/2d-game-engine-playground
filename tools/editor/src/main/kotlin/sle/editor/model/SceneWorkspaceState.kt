@@ -16,7 +16,7 @@ internal fun canonicalSceneDocument(source: String): String =
     NativeEngine.canonicalScene(source.toByteArray(Charsets.UTF_8)).toString(Charsets.UTF_8)
 
 /** Shown when applying a linked prefab rebuilt the scene and its undo history had to go. */
-internal const val HISTORY_CLEARED_NOTICE="Undo history cleared after prefab update"
+internal const val HISTORY_CLEARED_NOTICE="Undo history cleared after entity template update"
 
 internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefinition>,
     private val canonicalize: (String) -> String = ::canonicalSceneDocument) : EntityHistoryOwner {
@@ -233,7 +233,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
      * One undoable change; refuses when the scene changed after [captured] was taken. */
     fun linkSubtree(captured: SceneDocument,created: SubtreePrefab,assetId: String) {
         // Callers also compare full revisions (drafts included) before saving the asset.
-        require(document()==captured) { "The scene changed while the prefab was saved; the prefab was saved but not linked" }
+        require(document()==captured) { "The scene changed while the entity template was saved; the entity template was saved but not linked" }
         val root=created.prefab.root
         val link=PrefabInstance(assetId,root,created.prefab,parent=created.scene.parents[root]).capture(created.scene)
         val live=entities.associateBy { it.document.key }
@@ -241,7 +241,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
             val previous=live[created.renamed[entity.key] ?: entity.key]
             previous?.takeIf { it.document==entity } ?: EntityWorkspaceState(catalog).apply { resetTo(entity,previous?.assets ?: emptyMap()) }
         }
-        change("Create Prefab ${historyName(created.scene.entities.first { it.key==root })}") { entities=states;parents=created.scene.parents;prefabInstances=prefabInstances+link;selection.select(root) }
+        change("Create Entity Template ${historyName(created.scene.entities.first { it.key==root })}") { entities=states;parents=created.scene.parents;prefabInstances=prefabInstances+link;selection.select(root) }
     }
     fun insertPrefab(document: EntityDocument,imported: Map<Path,String>,position: Vec2?=null) {
         require(entities.size<MAX_SCENE_ENTITIES) { "Scene editor supports at most $MAX_SCENE_ENTITIES entities" }
@@ -315,7 +315,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
      * selected is copied once, with its ancestor) as one step, and selects the copies. */
     fun duplicateSelected() {
         val roots=selectionRoots().ifEmpty { return };val copied=LinkedHashSet<String>().apply { roots.forEach { addAll(subtree(it)) } }
-        require(roots.none { root -> prefabInstances.any { root in it.entityKeys && root!=it.key } }) { "Duplicate the linked prefab root, or unpack first" }
+        require(roots.none { root -> prefabInstances.any { root in it.entityKeys && root!=it.key } }) { "Duplicate the linked entity template root, or unpack first" }
         require(entities.size+copied.size<=MAX_SCENE_ENTITIES) { "Scene entity limit reached" }
         val remap=copied.associateWith { UUID.randomUUID().toString() }.toMutableMap();val ordinalKeys=entities.map { it.document.key }
         val duplicateLinks=prefabInstances.filter { it.key in copied }.map { link ->
@@ -339,7 +339,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     /** Deletes the union of the selected subtrees as one step. */
     fun removeSelected() {
         val removed=LinkedHashSet<String>().apply { selectionRoots().forEach { addAll(subtree(it)) } }.ifEmpty { return }
-        require(prefabInstances.none { link -> link.entityKeys.any { it in removed } && link.key !in removed }) { "Delete the linked prefab root, or unpack first" }
+        require(prefabInstances.none { link -> link.entityKeys.any { it in removed } && link.key !in removed }) { "Delete the linked entity template root, or unpack first" }
         val remaining=entities.filterNot { it.document.key in removed };requireReferences(remaining)
         val subject=subjects(removed)
         change("Delete $subject") { entities=remaining;parents=parents.filterKeys { it !in removed };prefabInstances=prefabInstances.filterNot { it.key in removed };selection.clear() }

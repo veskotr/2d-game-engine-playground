@@ -21,7 +21,7 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
     // Installed by the project UI; standalone actions retain their existing behavior.
     var projectFileAction: ((Boolean,Boolean)->Boolean)? = null
     fun openProject(opened: OpenedProjectDocument) {
-        require(opened.kind==ProjectDocumentKind.Prefab) { "Select a project prefab" }
+        require(opened.kind==ProjectDocumentKind.Prefab) { "Select a project entity template" }
         openResolved(opened.source,opened.assets,opened.path)
         projectDocument=opened
     }

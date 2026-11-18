@@ -129,7 +129,7 @@ internal fun editorApplicationMenus(
         "Create" to creation.flatMap { when(it.label) { "Create" -> it.children.map { child -> child.copy(enabled=it.enabled && child.enabled) };"Add Component","Import" -> listOf(it);else -> emptyList() } },
         "View" to listOf(
             EditorMenuEntry("Scene") { ctx.actions.showScene(false) },EditorMenuEntry("Game") { ctx.actions.showScene(true) },
-            EditorMenuEntry("Prefab Workspace",ctx.editable) { ctx.actions.openPrefabWorkspace() },
+            EditorMenuEntry("Entity Template Workspace",ctx.editable) { ctx.actions.openPrefabWorkspace() },
             entry(ViewCommands.fit),entry(sle.editor.command.ToolCommands.frameSelected),
             EditorMenuEntry.Separator,
             EditorMenuEntry("Appearance",children=sle.editor.ui.theme.EditorThemeMode.entries.map { mode -> EditorMenuEntry(mode.name) { onTheme(mode) } }),
@@ -144,7 +144,7 @@ internal fun editorApplicationMenus(
         ),
         "Help" to listOf(
             entry(ViewCommands.keyboardShortcuts),
-            EditorMenuEntry("About SLE Editor…") { EditorDialogs.showMessageDialog(null,"SLE Editor\nKotlin Compose Desktop · SLE native renderer\nScene and prefab authoring", "About",JOptionPane.INFORMATION_MESSAGE) },
+            EditorMenuEntry("About SLE Editor…") { EditorDialogs.showMessageDialog(null,"SLE Editor\nKotlin Compose Desktop · SLE native renderer\nScene and entity template authoring", "About",JOptionPane.INFORMATION_MESSAGE) },
         ),
     )
 }

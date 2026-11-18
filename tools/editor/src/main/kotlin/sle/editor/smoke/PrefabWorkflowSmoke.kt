@@ -75,7 +75,7 @@ internal suspend fun runPrefabWorkflowSmoke(window: JFrame,canvas: ()->EngineCan
     glide(screen(treeBounds.getValue(root)),folder)
     await("Hierarchy drag gave no valid-target feedback") { EntityDrag.dragging?.entityKey==root && EntityDrag.hovered!=null }
     robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
-    await("Hierarchy drag did not create a linked prefab") {
+    await("Hierarchy drag did not create a linked entity template") {
         !project.busy && scene.document().prefabInstances.any { it.key==root } && Files.exists(prefabs.resolve("Dragged.prefab.json"))
     }
     check(scene.entities.any { it.document.key=="$root/$child" } && scene.parents["$root/$child"]==root) { "Dragged subtree was not re-keyed as its instance" }
@@ -96,7 +96,7 @@ internal suspend fun runPrefabWorkflowSmoke(window: JFrame,canvas: ()->EngineCan
     robot.keyPress(KeyEvent.VK_ESCAPE);robot.keyRelease(KeyEvent.VK_ESCAPE);delay(120)
     check(EntityDrag.dragging==null) { "Escape did not cancel the entity drag" }
     robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);delay(300)
-    check(!project.busy && Files.list(prefabs).use { it.count() }==count && scene.document().prefabInstances.none { it.key==loose }) { "Cancelled drag wrote a prefab" }
+    check(!project.busy && Files.list(prefabs).use { it.count() }==count && scene.document().prefabInstances.none { it.key==loose }) { "Cancelled drag wrote an entity template" }
     // Refusals are reported as status-bar notices (the scene's error field is consumed by them).
     val beforeStale=workspace.notices.recent.firstOrNull()
     EntityDrag.move(EntityDragPayload("stale-scene",scene.file,loose,"Stale"),folder)
@@ -118,7 +118,7 @@ internal suspend fun runPrefabWorkflowSmoke(window: JFrame,canvas: ()->EngineCan
     glide(start,folder,20)
     await("Viewport drag gave no valid-target feedback") { EntityDrag.dragging?.entityKey==sprite && EntityDrag.hovered!=null }
     robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
-    await("Viewport drag did not create a linked prefab") {
+    await("Viewport drag did not create a linked entity template") {
         !project.busy && scene.document().prefabInstances.any { it.key==sprite } && Files.exists(prefabs.resolve("Viewport Sprite.prefab.json"))
     }
     check(scene.entities.first { it.document.key==sprite }.document.components["Transform"]==pose) { "Viewport drop kept the move instead of cancelling it" }
@@ -126,8 +126,8 @@ internal suspend fun runPrefabWorkflowSmoke(window: JFrame,canvas: ()->EngineCan
     // --- Apply Changes to Prefab from the Hierarchy context menu.
     scene.select(root);scene.selected!!.setValue("Transform",listOf("rotation"),JsonPrimitive(0.0))
     scene.selected!!.document=scene.selected!!.document.addComponent("Audio",buildJsonObject { put("volume",0.3) })
-    contextChoose(screen(treeBounds.getValue(root)),"Apply Changes to Prefab")
-    await("Apply did not update the prefab asset") {
+    contextChoose(screen(treeBounds.getValue(root)),"Apply Changes to Entity Template")
+    await("Apply did not update the entity template asset") {
         !project.busy && Files.readString(prefabs.resolve("Dragged.prefab.json")).contains("\"Audio\"")
     }
     val link=scene.document().prefabInstances.first { it.key==root }
@@ -135,34 +135,34 @@ internal suspend fun runPrefabWorkflowSmoke(window: JFrame,canvas: ()->EngineCan
     check(scene.dirty && scene.error==null)
     println("PREFAB_WORKFLOW_STAGE apply")
     // --- Temporary Prefab tab: a restored layout showing it without a prefab hides it again.
-    if(prefabPanel !in manager.layout.hidden) { manager.hidePanel(prefabPanel);await("Clean prefab tab did not close") { prefabPanel in manager.layout.hidden } }
+    if(prefabPanel !in manager.layout.hidden) { manager.hidePanel(prefabPanel);await("Clean entity template tab did not close") { prefabPanel in manager.layout.hidden } }
     check(!workspace.prefabSession && workspace.selectedTab==2 && prefab.file==null)
     val center=manager.layout.tabs().single { PanelId("scene") in it.panels }.group
     manager.movePanel(prefabPanel,DockTarget.Tab(center,0))
-    check(prefabPanel !in manager.layout.hidden) { "Fixture did not restore the Prefab tab" }
-    await("Restored stale Prefab tab was not hidden") { prefabPanel in manager.layout.hidden }
+    check(prefabPanel !in manager.layout.hidden) { "Fixture did not restore the Entity Template tab" }
+    await("Restored stale Entity template tab was not hidden") { prefabPanel in manager.layout.hidden }
     // Double-click opens a prefab in the temporary tab.
     val relative="Prefabs/Dragged.prefab.json"
     browserReveal(assetBounds,"AssetFolder:Prefabs",window,robot)
-    await("Dragged prefab row missing") { "AssetFile:$relative" in assetBounds }
+    await("Dragged entity template row missing") { "AssetFile:$relative" in assetBounds }
     val row=screen(assetBounds.getValue("AssetFile:$relative"))
     robot.mouseMove(row.x,row.y)
     repeat(2) { robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);delay(60) }
-    await("Double-click did not open the Prefab tab") {
+    await("Double-click did not open the Entity Template tab") {
         !project.busy && workspace.prefabSession && prefabPanel !in manager.layout.hidden && prefab.file?.fileName?.toString()=="Dragged.prefab.json"
     }
     // Closing with unsaved changes asks; No keeps the tab, Yes discards and returns to the scene.
-    prefab.rename("Unsaved Prefab Edit");check(prefab.dirty)
+    prefab.rename("Unsaved Entity Template Edit");check(prefab.dirty)
     answer(JOptionPane.NO_OPTION);manager.hidePanel(prefabPanel);delay(200)
-    check(prefabPanel !in manager.layout.hidden && prefab.dirty && workspace.prefabSession) { "Declined close lost the prefab tab" }
+    check(prefabPanel !in manager.layout.hidden && prefab.dirty && workspace.prefabSession) { "Declined close lost the entity template tab" }
     manager.movePanel(prefabPanel,DockTarget.Detached(LogicalBounds(120f,120f,640f,480f)))
-    await("Prefab tab did not detach") { manager.hostFor(prefabPanel)?.let { manager.boundWindows()[it]?.isShowing }==true }
+    await("Entity template tab did not detach") { manager.hostFor(prefabPanel)?.let { manager.boundWindows()[it]?.isShowing }==true }
     answer(JOptionPane.NO_OPTION);manager.closeHost(manager.hostFor(prefabPanel)!!);delay(200)
-    check(prefabPanel !in manager.layout.hidden && prefab.dirty) { "Closing the detached window discarded the prefab" }
+    check(prefabPanel !in manager.layout.hidden && prefab.dirty) { "Closing the detached window discarded the entity template" }
     answer(JOptionPane.YES_OPTION);manager.closeHost(manager.hostFor(prefabPanel)!!)
     await("Confirmed close did not return to the scene") { prefabPanel in manager.layout.hidden && !workspace.prefabSession && workspace.selectedTab==2 }
     check(!prefab.dirty && prefab.file==null)
-    check(!Files.readString(prefabs.resolve("Dragged.prefab.json")).contains("Unsaved Prefab Edit"))
+    check(!Files.readString(prefabs.resolve("Dragged.prefab.json")).contains("Unsaved Entity Template Edit"))
     manager.resetLayout()
     println("PREFAB_WORKFLOW_STAGE prefab-tab")
     // --- Save and reopen: both new links persist as declarations.

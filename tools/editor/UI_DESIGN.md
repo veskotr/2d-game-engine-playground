@@ -43,7 +43,7 @@ are stronger.
 | Toolbar/command `button` | 26 dp | 32 dp |
 | Input/select `field` | 26 dp | 30 dp |
 | `treeRow` (hierarchy, assets) | 24 dp | 28 dp |
-| Inspector `propertyRow` | 28 dp | 34 dp |
+| Details panel `propertyRow` | 28 dp | 34 dp |
 | Section header `sectionHeader` | 26 dp | 30 dp |
 | `panelPadding` / `gap` | 8 / 4 dp | 10 / 6 dp |
 | `icon` / `iconSmall` | 16 / 14 dp | 18 / 14 dp |
@@ -68,7 +68,7 @@ share one baseline. Feature code never sets `fontSize`.
 | Component | Use |
 |---|---|
 | `EditorButton(label, onClick, style=…)` | Commands. `EditorButtonStyle.Primary` (filled green, the main action of a surface), `Secondary` (default; restrained fill + subtle outline), `Ghost` (no resting chrome: toolbars, zoom, navigation, dock actions). `primary=true` maps to Primary. |
-| `EditorToggle`, `EditorIconToggle`, `EditorIconButton`, `EditorGlyphButton` + `EditorGlyphIcon(EditorGlyph.*)` | Toggles and icon-only commands; glyphs are drawn, never text symbols. `EditorIconToggle` is the icon form (viewport tools `ToolSelect`/`ToolMove`/`ToolRotate`/`ToolScale`, the Pivot/Center pair `PivotActive`/`PivotCenter`, snapping `Snap`); its tooltip names the command's chord from the keymap. |
+| `EditorToggle`, `EditorIconToggle`, `EditorIconButton`, `EditorGlyphButton` + `EditorGlyphIcon(EditorGlyph.*)` | Toggles and icon-only commands; glyphs are icons, never text symbols. Glyphs with an `iconKey` (tools, pivot/center, snap, notice levels) render the supplied PNG from `EditorIcons` as a mask in the state tint; window, chevron, check and grip glyphs stay drawn in code. Registered commands name an icon key (`EditorCommand.icon`), which menus show beside the label. `EditorIconToggle` is the icon form (viewport tools `ToolSelect`/`ToolMove`/`ToolRotate`/`ToolScale`, the Pivot/Center pair `PivotActive`/`PivotCenter`, snapping `Snap`); its tooltip names the command's chord from the keymap. |
 | `EditorTab` | Flat tab: active = surface fill + 2 dp accent underline. |
 | `EditorToolbar`, `EditorToolbarDivider`, `EditorSeparator` | Command strips and 1-hairline separators. |
 | `EditorTextField`, `EditorNumberField`, `EditorVectorField` | Text and numeric input (see contract below). |
@@ -89,14 +89,14 @@ highlight on hover/drag.
 
 ### Numeric editing contract
 
-Inspectors obtain `state.numberEdit(component, path, NumberOptions(min, max))`, an
+Details obtain `state.numberEdit(component, path, NumberOptions(min, max))`, an
 owner-cached `NumberEdit` that survives dock/window recreation. Valid text previews
 live; **Enter** or valid blur finishes one undo transaction; **Escape** restores the
 value from when editing started; invalid text (`-`, `1e`) never reaches the document and
 shows an error until corrected. Entered precision is preserved in JSON. Do not create a
 second numeric lifecycle.
 
-### Inspector metadata and section state
+### Details metadata and section state
 
 `ui/inspector/EditorPropertyDefinition.kt` classifies authored JSON plus the native
 component catalog (`ComponentDefinition(defaults, enums)`) into `PropertyKind` (Boolean,
@@ -156,11 +156,11 @@ document, dirty flag, render context and game pixels unchanged.
   false, and running it dismisses the notice first so its own result stays. Delete uses this:
   `reportDeletion` posts "Deleted N entities" with Undo, which runs the registered
   `EditCommands.undo` while the deletion is still the active document's latest step.
-- Document `error`/`message` fields (scene, its entities, the prefab workspace) and
+- Document `error`/`message` fields (scene, its entities, the entity template workspace) and
   `ProjectWorkspaceState.error` stay the model's way to report. `ReportNotices` in `Main.kt`
   posts each one (errors as Error, messages as Success, a history-cleared message as Warning)
   and clears the field. Appearance and layout notices are watched, not cleared.
-- Stays in place: field validation in the Inspector and its viewport hint, and the
+- Stays in place: field validation in the Details panel and its viewport hint, and the
   `viewportPanel` failure text, which explains an empty panel. The Assets panel keeps its
   own operation caption.
 
@@ -169,7 +169,7 @@ document, dirty flag, render context and game pixels unchanged.
 | Slot | Shows |
 |---|---|
 | Left | `EditorNotices.hint` while set, else the window's hint for the current view, in `textSecondary`. In the editable Scene view that is the active tool: its gesture hint during a drag or box (`ViewportToolState.gestureHint`, e.g. "Moving along X: Shift locks the main axis; Ctrl snaps to 1; Esc cancels"), else `toolHint(tool, …)`, which states the snapping state. |
-| Centre | The current notice on its level background: a drawn level glyph (`EditorGlyph.Info/Success/Warning/Error`) and the text in the level colour, an optional action, Dismiss for sticky levels; then the recent-messages button (`ChevronUp`, a Swing popup like other menus; clicking a row copies it). |
+| Centre | The current notice on its level background: a level icon (`EditorGlyph.Info/Success/Warning/Error`) and the text in the level colour, an optional action, Dismiss for sticky levels; then the recent-messages button (`ChevronUp`, a Swing popup like other menus; clicking a row copies it). |
 | Right | Background progress (spinner and label), "N selected", Editing/Playing/Paused and "Unsaved", divided by vertical separators. |
 
 Detached windows have no status bar; their panels post to the same service. The theme gallery
@@ -178,7 +178,7 @@ shows one bar per level, and `--editor-appearance-smoke` captures `status-bar-un
 
 ## Scene creation and deletion
 
-Hierarchy, viewport context menus and Inspector Delete actions share
+Hierarchy, viewport context menus and Details panel Delete actions share
 `ui/SceneCommands.kt`'s guarded deletion command. Keep key handlers local to the
 Hierarchy or native canvas so text fields retain Delete. Deletion clears selection;
 Undo restores the subtrees and the selection.

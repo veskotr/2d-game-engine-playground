@@ -167,7 +167,7 @@ private fun StatusBarGallery() {
     val samples=remember { listOf(
         Triple(NoticeLevel.Info,"Deleted 3 entities",true),
         Triple(NoticeLevel.Success,"Saved forest.scene.json",false),
-        Triple(NoticeLevel.Warning,"Undo history cleared after prefab update",false),
+        Triple(NoticeLevel.Warning,"Undo history cleared after entity template update",false),
         Triple(NoticeLevel.Error,"Could not save forest.scene.json: the folder is read-only",false),
     ).map { (level,text,undo) -> EditorNotices().also { notices ->
         // Long-lived specimens: the gallery never expires them.

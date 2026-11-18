@@ -31,11 +31,11 @@ internal fun InspectorGallery() {
         val paneWidth=maxWidth/2
         Row(Modifier.fillMaxWidth().heightIn(min=paneWidth)) {
             Column(Modifier.weight(1f).height(paneWidth*1.5f)) {
-                Text("Prefab inspector")
+                Text("Entity Template details")
                 EntityWorkspace(prefab,embedded=true)
             }
             Column(Modifier.weight(1f).height(paneWidth*1.5f)) {
-                Text("Scene inspector")
+                Text("Scene details")
                 SceneEntityInspector(scene)
             }
         }

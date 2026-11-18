@@ -158,7 +158,7 @@ class ShortcutDispatcherTest {
         assertEquals("Ctrl+Y", edit(true, "Redo").shortcut?.display())
         val file = menus(true).getValue("File")
         assertEquals("Ctrl+S", file.single { it.label == "Save" }.shortcut?.display())
-        assertEquals(listOf("Scene", "Prefab"), file.single { it.label == "New" }.children.map { it.label })
+        assertEquals(listOf("Scene", "Entity Template"), file.single { it.label == "New" }.children.map { it.label })
         assertTrue(menus(true).getValue("Edit").none { it.label == "Delete Entity" || it.label == "Duplicate Subtree" })
         assertEquals(listOf("Keyboard Shortcuts…", "About SLE Editor…"), menus(true).getValue("Help").map { it.label })
         // Context menus reference the same commands.

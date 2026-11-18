@@ -80,7 +80,7 @@ internal fun SceneTree(state: SceneWorkspaceState,modifier: Modifier=Modifier,
     val root=sceneTree(state.document())
     // A tooltip cannot show during a drag, so the refusal goes to the status bar.
     val notices=LocalEditorNotices.current
-    fun refuseMultiDrag() { val text="Select a single entity to save it as a prefab";notices?.warning(text) ?: run { state.error=text } }
+    fun refuseMultiDrag() { val text="Select a single entity to save it as an entity template";notices?.warning(text) ?: run { state.error=text } }
     var expanded by remember(state.key) { mutableStateOf(true) }
     var expandedNodes by remember(state.key) { mutableStateOf<Set<String>>(emptySet()) }
     LaunchedEffect(state.selection.keys,state.parents) {

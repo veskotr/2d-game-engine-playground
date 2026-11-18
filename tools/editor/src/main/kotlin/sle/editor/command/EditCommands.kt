@@ -11,13 +11,13 @@ import sle.editor.ui.SINGLE_ENTITY_REASON
 
 /** Edit commands. Undo and Redo walk the active document's single timeline ([CommandContext.document]). */
 internal object EditCommands {
-    val undo = EditorCommand(CommandId("edit.undo"), "Undo", defaultChords = listOf(KeyChord.ctrl(KeyEvent.VK_Z)),
+    val undo = EditorCommand(CommandId("edit.undo"), "Undo", icon = "undo", defaultChords = listOf(KeyChord.ctrl(KeyEvent.VK_Z)),
         scopes = setOf(CommandScope.Document), repeatable = true,
         // Undo during a drag or numeric edit cancels that gesture first.
         enabled = { it.editable && it.document?.let { document -> document.history.canUndo || document.gestureActive } == true }) { ctx ->
         timelineAttempt(ctx, UndoableDocument::undo)
     }
-    val redo = EditorCommand(CommandId("edit.redo"), "Redo",
+    val redo = EditorCommand(CommandId("edit.redo"), "Redo", icon = "redo",
         defaultChords = listOf(KeyChord.ctrl(KeyEvent.VK_Y), KeyChord.ctrl(KeyEvent.VK_Z, shift = true)),
         scopes = setOf(CommandScope.Document), repeatable = true,
         enabled = { it.editable && it.document?.let { document -> document.history.canRedo || document.gestureActive } == true }) { ctx ->
@@ -41,19 +41,19 @@ internal object EditCommands {
     private fun singleReason(ctx: CommandContext) = if(ctx.selectionCount > 1) SINGLE_ENTITY_REASON else null
     private val sceneSelection = setOf(CommandScope.Hierarchy, CommandScope.SceneViewport)
     /** Selects every scene entity; selection is never an undo step. */
-    val selectAll = EditorCommand(CommandId("edit.selectAll"), "Select All", defaultChords = listOf(KeyChord.ctrl(KeyEvent.VK_A)),
+    val selectAll = EditorCommand(CommandId("edit.selectAll"), "Select All", icon = "select_all", defaultChords = listOf(KeyChord.ctrl(KeyEvent.VK_A)),
         scopes = sceneSelection, enabled = { it.sceneDocument && it.scene?.entities?.isNotEmpty() == true }) { ctx -> ctx.scene?.selectAll() }
     /** Removes the selected entities and their descendants as one undoable step. */
-    val delete = EditorCommand(CommandId("edit.delete"), "Delete",
+    val delete = EditorCommand(CommandId("edit.delete"), "Delete", icon = "delete",
         defaultChords = listOf(KeyChord.plain(KeyEvent.VK_DELETE), KeyChord.plain(KeyEvent.VK_BACK_SPACE)),
         scopes = sceneSelection, enabled = ::selected) { ctx -> ctx.scene?.let { deleteSceneSelection(it, ctx.editable) } }
     /** Duplicates the top-most selected subtrees and selects the copies. */
-    val duplicate = EditorCommand(CommandId("edit.duplicate"), "Duplicate", defaultChords = listOf(KeyChord.ctrl(KeyEvent.VK_D)),
+    val duplicate = EditorCommand(CommandId("edit.duplicate"), "Duplicate", icon = "duplicate", defaultChords = listOf(KeyChord.ctrl(KeyEvent.VK_D)),
         scopes = sceneSelection, enabled = ::selected) { ctx -> sceneAttempt(ctx) { it.duplicateSelected() } }
     val editEntity = EditorCommand(CommandId("edit.entity"), "Edit Entity", enabled = ::single, disabledReason = ::singleReason) { ctx ->
         ctx.scene?.selectedKey?.let(ctx.actions::editEntity)
     }
-    val applyToPrefab = EditorCommand(CommandId("edit.applyToPrefab"), "Apply Changes to Prefab",
+    val applyToPrefab = EditorCommand(CommandId("edit.applyToPrefab"), "Apply Changes to Entity Template", icon = "apply_to_prefab",
         enabled = { it.editable && it.sceneDocument && it.scene?.let(::canApplyToPrefab) == true },
         disabledReason = ::singleReason) { ctx -> sceneAttempt(ctx, ::applySelectionToPrefab) }
 

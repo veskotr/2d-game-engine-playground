@@ -1,5 +1,8 @@
 # Prefabs
 
+The desktop editor shows prefabs as **Entity Templates**. File formats, scene `prefabs`
+arrays and the engine and Lua APIs below keep the prefab name.
+
 A prefab is a JSON entity subtree, loaded through the same component codecs as a
 scene. Each entity needs a unique, nonempty key. `root` names its single root;
 every other entity must reach that root through its `parent` reference.

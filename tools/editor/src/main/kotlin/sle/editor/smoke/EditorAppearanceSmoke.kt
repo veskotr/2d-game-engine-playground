@@ -126,7 +126,7 @@ internal suspend fun runEditorAppearanceSmoke(
 
     // Detached Inspector: theme switch reaches the second window and its caption.
     workspace.windows.detachPanel(PanelId("inspector"))
-    await("Inspector did not detach") { Window.getWindows().count { it is JFrame && it.isShowing }>=2 }
+    await("Details did not detach") { Window.getWindows().count { it is JFrame && it.isShowing }>=2 }
     val detached=Window.getWindows().filterIsInstance<JFrame>().first { it.isShowing && it!==window }
     // The harness keeps the main window on top; lift the detached window above it for capture.
     window.isAlwaysOnTop=false;detached.isAlwaysOnTop=true;detached.setBounds(window.x+window.width/3,window.y+60,420,640);detached.toFront();delay(400)

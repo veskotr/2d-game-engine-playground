@@ -102,7 +102,7 @@ internal class MenuGlyph(private val label: String, private val theme: MenuAppea
                 label.contains("Camera") || label=="Rendering" -> {
                     g.drawRoundRect(2,5,14,10,2,2);g.drawOval(7,7,5,5);line(5,5,6,3);line(6,3,11,3)
                 }
-                label=="Import" || label.contains("Assets") || label.contains("Prefab") -> {
+                label=="Import" || label.contains("Assets") || label.contains("Entity Template") -> {
                     val path=Path2D.Double().apply { moveTo(2.0,6.0);lineTo(2.0,14.0);lineTo(16.0,14.0);lineTo(16.0,5.0);lineTo(9.0,5.0);lineTo(7.0,3.0);lineTo(2.0,3.0);lineTo(2.0,6.0) }
                     g.draw(path);line(9,6,9,11);line(6,9,9,12);line(9,12,12,9)
                 }

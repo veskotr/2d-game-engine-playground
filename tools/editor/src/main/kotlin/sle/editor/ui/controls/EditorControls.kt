@@ -146,18 +146,29 @@ internal fun EditorGlyphButton(label: String, onClick: () -> Unit, modifier: Mod
     }
 }
 
-/** Small stroked glyphs shared by dock actions, selects, trees and checkboxes. */
-enum class EditorGlyph { Minimize, Detach, Close, ChevronDown, ChevronRight, ChevronUp, Check, Plus, Minus, Grip,
+/**
+ * Small glyphs shared by dock actions, selects, trees and checkboxes. Glyphs with an [iconKey] use
+ * the supplied editor icon (`EditorIcons`) as a mask in the state tint; the rest are drawn strokes.
+ */
+enum class EditorGlyph(internal val iconKey: String? = null) {
+    Minimize, Detach, Close, ChevronDown, ChevronRight, ChevronUp, Check, Plus, Minus, Grip,
     /** Notice levels: drawn in the level's token colour, always beside the notice text. */
-    Info, Success, Warning, Error,
+    Info("info"), Success("success"), Warning("warning"), Error("error"),
     /** Scene view tools and snapping. */
-    ToolSelect, ToolMove, ToolRotate, ToolScale, Snap,
+    ToolSelect("tool_select"), ToolMove("tool_move"), ToolRotate("tool_rotate"), ToolScale("tool_scale"), Snap("snap"),
     /** Rotate/Scale pivot: the active entity's pivot, or the selection center. */
-    PivotActive, PivotCenter }
+    PivotActive("pivot"), PivotCenter("center") }
 
 @Composable
 internal fun EditorGlyphIcon(glyph: EditorGlyph, tint: Color, modifier: Modifier = Modifier,
     size: Dp = LocalEditorMetrics.current.iconSmall) {
+    glyph.iconKey?.let { key ->
+        // The 16px art stays crisp at 100%; larger scales use the 24px art.
+        val pixels=with(androidx.compose.ui.platform.LocalDensity.current) { size.toPx() }
+        val path=sle.editor.ui.EditorIcons.path(key,LocalEditorAppearance.current.mode,if(pixels<=18f) 16 else 24)
+        Icon(androidx.compose.ui.res.painterResource(path),null,modifier.size(size),tint=tint)
+        return
+    }
     Canvas(modifier.size(size)) {
         val w=this.size.width;val h=this.size.height
         val stroke=(1.4f*density).coerceAtLeast(1f)
@@ -177,53 +188,7 @@ internal fun EditorGlyphIcon(glyph: EditorGlyph, tint: Color, modifier: Modifier
             EditorGlyph.Grip -> for(x in listOf(.38f,.62f)) for(y in listOf(.3f,.5f,.7f))
                 drawCircle(tint,stroke*.75f,Offset(x*w,y*h))
             EditorGlyph.ChevronUp -> { line(.3f,.6f,.5f,.4f);line(.5f,.4f,.7f,.6f) }
-            EditorGlyph.Info, EditorGlyph.Success, EditorGlyph.Error -> {
-                drawCircle(tint,.4f*w,Offset(.5f*w,.5f*h),style=Stroke(stroke))
-                when(glyph) {
-                    EditorGlyph.Info -> { line(.5f,.46f,.5f,.7f);drawCircle(tint,stroke*.8f,Offset(.5f*w,.3f*h)) }
-                    EditorGlyph.Success -> { line(.32f,.52f,.45f,.65f);line(.45f,.65f,.69f,.38f) }
-                    else -> { line(.36f,.36f,.64f,.64f);line(.64f,.36f,.36f,.64f) }
-                }
-            }
-            EditorGlyph.ToolSelect -> {
-                // Pointer arrow.
-                val points=listOf(.3f to .14f,.3f to .8f,.45f to .66f,.57f to .88f,.66f to .84f,.54f to .62f,.74f to .62f,.3f to .14f)
-                points.zipWithNext().forEach { (a,b) -> line(a.first,a.second,b.first,b.second) }
-            }
-            EditorGlyph.ToolMove -> {
-                // Four-way arrows.
-                line(.14f,.5f,.86f,.5f);line(.5f,.14f,.5f,.86f)
-                line(.14f,.5f,.26f,.38f);line(.14f,.5f,.26f,.62f);line(.86f,.5f,.74f,.38f);line(.86f,.5f,.74f,.62f)
-                line(.5f,.14f,.38f,.26f);line(.5f,.14f,.62f,.26f);line(.5f,.86f,.38f,.74f);line(.5f,.86f,.62f,.74f)
-            }
-            EditorGlyph.ToolRotate -> {
-                // Three-quarter circle with an arrowhead at its open end.
-                drawArc(tint,-60f,290f,false,Offset(.18f*w,.18f*h),androidx.compose.ui.geometry.Size(.64f*w,.64f*h),style=Stroke(stroke))
-                line(.66f,.22f,.72f,.06f);line(.66f,.22f,.84f,.26f)
-            }
-            EditorGlyph.ToolScale -> {
-                // A small box growing into a larger one along the diagonal.
-                drawRect(tint,Offset(.14f*w,.5f*h),androidx.compose.ui.geometry.Size(.36f*w,.36f*h),style=Stroke(stroke))
-                line(.14f,.5f,.14f,.14f);line(.14f,.14f,.86f,.14f);line(.86f,.14f,.86f,.86f);line(.86f,.86f,.5f,.86f)
-                line(.4f,.6f,.72f,.28f);line(.72f,.28f,.56f,.28f);line(.72f,.28f,.72f,.44f)
-            }
-            EditorGlyph.PivotActive, EditorGlyph.PivotCenter -> {
-                // The selection box with its turning point: off-centre at the pivot, or in the middle.
-                drawRect(tint,Offset(.16f*w,.16f*h),androidx.compose.ui.geometry.Size(.68f*w,.68f*h),style=Stroke(stroke))
-                val point=if(glyph==EditorGlyph.PivotActive) Offset(.34f*w,.66f*h) else Offset(.5f*w,.5f*h)
-                drawCircle(tint,stroke*1.6f,point)
-                line(point.x/w-.14f,point.y/h,point.x/w+.14f,point.y/h);line(point.x/w,point.y/h-.14f,point.x/w,point.y/h+.14f)
-            }
-            EditorGlyph.Snap -> {
-                // Magnet: two legs joined by an arc, with pole bands.
-                line(.28f,.16f,.28f,.52f);line(.72f,.16f,.72f,.52f)
-                drawArc(tint,0f,180f,false,Offset(.28f*w,.3f*h),androidx.compose.ui.geometry.Size(.44f*w,.44f*h),style=Stroke(stroke))
-                line(.2f,.3f,.36f,.3f);line(.64f,.3f,.8f,.3f)
-            }
-            EditorGlyph.Warning -> {
-                line(.5f,.12f,.9f,.86f);line(.9f,.86f,.1f,.86f);line(.1f,.86f,.5f,.12f)
-                line(.5f,.4f,.5f,.6f);drawCircle(tint,stroke*.8f,Offset(.5f*w,.73f*h))
-            }
+            else -> Unit // Supplied icons, handled above.
         }
     }
 }

@@ -34,6 +34,8 @@ internal data class EditorMenuEntry(
     val separator: Boolean = false,
     /** Tooltip, e.g. why a command is disabled. */
     val help: String? = null,
+    /** Icon key from `EditorIcons` (the command's icon); null falls back to the label's glyph. */
+    val icon: String? = null,
     val action: () -> Unit = {},
 ) {
     companion object { val Separator = EditorMenuEntry("", enabled = false, separator = true) }
@@ -56,7 +58,7 @@ internal fun refreshEditorPopups(value: sle.editor.ui.theme.EditorAppearance) {
         popup.components.filterIsInstance<JMenuItem>().forEach { item ->
             if(item is JMenu) item.setUI(EditorSubmenuUI(theme)) else item.setUI(EditorMenuItemUI(theme))
             item.background=theme.surface;item.foreground=theme.foreground;item.font=theme.font
-            item.icon=EditorIcons.commandFallback(item.text,theme);item.disabledIcon=item.icon
+            item.icon=EditorIcons.menuIcon(item.getClientProperty(EditorIcons.MENU_ICON_KEY) as String?,item.text,theme);item.disabledIcon=item.icon
         }
         popup.revalidate();popup.repaint()
     }
@@ -92,7 +94,8 @@ internal fun buildEditorPopup(entries: List<EditorMenuEntry>, appearance: MenuAp
             isEnabled=entry.enabled
             toolTipText=entry.help
             background=appearance.surface;foreground=appearance.foreground;font=appearance.font
-            icon=EditorIcons.commandFallback(entry.label,appearance)
+            putClientProperty(EditorIcons.MENU_ICON_KEY,entry.icon)
+            icon=EditorIcons.menuIcon(entry.icon,entry.label,appearance)
             disabledIcon=icon
             iconTextGap=(8*appearance.scale).roundToInt()
             border=BorderFactory.createEmptyBorder((7*appearance.scale).roundToInt(),10,(7*appearance.scale).roundToInt(),12)
@@ -245,9 +248,9 @@ internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, on
                 EditorMenuEntry("As Child", state.selected != null) { attempt { state.addCamera(true,position) } },
             )),
         )),
-        EditorMenuEntry("Import", editable, listOf(EditorMenuEntry("Prefab…") {
+        EditorMenuEntry("Import", editable, listOf(EditorMenuEntry("Entity Template…") {
             val chooser = EditorFileChooser(EditorFileLocations.folder(EditorFileLocations.Kind.Prefab)).apply {
-                fileFilter = FileNameExtensionFilter("Prefabs (*.sleprefab, *.json)", "sleprefab", "json")
+                fileFilter = FileNameExtensionFilter("Entity Templates (*.sleprefab, *.json)", "sleprefab", "json")
             }
             if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
                 EditorFileLocations.remember(EditorFileLocations.Kind.Prefab, chooser.selectedFile)

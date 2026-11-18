@@ -56,7 +56,7 @@ class WorkspaceLifecycleTest {
     @Test fun hostClosureAndPanelFocusPreserveRealPlaybackDraftsAndHistory() {
         val workspace=workspace()
         val prefab=workspace.authoring.getOrThrow()
-        prefab.rename("Unsaved prefab")
+        prefab.rename("Unsaved entity template")
         prefab.editField("Transform",listOf("rotation"),JsonPrimitive(0.0),"-")
         val scene=workspace.scene.getOrThrow();scene.addEntity()
         workspace.scenePlayback.play(scene)
@@ -111,7 +111,7 @@ class WorkspaceLifecycleTest {
     @Test fun restoredPrefabPanelWithoutAnOpenPrefabDoesNotSwitchModes() {
         val workspace=workspace()
         workspace.windows.showPanel(PanelId("entity"))
-        assertEquals(2,workspace.selectedTab,"an old layout's active Entity tab must not open an empty prefab")
+        assertEquals(2,workspace.selectedTab,"an old layout's active Entity tab must not open an empty entity template")
         workspace.close()
     }
 
@@ -147,7 +147,7 @@ class WorkspaceLifecycleTest {
         workspace.windows.closeRequest={ asked+=it;allow }
         workspace.windows.showPanel(PanelId("entity"))
         workspace.windows.hidePanel(PanelId("entity"))
-        assertFalse(PanelId("entity") in workspace.windows.layout.hidden,"vetoed close keeps the unsaved prefab tab")
+        assertFalse(PanelId("entity") in workspace.windows.layout.hidden,"vetoed close keeps the unsaved entity template tab")
         assertEquals(0,workspace.selectedTab)
         workspace.windows.hidePanel(PanelId("assets"))
         assertEquals(listOf(PanelId("entity")),asked,"ordinary panels never ask")

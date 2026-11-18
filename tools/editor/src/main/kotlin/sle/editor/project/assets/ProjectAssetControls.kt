@@ -62,7 +62,7 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
         }
     }
     fun managed(action: suspend (ProjectAssetOperations)->String?) {
-        if(!mutable()) { message="Stop playback and use New in both scene and prefab workspaces before managing files; save your drafts first.";return }
+        if(!mutable()) { message="Stop playback and use New in both scene and entity template workspaces before managing files; save your drafts first.";return }
         run {
             project.busy=true
             // Exclude all authoring/menu/native-canvas input, including while the

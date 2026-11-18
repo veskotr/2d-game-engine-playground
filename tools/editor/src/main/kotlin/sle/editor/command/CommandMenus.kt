@@ -9,7 +9,7 @@ import sle.editor.ui.EditorMenuEntry
  */
 internal fun EditorCommand.menuEntry(ctx: CommandContext, keymap: Keymap = standardKeymap, label: String = menuLabel ?: this.label) =
     enabled(ctx).let { on ->
-        EditorMenuEntry(label, on, command = id, shortcut = keymap.primary(id), help = if(on) null else disabledReason(ctx)) { if(enabled(ctx)) run(ctx) }
+        EditorMenuEntry(label, on, command = id, icon = icon, shortcut = keymap.primary(id), help = if(on) null else disabledReason(ctx)) { if(enabled(ctx)) run(ctx) }
     }
 
 internal data class ShortcutRow(val label: String, val chords: List<KeyChord>)
@@ -42,8 +42,8 @@ internal val mouseGestureHelp: List<Pair<String, String>> = listOf(
     "Invert snapping for one drag or nudge" to "Hold Ctrl",
     "Context actions" to "Right-click",
     "Edit with handles" to "Drag a handle; Esc cancels the drag",
-    "Save as a linked prefab" to "Drag an entity onto an Assets folder",
-    "Edit a prefab" to "Double-click it in Assets",
+    "Save as a linked entity template" to "Drag an entity onto an Assets folder",
+    "Edit an entity template" to "Double-click it in Assets",
     "Game input" to "Click the Game view while playing",
 )
 

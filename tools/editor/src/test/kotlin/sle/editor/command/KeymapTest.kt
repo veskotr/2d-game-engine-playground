@@ -84,7 +84,7 @@ class KeymapTest {
         assertEquals(listOf("Ctrl+Y", "Ctrl+Shift+Z"), rows["Redo"])
         assertEquals(listOf("Delete", "Backspace"), rows["Delete"])
         // Unbound commands are not listed.
-        assertNull(rows["Apply Changes to Prefab"])
+        assertNull(rows["Apply Changes to Entity Template"])
         val html = keyboardShortcutsHtml()
         assertTrue("Ctrl+Shift+S" in html && "Mouse" in html && "Middle-drag" in html)
         // A user override changes Help with no other edits.

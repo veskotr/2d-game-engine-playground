@@ -9,7 +9,7 @@ plugins {
 group = "sle.editor"
 // Editor version: 0.MINOR.PATCH while pre-1.0; bump MINOR for each added editor feature.
 // The engine version lives in the top-level CMakeLists.txt project(VERSION).
-version = "0.9.0"
+version = "0.10.0"
 
 val hostOs = System.getProperty("os.name")
 val isWindowsHost = hostOs.startsWith("Windows")

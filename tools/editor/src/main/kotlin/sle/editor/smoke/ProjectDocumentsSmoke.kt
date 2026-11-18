@@ -113,13 +113,13 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     await("Project scene Save failed") { !project.busy && scene.file==scenePath && !scene.dirty }
     val source=withContext(Dispatchers.IO) { Files.readString(scenePath) }
     check(source.contains("project-asset://") && !source.contains(first.root.toString().replace('\\','/')))
-    prefab.rename("Shared Prefab");prefab.addComponent("SpriteRenderer")
+    prefab.rename("Shared Entity Template");prefab.addComponent("SpriteRenderer")
     prefab.setValue("SpriteRenderer",listOf("texture"),JsonPrimitive(first.assets.resolve("Textures/tile2.png").toString().replace('\\','/')))
     val prefabPath=first.assets.resolve("Prefabs/shared.prefab.json")
     documents()!!.savePath(ProjectDocumentKind.Prefab,prefabPath)
-    await("Project prefab save failed") { !project.busy && prefab.file==prefabPath && !prefab.dirty }
+    await("Project entity template save failed") { !project.busy && prefab.file==prefabPath && !prefab.dirty }
     scene.importPrefab(prefabPath)
-    await("Project prefab insertion failed") { !project.busy && scene.entities.size==3 }
+    await("Project entity template insertion failed") { !project.busy && scene.entities.size==3 }
     check(scene.selected!!.document.components.getValue("SpriteRenderer").jsonObject.getValue("texture").jsonPrimitive.content==first.assets.resolve("Textures/tile2.png").toString().replace('\\','/'))
     scene.undo();check(scene.entities.size==2 && !scene.dirty)
     check(withContext(Dispatchers.IO) { Files.list(first.assets.resolve("Textures")).use { it.count() } }==2L)
@@ -168,7 +168,7 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     val standalone=SceneWorkspaceState(prefab.catalog);withContext(Dispatchers.IO) { standalone.open(packagePath) }
     check(standalone.entities.size==2 && standalone.entities.any { "Script" in it.document.components })
     click("AssetFolder:Prefabs");click("AssetFile:Prefabs/shared.prefab.json",true)
-    await("Browser prefab open failed") { !project.busy && prefab.projectDocument!=null && prefab.document.name=="Shared Prefab" }
+    await("Browser entity template open failed") { !project.busy && prefab.projectDocument!=null && prefab.document.name=="Shared Entity Template" }
     projects.close();await("Project close failed") { !project.busy && project.opened==null }
     val moved=withContext(Dispatchers.IO) { first.root.resolveSibling("Relocated Game").also { Files.move(first.root,it) } }
     projects.openPath(moved.resolve(first.file.fileName))
@@ -191,13 +191,13 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     val linkedPath=moved.resolve(first.document.assetRoot).resolve("Prefabs/shared.prefab.json")
     val linkedScenePath=moved.resolve(first.document.assetRoot).resolve("Scenes/shared.scene.json")
     scene.importPrefab(linkedPath)
-    await("Linked prefab import failed") { !project.busy && scene.document().prefabInstances.size==1 }
+    await("Linked entity template import failed") { !project.busy && scene.document().prefabInstances.size==1 }
     val linkedKey=scene.selectedKey!!
     documents()!!.savePath(ProjectDocumentKind.Scene,linkedScenePath)
     await("Linked scene save failed") { !project.busy && !scene.dirty }
     prefab.setValue("SpriteRenderer",listOf("size"),vector(96,96))
     documents()!!.savePath(ProjectDocumentKind.Prefab,linkedPath)
-    await("Prefab save did not refresh linked scene") {
+    await("Entity template save did not refresh linked scene") {
         !project.busy && !prefab.dirty && scene.dirty &&
             scene.entities.first { it.document.key==linkedKey }.document.components["SpriteRenderer"]!!.jsonObject["size"]!!.jsonObject["x"]?.jsonPrimitive?.doubleOrNull==96.0
     }
@@ -215,7 +215,7 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
             PrefabDocument("root",listOf(EntityDocument(key="root"))).serialize(),emptyMap(),null) {}
     }
     documents()!!.openPath(linkedPath)
-    await("Linked prefab reopen failed") { !project.busy && prefab.file?.toAbsolutePath()==linkedPath.toAbsolutePath() }
+    await("Linked entity template reopen failed") { !project.busy && prefab.file?.toAbsolutePath()==linkedPath.toAbsolutePath() }
     scene.rename("Switch Scene");prefab.setValue("SpriteRenderer",listOf("size"),vector(128,128))
     check(scene.dirty && prefab.dirty)
     documents()!!.openPath(otherPrefab)

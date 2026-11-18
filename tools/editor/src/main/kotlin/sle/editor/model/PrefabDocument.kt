@@ -13,12 +13,12 @@ internal data class PrefabDocument(val root: String, val entities: List<EntityDo
     }
     private fun validate() {
         val keys=entities.map { it.key }
-        require(root in keys && root !in parents && keys.distinct().size==keys.size) { "Prefab requires one unique root" }
+        require(root in keys && root !in parents && keys.distinct().size==keys.size) { "Entity template requires one unique root" }
         validateSceneParents(keys,parents)
         for(key in keys) {
             var current=key
             while(current in parents) current=parents.getValue(current)
-            require(current==root) { "All prefab entities must descend from its root" }
+            require(current==root) { "Every entity in an entity template must descend from its root" }
         }
         entities.forEach { entity -> remapPrefabReferences(entity,keys,keys.associateWith { it }) }
     }
@@ -28,7 +28,7 @@ internal data class PrefabDocument(val root: String, val entities: List<EntityDo
         val keys=entities.map { it.key }
         val remap=keys.associateWith { if(it==root) key else "$key/$it" }
         require(remap.values.distinct().size==keys.size) { "Instance keys collide" }
-        require(overrides.keys.all { it in keys }) { "Override refers to missing prefab entity" }
+        require(overrides.keys.all { it in keys }) { "Override refers to an entity missing from the entity template" }
         val expanded=entities.map { entity ->
             val patch=overrides[entity.key] as? JsonObject ?: JsonObject(emptyMap())
             require(patch.values.all { it is JsonObject || it==JsonNull }) { "Invalid component override" }
@@ -42,7 +42,7 @@ internal data class PrefabDocument(val root: String, val entities: List<EntityDo
     companion object {
         fun parse(source: String): PrefabDocument {
             val json=Json.parseToJsonElement(source).jsonObject
-            require(json.keys==setOf("root","entities")) { "Unsupported prefab metadata; no content was discarded" }
+            require(json.keys==setOf("root","entities")) { "Unsupported entity template metadata; no content was discarded" }
             val root=json.getValue("root").jsonPrimitive.also { require(it.isString) }.content
             val scene=SceneDocument.parse(buildJsonObject { put("entities",json.getValue("entities")) }.toString())
             return PrefabDocument(root,scene.entities,scene.parents).also { it.validate() }
@@ -63,7 +63,7 @@ internal fun remapPrefabReferences(entity: EntityDocument,ordinals: List<String>
     val mapped=JsonObject(targets.mapValues { (_,value) ->
         val primitive=value as? JsonPrimitive ?: error("Invalid Animator target")
         val local=if(primitive.isString) primitive.content else primitive.intOrNull?.let { ordinals.getOrNull(it-1) }
-        JsonPrimitive(keys[local] ?: error("Animator target is outside prefab: $value"))
+        JsonPrimitive(keys[local] ?: error("Animator target is outside entity template: $value"))
     })
     return entity.copy(components=JsonObject(entity.components+("Animator" to JsonObject(animator+("targetEntities" to mapped)))))
 }
@@ -105,9 +105,9 @@ internal data class PrefabInstance(val assetId: String,val key: String,val sourc
         })
     }
     fun capture(scene: SceneDocument): PrefabInstance {
-        require(scene.entities.map { it.key }.containsAll(entityKeys)) { "Linked prefab subtree changed; unpack before changing its structure" }
+        require(scene.entities.map { it.key }.containsAll(entityKeys)) { "Linked entity template subtree changed; unpack before changing its structure" }
         val base=source.instantiate(key,parent)
-        require(entityKeys.all { scene.parents[it]==base.parents[it] }) { "Linked prefab hierarchy changed; unpack first" }
+        require(entityKeys.all { scene.parents[it]==base.parents[it] }) { "Linked entity template hierarchy changed; unpack first" }
         val reverse=source.entities.associate { (if(it.key==source.root) key else "$key/${it.key}") to it.key }
         val ordinals=scene.entities.map { it.key }
         val patches=source.entities.associate { local ->
@@ -126,14 +126,14 @@ internal data class PrefabInstance(val assetId: String,val key: String,val sourc
             val difference=overlay(retained,prefabDifference(local.components,current.components)).toMutableMap()
             // Placement is always local, even when equal to the saved source placement.
             if(local.key==source.root) difference["Transform"]=current.components["Transform"] ?: JsonNull
-            require(local.name==current.name) { "Rename the prefab asset entity, or unpack the instance first" }
+            require(local.name==current.name) { "Rename the entity in the entity template asset, or unpack the instance first" }
             local.key to JsonObject(difference)
         }.filterValues { it.isNotEmpty() }
         return copy(overrides=JsonObject(patches))
     }
     fun reconcile(scene: SceneDocument,updated: PrefabDocument): SceneDocument {
         val captured=capture(scene)
-        require(captured.overrides.keys.all { local -> local in updated.entities.map { it.key } }) { "Updated prefab removes an overridden descendant" }
+        require(captured.overrides.keys.all { local -> local in updated.entities.map { it.key } }) { "Updated entity template removes an overridden descendant" }
         val replacement=updated.instantiate(key,parent,captured.overrides)
         val combined=scene.copy(entities=scene.entities.filterNot { it.key in entityKeys }+replacement.entities,
             parents=scene.parents.filterKeys { it !in entityKeys }+replacement.parents)
@@ -149,7 +149,7 @@ internal data class PrefabInstance(val assetId: String,val key: String,val sourc
  * rebased onto it, so the applied edits are not retained as instance overrides. Other instances
  * still hold their previous source and are reconciled by the normal prefab update. */
 internal fun applyInstanceToPrefab(scene: SceneDocument,instanceKey: String): Pair<PrefabDocument,SceneDocument> {
-    val link=scene.prefabInstances.singleOrNull { it.key==instanceKey } ?: error("Select a linked prefab instance")
+    val link=scene.prefabInstances.singleOrNull { it.key==instanceKey } ?: error("Select a linked entity template instance")
     val placed=link.copy(parent=scene.parents[link.key])
     val prefab=placed.applied(scene)
     val rebased=PrefabInstance(link.assetId,link.key,prefab,parent=placed.parent).capture(scene)
@@ -163,7 +163,7 @@ internal data class SubtreePrefab(val prefab: PrefabDocument,val scene: SceneDoc
      * spurious overrides; the instance entities are re-expanded from it. */
     fun withSource(stored: PrefabDocument): SubtreePrefab {
         require(stored.root==prefab.root && stored.entities.map { it.key }.toSet()==prefab.entities.map { it.key }.toSet() && stored.parents==prefab.parents) {
-            "The saved prefab structure differs from the dragged entity"
+            "The saved entity template structure differs from the dragged entity"
         }
         val expanded=stored.instantiate(prefab.root,scene.parents[prefab.root]).entities.associateBy { it.key }
         return copy(prefab=stored,scene=scene.copy(entities=scene.entities.map { expanded[it.key] ?: it }))
@@ -186,7 +186,7 @@ internal fun prefabFromSceneSubtree(scene: SceneDocument,root: String): SubtreeP
     val prefab=PrefabDocument.fromScene(scene,root)
     val owned=prefab.entities.map { it.key }.toSet()
     require(scene.prefabInstances.none { link -> link.entityKeys.any { it in owned } }) {
-        "Prefabs cannot contain linked prefab instances yet; unpack the instance first"
+        "Entity templates cannot contain linked entity template instances yet; unpack the instance first"
     }
     val remap=owned.associateWith { if(it==root) root else "$root/$it" }
     val ordinals=scene.entities.map { it.key }
@@ -196,7 +196,7 @@ internal fun prefabFromSceneSubtree(scene: SceneDocument,root: String): SubtreeP
             value is JsonPrimitive && !value.isString && value.intOrNull?.let { ordinals.getOrNull(it-1) }?.let { it in owned }==true
         } }) { "A numeric Animator target addresses an entity in this subtree; save and reopen the scene to normalize it first" }
     val others=scene.entities.map { it.key }.toSet()-owned
-    require(remap.values.none { it in others }) { "Existing entity keys collide with the new prefab instance" }
+    require(remap.values.none { it in others }) { "Existing entity keys collide with the new entity template instance" }
     val expanded=prefab.instantiate(root,scene.parents[root]).entities.associateBy { it.key }
     val entities=scene.entities.map { entity ->
         if(entity.key in owned) expanded.getValue(remap.getValue(entity.key)) else renameEntityReferences(entity,remap)

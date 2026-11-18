@@ -1,6 +1,11 @@
 # L1 — Editor core: commands, history, selection, status bar, viewport tools
 
-**Status:** Planned 2026-11-17. Sessions 1–6 implemented and validated (see Progress); session 7 not started.
+**Status:** Complete (2026-11-18). Sessions 1–7 done (see Progress). Carried forward as open
+findings from the Session 7 handoff: Light-theme viewport handle contrast (needs a design decision)
+and one unexplained Scale-drag failure under a 1.5× Java2D scale. Linux/WSL, mixed DPI and real
+Windows 150% display scaling are untested. After S7, the same change set adds 27 command, tool and
+notice icons (see PROVENANCE.md) and renames Prefab → Entity Template and Inspector → Details in
+editor UI text only; file formats and engine/Lua APIs keep the prefab name.
 **Parent:** [editor-game-workflows.md](editor-game-workflows.md) §5, base layer
 **L1** (roadmap items 0.1, 0.2, 0.4, 1.1, 1.2 and rule R3).
 **Request:** Plan L1 only. Tilemaps and the other layers come later.
@@ -335,10 +340,11 @@ is shippable alone.
 
 ### Session 7: Verification and handoff
 
-- [ ] Run the full editor build and tests, plus all listed smokes. Build and run
+- [x] Run the full editor build and tests, plus all listed smokes. Build and run
   native CTest for the grid bridge change.
-- [ ] Manual walk, with `-Dsle.workspaceData=<temp dir>` so the real layout is
-  untouched:
+- [x] Manual walk, with `-Dsle.workspaceData=<temp dir>` so the real layout is
+  untouched (done by Robot through `--l1-walk-smoke`, captures reviewed; see the
+  Session 7 handoff for what that does and does not cover):
   1. Create entities; Ctrl/Shift select; marquee.
   2. W/E/R drags with snapping and Ctrl inversion.
   3. Undo/redo across structural and transform edits.
@@ -347,7 +353,7 @@ is shippable alone.
   6. Game focused while playing: W/Delete reach the game; F5/Shift+F5 still
      work.
   7. Dark and Light, Compact and Comfortable, 150% scale.
-- [ ] Bump the editor version, and the engine version if not already done in S5.
+- [x] Bump the editor version, and the engine version if not already done in S5.
   Record untested platforms (Linux/WSL, mixed DPI) honestly.
 
 ## Not in L1 (later layers or roadmap items)
@@ -389,7 +395,12 @@ as in CONTRIBUTING). Confirm smoke flag names in `app/Main.kt` before running.
 .\gradlew.bat run --args=--editor-appearance-smoke
 .\gradlew.bat run --args=--docking-workspace-smoke
 .\gradlew.bat run --args=--project-documents-smoke
+.\gradlew.bat run --args=--l1-walk-smoke
 ```
+
+`--l1-walk-smoke` (added in S7) drives the manual-walk steps below with Robot and writes
+captures to `build/reports/l1-walk-<scale>/`. For a 150% check on a 100% display, run it with
+`JAVA_TOOL_OPTIONS=-Dsun.java2d.uiScale=1.5` (Java2D scaling only, not Windows display scaling).
 
 Native (session 5 grid bridge), from the repository root:
 
@@ -1207,3 +1218,180 @@ Desktop smokes need an unlocked interactive Windows session.
     were not run in this session (S7 runs the full list).
   - No editor version bump (planned for S7).
 - Next: Session 7 (verification and handoff), only when requested.
+
+### Session 7 handoff — 2026-11-18
+
+- Start state: `feat/project-foundation` at 40d62b6 (Session 6). Only the untracked starter-assets
+  zip and `docs/plans/editor-game-workflows.md` were present; both were left alone. Two monitors,
+  both 1920×1080 at 96 DPI (100%). At the start the desktop was unlocked (LogonUI not running; only
+  the LockApp process from 2026-11-11). Nothing was committed.
+- Commands run. Gradle ran from `tools/editor` through `gradle.ps1` (JDK 21); smokes ran from Git
+  Bash with `powershell -File gradle.ps1 run --args=--<smoke>`.
+  - `build`: up to date in 8 s with test results cached from S6. **Not counted.**
+  - `cleanTest build`: failed in `cleanTest`, because my shell's working directory was inside
+    `build/test-results/test` (Windows would not delete it). Rerun from another directory:
+    **passed, 328 tests, 0 failures, 2 existing skips.**
+  - Native, from the repository root:
+    - `cmake --build build/debug --config Debug`: passed. All targets built, including
+      `sle_editor_native`.
+    - `ctest --test-dir build/debug -C Debug --output-on-failure`: **77/77 passed**.
+      `integration_editor_grid_path` reported Passed, not Skipped (its skip code is 125); a `-V`
+      rerun confirmed it.
+  - Smokes, each run once in sequence between 11:57 and 12:00:
+    - `--context-menu-smoke`: `AUXILIARY_APPEARANCE_SMOKE_PASS`, `MENU_KEYBOARD_SMOKE_PASS`,
+      `DETACHED_DELETE_PLAYBACK_SMOKE_PASS`, `CONTEXT_MENU_SMOKE_PASS`.
+    - `--scene-smoke`: `SCENE_TOOLS_SMOKE_PASS`, `SCENE_MULTI_SELECT_SMOKE_PASS`,
+      `SCENE_EDITOR_SMOKE_PASS`, `EDITOR_UI_SCALE_PASS`, `SCENE_TREE_COMPONENT_HANDOFF_PASS`,
+      `SANDBOX_DESKTOP_PASS`, `SCENE_ENTITY_SANDBOX_SWITCH_PASS`.
+    - `--gizmo-smoke`: `VIEWPORT_GIZMO_SMOKE_PASS` (handles=176), `VIEWPORT_TRANSFORM_TOOLS_SMOKE_PASS`.
+    - `--editor-appearance-smoke`: `EDITOR_APPEARANCE_SMOKE_PASS`.
+    - `--docking-workspace-smoke`: **failed** (see the regression below).
+    - `--project-documents-smoke`: `PROJECT_DOCUMENTS_SMOKE_PASS`, `PREFAB_WORKFLOW_SMOKE_PASS`.
+      There is no separate `--prefab-workflow` flag; it runs inside this smoke.
+    - `--project-smoke`: `PROJECT_FOUNDATION_SMOKE_PASS`.
+    - `--project-runtime-smoke`: `PROJECT_RUNTIME_SMOKE_PASS`.
+    - `--project-distribution-smoke`: `PROJECT_DISTRIBUTION_SMOKE_PASS`, `PROJECT_RUNTIME_SMOKE_PASS`.
+    - The earlier one-off flakes did not recur. Both stages passed on the first run: the first
+      Hierarchy click in `--scene-smoke`, and the View → Prefab Workspace popup in
+      `--context-menu-smoke`. One clean run does not prove they are fixed.
+  - `--docking-workspace-smoke`:
+    - Runs 1 and 2 (unchanged code) both failed at "Panel restore strip failed", after
+      `ACTIVE_DOCK_TAB_VISIBLE_PASS`.
+    - Run 3, after the fix below: `ACTIVE_DOCK_TAB_VISIBLE_PASS`, `INTERACTIVE_DOCKING_SMOKE_PASS`,
+      `SEPARATE_MONITORS_SMOKE_PASS`, `GAME_PLAY_REDOCK_SMOKE_PASS`, `DOCKING_WORKSPACE_SMOKE_PASS`.
+  - After the S7 changes (smoke fix, walk smoke, version): `compileKotlin` passed, and
+    `cleanTest build` passed again: 328 tests, 0 failures, 2 skips.
+- Regression found and fixed: the `--docking-workspace-smoke` restore click.
+  - Trigger: `InteractiveDockingSmoke` clicked the minimized-panel restore strip at
+    `contentPane.height - 14`.
+  - Cause: S4 (2fda133) added the main-window status bar below `DockSurface`, so that point is now
+    on the status bar. The restore strip (`DockChrome`, 28 dp) sits directly above it. S4–S6 did
+    not run this smoke, so the break went unnoticed.
+  - Impact: the smoke only. The restore strip itself works: run 3 clicks it.
+  - Fix: `Main.kt` also records the `StatusBar` bounds for the docking smoke, and the smoke clicks
+    14 dp above the bar's top. The rerun above is the regression check.
+- Manual walk: new `--l1-walk-smoke` (`smoke/L1WalkSmoke.kt`).
+  - What it is: Robot input driving the real editor on the camera demo scene, where Player moves
+    with WASD through Lua. Every step is checked against editor state, and I reviewed the captures.
+    It is not a person at the keyboard.
+  - Isolation: launched with `JAVA_TOOL_OPTIONS=-Dsle.workspaceData=<scratch dir>`. Smoke mode also
+    uses temporary appearance and snap stores and never starts layout persistence, so the user's
+    real layout is untouched.
+  - Runs at 100%:
+    - Runs 1 and 2 failed on harness bugs: looking an entity up by name after deleting it, and
+      clearing Hierarchy row bounds after the detached window had already reported them.
+    - Run 3 passed all seven steps (`L1_WALK_SMOKE_PASS`, captures 12:10).
+  - Runs under a 1.5× Java2D scale (`-Dsun.java2d.uiScale=1.5`):
+    - Run 1 failed on a harness bug: Compose bounds are device pixels, while Robot uses user-space
+      units.
+    - Run 2 **failed at step 2**: dragging the Scale X handle outward along its axis set Crate B's
+      scale X from 1.0 to 0.5. This is unexplained (see Open findings).
+    - Run 3 passed all seven steps (captures 12:13:33). The same drag gave 1.0 → 1.4.
+  - Three later repeats (two at 1.5×, one at 100%, from 12:13:49) failed at the first right-click.
+    **The Windows session had locked** (LogonUI running; the failure capture shows the lock
+    screen). They are not evidence either way. They also overwrote `walk-0-start.png` in both
+    capture folders with the lock screen.
+  - After the user unlocked the desktop (12:49–12:53), seven more runs with the final code: five
+    at 1.5× and two at 100%.
+    - Passed: 1.5× runs 4 and 5, and 100% run 1 (all seven steps).
+    - Failed, but **inconclusive**. Each failed on Robot input reaching the editor, at a different
+      point:
+      - 1.5× run 2: the viewport Create menu made no entity (step 1, 5 s after launch).
+      - 1.5× run 3: the first Hierarchy click did not select (step 1).
+      - 1.5× run 1: no Delete notice in step 7.
+      - 100% run 2: the Edit menu did not open (step 7).
+    - Why inconclusive: the desktop was in use during these runs. The 100% run 2 failure capture
+      shows other applications in front and no editor window on screen.
+    - The Scale drag passed in all five runs that reached step 2 (three at 1.5×, two at 100%).
+- Walk results. Each step was verified at 100% and at 1.5× Java2D (run 3 of each):
+  1. **Verified.**
+     - Two entities were created from the viewport menu (Create → Entity → At Scene Root), each
+       one "Create" step.
+     - Hierarchy: a click, Ctrl-click to add, and Shift-click for a range. The capture shows the
+       selected rows and the active-row marker.
+     - Q, then a marquee from empty space selected exactly what `marqueeHits` reports.
+  2. **Verified.** Each drag was one step ("Move/Rotate/Scale Crate B"):
+     - W X-arrow drag: snapped to the 8-unit step. With Ctrl held it moved off the step.
+     - E ring drag: snapped to 15°. With Ctrl held it rotated freely.
+     - R X-handle drag: snapped to 0.1. With Ctrl held it scaled freely.
+     - Ctrl inversion for E/R had only unit-test coverage before.
+     - Not covered by the walk: Shift axis lock and uniform scale (covered by the scene and gizmo
+       smokes).
+  3. **Verified.**
+     - The timeline read Create, Create, Move, Move, Rotate, Rotate, Scale, Scale.
+     - Six Ctrl+Z restored Crate B while both created entities remained. Two more restored the
+       starting scene.
+     - Ctrl+Y ×7 plus Ctrl+Shift+Z redid everything.
+     - The Edit menu capture shows the labelled "Undo Delete New Entity · Ctrl+Z".
+  4. **Verified.** Delete posted "Deleted Crate B" with Undo, and a Robot click on the status-bar
+     Undo button (found by the notice colour) restored Crate B and its selection.
+  5. **Verified.**
+     - Detached Hierarchy window: click, Ctrl+D ("Duplicate Crate B"), Delete, Ctrl+Z ×2, Ctrl+A
+       (all rows, captured) and Esc.
+     - Detached Scene window: click, then Q/W/E/R switched tools, F framed the selection (captured),
+       Delete, Ctrl+Z.
+     - Not covered: Ctrl+S inside a detached window.
+  6. **Verified.** With the Scene canvas focused, F5 started Play and showed the Game view. With
+     the Game canvas focused:
+     - Holding W moved Player up by 46.6 units at 100% and 43.0 at 1.5×, through its Lua script.
+     - The Scene tool stayed Select, and Delete and E changed nothing in the scene.
+     - F6 paused: transforms froze and focus stayed. F5 resumed, and Shift+F5 stopped with the
+       authored scene unchanged.
+     - With the stopped Game view focused, F5 played again and Shift+F5 stopped.
+     - Not covered: the Ctrl+F5 (Run Project) chord, since no project was open.
+  7. **Partly verified.**
+     - Dark/Light × Compact/Comfortable were captured at 100% and at 1.5× Java2D and reviewed. In
+       each: two-entity outlines, the active-row marker, the status bar (hint, "Deleted New Entity ·
+       Undo", "2 selected | Editing | Unsaved") and the Rotate ring.
+     - In all eight runs Edit → Edit Entity was disabled, and its real Swing tooltip "Select a
+       single entity to use this" was seen showing and captured.
+     - The editor's own UI Scale (75/85/100%) is covered by `EDITOR_UI_SCALE_PASS`.
+     - **Not verified:** real Windows 150% display scaling (only Java2D was emulated), and mixed
+       DPI.
+     - Light-theme finding below.
+- Open findings (not fixed; they need a decision or more runs):
+  - **Light-theme viewport handle contrast.**
+    - The native viewport is not themed (UI_DESIGN "Known exceptions"); it clears to about
+      #17191F in both themes. The overlay, however, uses the current theme's tokens. Light's
+      tokens are tuned for its light `viewportBackground` (#E4E8E3), which the native viewport
+      never uses.
+    - Measured on the real Light capture, against the viewport:
+      - `selectionOutline` #2C7547: 3.13:1. This predates S5: `Main.kt` pushed it at 2fda133.
+      - `viewportXAxis` #9F2925: 2.36:1. Used by the S5/S6 Move arrows, Rotate ring and Scale
+        handles.
+      - `viewportYAxis` #25613D: 2.39:1. Same handles.
+      - The Dark tokens are about 9.2:1.
+    - Impact: in Light, the tool handles are hard to see. The ring looks dim brown and the arrows
+      dark red and green on near-black.
+    - Code: `app/Main.kt` (the `SideEffect` that sets `editorSelectionColor`/`editorAxisColors`)
+      and `viewport/NativeViewportOwner.kt` (overlay calls).
+    - Options: always use overlay tokens that match the native viewport (the Dark overlay
+      colours), or theme the native clear colour. Both are design decisions, so neither was made
+      here.
+  - **Unexplained Scale drag at 1.5× Java2D (run 2).**
+    - An outward X-handle drag gave scale 0.5, as if the pointer had moved half a handle length
+      inward.
+    - Not reproduced since: across 1.5× runs it passed 4 times and failed once, and all 100%
+      runs passed it.
+    - It may be a timing or input-rounding issue in the harness, or a real HiDPI problem in the
+      Scale tool's press point.
+    - The walk now puts the handles, grab point and camera into that failure message. Rerun
+      `--l1-walk-smoke` at 1.5× a few times on an unlocked desktop.
+  - Cosmetic, not investigated:
+    - Swing menu tooltips use the default pale-yellow look in both themes, not the
+      `tooltipBackground` token.
+    - Every Edit-menu item shows the same generic icon.
+- Platforms not tested:
+  - Linux/WSL.
+  - Mixed DPI. Both monitors are 96 DPI, so `SEPARATE_MONITORS_SMOKE_PASS` ran on equal DPI.
+  - Real Windows 150% display scaling.
+  - Any GPU other than this machine's.
+- Versions: editor 0.9.0 → **0.10.0** (MINOR; L1 adds editor features). The engine stays at
+  0.18.0, already bumped in S5.
+- Docs: this plan (Status, checkboxes, Validation adds `--l1-walk-smoke`) and the editor README
+  (Validation: the walk smoke and the 1.5× option).
+- Next:
+  - Decide on the Light-theme overlay colours.
+  - Optionally, rerun `--l1-walk-smoke` a few times while nobody uses the desktop; it is
+    sensitive to focus.
+  - Commit L1 S7.

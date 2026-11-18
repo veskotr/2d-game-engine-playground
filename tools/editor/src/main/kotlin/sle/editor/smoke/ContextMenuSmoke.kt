@@ -198,10 +198,10 @@ internal suspend fun runContextMenuSmoke(
     clickShell("GameTab")
     await("Game tab not applied") { canvas().gameViewActive() }
     clickShell("SceneTab")
-    clickShell("View");choose("Prefab Workspace")
-    await("Prefab workspace not ready") { canvas().authoringReady() }
+    clickShell("View");choose("Entity Template Workspace")
+    await("Entity template workspace not ready") { canvas().authoringReady() }
     open(canvas().locationOnScreen.x+canvas().width-20,canvas().locationOnScreen.y+canvas().height-20)
-    check(popup()!!.components.filterIsInstance<JMenuItem>().any { it.text=="New" }) { "Prefab navigation retained the scene entity context" }
+    check(popup()!!.components.filterIsInstance<JMenuItem>().any { it.text=="New" }) { "Entity template navigation retained the scene entity context" }
     MenuSelectionManager.defaultManager().clearSelectedPath()
     clickShell("View");choose("Scene")
     await("Scene authoring not restored") { canvas().authoringReady() }

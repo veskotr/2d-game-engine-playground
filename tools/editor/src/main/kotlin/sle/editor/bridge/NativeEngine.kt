@@ -40,6 +40,8 @@ internal object NativeEngine {
     external fun drawSceneView(session: Long, width: Int, height: Int, gameView: Boolean, fit: Boolean)
     external fun renderSceneView(session: Long, width: Int, height: Int, dt: Float, gameView: Boolean, playing: Boolean)
     external fun panPreview(session: Long, dx: Float, dy: Float)
+    // Scene/Entity preview grid only; spacing 0 restores the automatic grid.
+    external fun setEditorGrid(session: Long, spacing: Float, majorEvery: Int)
     external fun sceneTransforms(session: Long): ByteArray
     external fun sceneGameViewport(session: Long): FloatArray
     external fun render(session: Long, width: Int, height: Int, dt: Float)

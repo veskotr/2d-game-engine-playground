@@ -108,6 +108,15 @@ internal fun EditorToggle(label: String, selected: Boolean, onSelectedChange: (B
     EditorButton(label,{onSelectedChange(!selected)},modifier.semantics { this.selected=selected },enabled,selected,help=help,style=style)
 }
 
+/** Icon-only toggle (viewport tools, snapping): the selected state uses the control's selected chrome. */
+@Composable
+internal fun EditorIconToggle(label: String, glyph: EditorGlyph, selected: Boolean, onSelectedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true, help: String? = label) {
+    EditorGlyphButton(label,{onSelectedChange(!selected)},modifier.semantics { this.selected=selected },enabled,selected,help) { tint ->
+        EditorGlyphIcon(glyph,tint,size=LocalEditorMetrics.current.icon)
+    }
+}
+
 @Composable
 internal fun EditorIconButton(label: String, painter: Painter, onClick: () -> Unit,
     modifier: Modifier = Modifier, enabled: Boolean = true, selected: Boolean = false, help: String? = label,
@@ -140,7 +149,9 @@ internal fun EditorGlyphButton(label: String, onClick: () -> Unit, modifier: Mod
 /** Small stroked glyphs shared by dock actions, selects, trees and checkboxes. */
 enum class EditorGlyph { Minimize, Detach, Close, ChevronDown, ChevronRight, ChevronUp, Check, Plus, Minus, Grip,
     /** Notice levels: drawn in the level's token colour, always beside the notice text. */
-    Info, Success, Warning, Error }
+    Info, Success, Warning, Error,
+    /** Scene view tools and snapping. */
+    ToolSelect, ToolMove, Snap }
 
 @Composable
 internal fun EditorGlyphIcon(glyph: EditorGlyph, tint: Color, modifier: Modifier = Modifier,
@@ -171,6 +182,23 @@ internal fun EditorGlyphIcon(glyph: EditorGlyph, tint: Color, modifier: Modifier
                     EditorGlyph.Success -> { line(.32f,.52f,.45f,.65f);line(.45f,.65f,.69f,.38f) }
                     else -> { line(.36f,.36f,.64f,.64f);line(.64f,.36f,.36f,.64f) }
                 }
+            }
+            EditorGlyph.ToolSelect -> {
+                // Pointer arrow.
+                val points=listOf(.3f to .14f,.3f to .8f,.45f to .66f,.57f to .88f,.66f to .84f,.54f to .62f,.74f to .62f,.3f to .14f)
+                points.zipWithNext().forEach { (a,b) -> line(a.first,a.second,b.first,b.second) }
+            }
+            EditorGlyph.ToolMove -> {
+                // Four-way arrows.
+                line(.14f,.5f,.86f,.5f);line(.5f,.14f,.5f,.86f)
+                line(.14f,.5f,.26f,.38f);line(.14f,.5f,.26f,.62f);line(.86f,.5f,.74f,.38f);line(.86f,.5f,.74f,.62f)
+                line(.5f,.14f,.38f,.26f);line(.5f,.14f,.62f,.26f);line(.5f,.86f,.38f,.74f);line(.5f,.86f,.62f,.74f)
+            }
+            EditorGlyph.Snap -> {
+                // Magnet: two legs joined by an arc, with pole bands.
+                line(.28f,.16f,.28f,.52f);line(.72f,.16f,.72f,.52f)
+                drawArc(tint,0f,180f,false,Offset(.28f*w,.3f*h),androidx.compose.ui.geometry.Size(.44f*w,.44f*h),style=Stroke(stroke))
+                line(.2f,.3f,.36f,.3f);line(.64f,.3f,.8f,.3f)
             }
             EditorGlyph.Warning -> {
                 line(.5f,.12f,.9f,.86f);line(.9f,.86f,.1f,.86f);line(.1f,.86f,.5f,.12f)

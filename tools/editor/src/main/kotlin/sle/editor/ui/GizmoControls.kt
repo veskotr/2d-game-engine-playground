@@ -30,6 +30,5 @@ internal fun GizmoControls(state: EntityWorkspaceState, entityOnly: Boolean = fa
             help=history.undoLabel?.let { "Undo $it" },style=EditorButtonStyle.Ghost)
         EditorButton("Redo",{timeline.redo()},enabled=history.canRedo || timeline.gestureActive,
             help=history.redoLabel?.let { "Redo $it" },style=EditorButtonStyle.Ghost)
-        EditorCheckBox("Snap 0.1",state.snap,{state.snap=it})
     }
 }

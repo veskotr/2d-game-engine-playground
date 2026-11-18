@@ -3,6 +3,7 @@ package sle.editor.project
 import kotlinx.serialization.json.*
 import java.nio.file.*
 import java.nio.file.StandardCopyOption.*
+import sle.editor.viewport.toJson
 
 internal data class OpenedProject(val file: Path,val document: ProjectDocument) {
     val root: Path get()=file.parent
@@ -20,7 +21,10 @@ internal data class OpenedProject(val file: Path,val document: ProjectDocument) 
     }
 }
 
-internal data class ProjectEditorState(val uiScale: Float=1f,val lastScene: String?=null,val notice: String?=null)
+/** Per-user editor state in `.sle/editor-state.json`. Every field is optional on disk, so older files
+ * still parse; a null [snap] keeps the saved snap settings when this state is written. */
+internal data class ProjectEditorState(val uiScale: Float=1f,val lastScene: String?=null,val notice: String?=null,
+    val snap: sle.editor.viewport.SnapSettings?=null)
 
 internal object ProjectFiles {
     private const val MAX_DESCRIPTOR=1024*1024
@@ -84,7 +88,9 @@ internal object ProjectFiles {
             val scale=source["uiScale"]?.jsonPrimitive?.float ?: 1f
             require(scale in listOf(0.75f,0.85f,1f))
             val last=source["lastScene"]?.takeUnless { it==JsonNull }?.jsonPrimitive?.also { require(it.isString) }?.content
-            ProjectEditorState(scale,last)
+            // A damaged snap block falls back to the defaults without losing the rest of the state.
+            val snap=source["snap"]?.takeUnless { it==JsonNull }?.let { runCatching { sle.editor.viewport.snapSettingsFrom(it) } }
+            ProjectEditorState(scale,last,snap?.exceptionOrNull()?.let { "Snap settings recovered to defaults: ${it.message}" },snap?.getOrNull())
         }.getOrElse { ProjectEditorState(notice="Local editor state could not be read: ${it.message}") }
     }
     @Synchronized fun saveEditorState(project: OpenedProject,state: ProjectEditorState) {
@@ -93,10 +99,12 @@ internal object ProjectFiles {
             runCatching { scenePath(project,it) }.isSuccess
         }
         last?.let { scenePath(project,it) }
+        val snap=state.snap ?: editorState(project).snap
         val file=project.resolve(".sle/editor-state.json")
         Files.createDirectories(file.parent)
         atomicWrite(file,buildJsonObject {
             put("uiScale",state.uiScale);last?.let { put("lastScene",it) }
+            snap?.let { put("snap",it.toJson()) }
         }.toString())
     }
     fun scenePath(project: OpenedProject,relative: String): Path = project.resolve(relative).also {

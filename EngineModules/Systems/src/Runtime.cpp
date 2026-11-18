@@ -287,7 +287,7 @@ namespace sle
         Context ctx{scene, scene.getRegistry(), scene.getEventBus(), globalBus_, renderer, displayCamera, physicsWorld.get(), 0.0f};
         renderer.beginFrame();
         renderSystem.update(ctx);
-        if (editorView) EntityPreviewSystem::submitOverlay(scene,renderer,editorCamera);
+        if (editorView) EntityPreviewSystem::submitOverlay(scene,renderer,editorCamera,editorGrid);
         sle::ui::UIFrameContext uiCtx{scene, scene.getRegistry(), scene.getEventBus(), globalBus_, renderer, displayCamera, scriptEngine, 0.0f};
         uiSystem.renderSnapshot(uiCtx);
         renderer.endFrame();
@@ -351,6 +351,12 @@ namespace sle
         const auto center=editorCamera.getPosition()+size*0.5f;
         editorCamera.setViewport(next.x,next.y);
         editorCamera.setPosition(center-next*0.5f);
+    }
+
+    bool Runtime::setEditorGrid(const EditorGrid& grid) {
+        if (!grid.valid()) return false;
+        editorGrid=grid;
+        return true;
     }
 
     void Runtime::panEntityPreview(glm::vec2 delta) {
@@ -581,7 +587,7 @@ namespace sle
 
         // Submit sprite renders for all entities with transforms.
         renderSystem.update(renderCtx);
-        if (sceneViewOverride) EntityPreviewSystem::submitOverlay(scene,renderer,editorCamera);
+        if (sceneViewOverride) EntityPreviewSystem::submitOverlay(scene,renderer,editorCamera,editorGrid);
         sle::ui::UIFrameContext uiCtx{scene, scene.getRegistry(), scene.getEventBus(), globalBus_, renderer, displayCamera, scriptEngine, dt};
         uiSystem.update(uiCtx);
         auto t4 = Clock::now();

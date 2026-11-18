@@ -8,6 +8,7 @@
 #include <sle/engine/PrefabLoader.hpp>
 #include <sle/scene/components/Transform.hpp>
 #include <sle/scene/components/BoxColliderComponent.hpp>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -133,5 +134,41 @@ int main(int argc, char** argv)
     const auto extremePosition=camera.getPosition(), extremeSize=camera.getViewportSize();
     if (!std::isfinite(extremePosition.x) || !std::isfinite(extremePosition.y) ||
         !std::isfinite(extremeSize.x) || !std::isfinite(extremeSize.y) || extremeSize.y > 1.0e6f) return 1;
+
+    // The editor grid follows the move snap step: lines on multiples of the spacing, every Nth
+    // one major, coarsened by the major interval when too dense, automatic when unset or invalid.
+    auto gridFails = [](const char* message) { std::cerr << "Editor grid: " << message << '\n'; return true; };
+    sle::core::Camera2D gridCamera(48,27);
+    gridCamera.setPosition({-25.5f,-3.0f});
+    const auto onMultiple = [](float value, double step) { return std::abs(value/step-std::round(value/step)) < 1e-4; };
+    const auto unit = sle::EntityPreviewSystem::gridLines(gridCamera,{1.0f,10});
+    int majors = 0;
+    for (const auto& line : unit) {
+        const bool vertical = line.from.x == line.to.x;
+        const float at = vertical ? line.from.x : line.from.y;
+        if (!onMultiple(at,1.0) && gridFails("unit lines off the step")) return 1;
+        if (line.major != onMultiple(at,10.0) && gridFails("major interval")) return 1;
+        majors += line.major ? 1 : 0;
+    }
+    if ((unit.size() < 48+27 || unit.size() > 48+27+4 || majors < 5) && gridFails("unit line count")) return 1;
+    if (unit.front().from.x > -25.5f && gridFails("first line starts at or before the view")) return 1;
+    gridCamera.setViewport(4800,2700);
+    const auto coarse = sle::EntityPreviewSystem::gridLines(gridCamera,{1.0f,10});
+    if ((coarse.empty() || coarse.size() > 204) && gridFails("coarse line count")) return 1;
+    for (const auto& line : coarse) {
+        const float at = line.from.x == line.to.x ? line.from.x : line.from.y;
+        if ((!onMultiple(at,100.0) || line.major != onMultiple(at,1000.0)) && gridFails("dense grid not coarsened by the major interval")) return 1;
+    }
+    const auto automatic = sle::EntityPreviewSystem::gridLines(gridCamera,{});
+    if ((automatic.empty() || std::any_of(automatic.begin(),automatic.end(),[](const auto& line) { return line.major; })) &&
+        gridFails("automatic grid has no major lines")) return 1;
+    for (const sle::EditorGrid invalid : {sle::EditorGrid{-1.0f,10},sle::EditorGrid{std::numeric_limits<float>::quiet_NaN(),10},
+        sle::EditorGrid{std::numeric_limits<float>::infinity(),10},sle::EditorGrid{1.0f,-1},sle::EditorGrid{1.0f,1001}}) {
+        const auto lines = sle::EntityPreviewSystem::gridLines(gridCamera,invalid);
+        if ((invalid.valid() || lines.size() != automatic.size()) && gridFails("invalid grid falls back to automatic")) return 1;
+    }
+    gridCamera.setPosition({1.0e38f,-1.0e38f});
+    const auto far = sle::EntityPreviewSystem::gridLines(gridCamera,{0.001f,10});
+    if (far.size() > 204 && gridFails("extreme positions stay bounded")) return 1;
     return 0;
 }

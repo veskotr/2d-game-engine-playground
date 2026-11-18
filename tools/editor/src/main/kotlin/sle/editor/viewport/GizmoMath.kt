@@ -16,6 +16,15 @@ internal data class PreviewCamera(val origin: Vec2, val size: Vec2, val width: I
     fun world(pixel: Vec2) = origin + Vec2(pixel.x / width * size.x, (1.0 - pixel.y / height) * size.y)
     fun screen(world: Vec2) = Vec2((world.x-origin.x)/size.x*width, (1-(world.y-origin.y)/size.y)*height)
 }
+/** A move constraint: a Move-tool axis arrow, or Shift's dominant axis. */
+internal enum class DragAxis(val snapAxes: SnapAxes) {
+    Free(SnapAxes.Both), X(SnapAxes.X), Y(SnapAxes.Y);
+    fun constrain(start: Vec2, end: Vec2) = when(this) { Free -> end; X -> Vec2(end.x,start.y); Y -> Vec2(start.x,end.y) }
+    companion object {
+        /** The axis along which [delta] moved most (X on a tie). */
+        fun dominant(delta: Vec2) = if (abs(delta.y) > abs(delta.x)) Y else X
+    }
+}
 internal data class GizmoHandle(val kind: String, val local: Vec2, val x: Int = 0, val y: Int = 0)
 internal data class GizmoShape(val target: String, val position: Vec2, val rotation: Double, val scale: Vec2,
     val offset: Vec2, val size: Vec2, val radius: Double) {
@@ -92,10 +101,18 @@ internal object GizmoMath {
     fun handleWorld(shape: GizmoShape, handle: GizmoHandle) = if (handle.kind == "radius")
         shape.center + Vec2(handle.x*shape.worldRadius,handle.y*shape.worldRadius) else shape.world(handle.local)
 
-    fun drag(doc: EntityDocument, target: String, handle: GizmoHandle, start: Vec2, end: Vec2, snap: Boolean): EntityDocument {
+    /**
+     * [snap] is the move step while snapping applies (null: free). [axis] keeps a move on one world
+     * axis (a Move-tool arrow, or Shift's dominant axis); only the moved axes are snapped. An
+     * entity's position is snapped as given: in the Scene view that is its world position, which
+     * the caller converts to local through the parent pose.
+     */
+    fun drag(doc: EntityDocument, target: String, handle: GizmoHandle, start: Vec2, pointer: Vec2, snap: Double? = null,
+        axis: DragAxis = DragAxis.Free): EntityDocument {
         val shape = GizmoShape.from(doc,target) ?: return doc
+        val end = axis.constrain(start,pointer)
         if ((end-start).length() < 1e-12) return doc
-        fun precise(value: Double) = if (snap) round(value*10)/10 else value
+        fun precise(value: Double) = snap?.let { SnapMath.value(value,it) } ?: value
         fun vector(doc: EntityDocument, component: String, field: String, value: Vec2): EntityDocument {
             if (!value.x.isFinite() || !value.y.isFinite() || max(abs(value.x),abs(value.y)) > 1e9) return doc
             val vector=buildJsonObject { put("x",value.x); put("y",value.y) }
@@ -104,7 +121,7 @@ internal object GizmoMath {
         }
         if (target == "Entity") {
             val next = shape.position+end-start
-            return vector(doc,"Transform","position",Vec2(precise(next.x),precise(next.y)))
+            return vector(doc,"Transform","position",snap?.let { SnapMath.point(next,it,axis.snapAxes) } ?: next)
         }
         if (!shape.editable) return doc
         if (handle.kind == "move") {

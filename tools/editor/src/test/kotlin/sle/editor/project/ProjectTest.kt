@@ -115,4 +115,25 @@ class ProjectTest {
         Files.writeString(project.root.resolve(".sle/editor-state.json"),"broken")
         assertEquals(1f,ProjectFiles.editorState(project).uiScale)
     }
+
+    @Test fun snapSettingsAreOptionalPerUserProjectState() {
+        val project=create();val file=project.root.resolve(".sle/editor-state.json")
+        // A state file written before snap settings existed still parses, with no snap block.
+        Files.createDirectories(file.parent)
+        Files.writeString(file,"""{"uiScale":0.85,"lastScene":"Assets/Scenes/Main.scene.json"}""")
+        val old=ProjectFiles.editorState(project)
+        assertEquals(0.85f,old.uiScale);assertEquals("Assets/Scenes/Main.scene.json",old.lastScene);assertNull(old.snap);assertNull(old.notice)
+        val snap=sle.editor.viewport.SnapSettings(true,16.0,30.0,0.5)
+        ProjectFiles.saveEditorState(project,ProjectEditorState(0.85f,snap=snap))
+        assertEquals(snap,ProjectFiles.editorState(project).snap)
+        assertEquals("Assets/Scenes/Main.scene.json",ProjectFiles.editorState(project).lastScene)
+        // Writers that know nothing about snapping (UI scale on close, remembered scenes) keep it.
+        ProjectFiles.saveEditorState(project,ProjectEditorState(1f))
+        ProjectFiles.rememberScene(project,project.assets.resolve("Scenes/Main.scene.json"))
+        assertEquals(snap,ProjectFiles.editorState(project).snap);assertEquals(1f,ProjectFiles.editorState(project).uiScale)
+        // A damaged snap block falls back to the defaults and keeps the rest of the state.
+        Files.writeString(file,"""{"uiScale":0.75,"snap":{"move":-3}}""")
+        val damaged=ProjectFiles.editorState(project)
+        assertEquals(0.75f,damaged.uiScale);assertNull(damaged.snap);assertNotNull(damaged.notice)
+    }
 }

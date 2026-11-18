@@ -68,7 +68,7 @@ share one baseline. Feature code never sets `fontSize`.
 | Component | Use |
 |---|---|
 | `EditorButton(label, onClick, style=…)` | Commands. `EditorButtonStyle.Primary` (filled green, the main action of a surface), `Secondary` (default; restrained fill + subtle outline), `Ghost` (no resting chrome: toolbars, zoom, navigation, dock actions). `primary=true` maps to Primary. |
-| `EditorToggle`, `EditorIconButton`, `EditorGlyphButton` + `EditorGlyphIcon(EditorGlyph.*)` | Toggles and icon-only commands; glyphs are drawn, never text symbols. |
+| `EditorToggle`, `EditorIconToggle`, `EditorIconButton`, `EditorGlyphButton` + `EditorGlyphIcon(EditorGlyph.*)` | Toggles and icon-only commands; glyphs are drawn, never text symbols. `EditorIconToggle` is the icon form (viewport tools `ToolSelect`/`ToolMove`, snapping `Snap`); its tooltip names the command's chord from the keymap. |
 | `EditorTab` | Flat tab: active = surface fill + 2 dp accent underline. |
 | `EditorToolbar`, `EditorToolbarDivider`, `EditorSeparator` | Command strips and 1-hairline separators. |
 | `EditorTextField`, `EditorNumberField`, `EditorVectorField` | Text and numeric input (see contract below). |
@@ -130,7 +130,10 @@ document, dirty flag, render context and game pixels unchanged.
 
 ## Known exceptions (not themed by the editor)
 
-- Native viewport content, grid and axes (C++ editor bridge). `NativeViewportOwner`'s
+- Native viewport content, grid and axes (C++ editor bridge). The grid spacing follows the
+  move snap step (`NativeEngine.setEditorGrid`); the Move tool arrows, box selection and
+  selection outlines are editor overlays drawn with `viewportXAxis`, `viewportYAxis` and
+  `selectionOutline`. `NativeViewportOwner`'s
   backing fill matches the GL clear color. Game pixels are never themed.
 - Native window captions on Windows before 10 2004; caption colors before Windows 11.
 - Drive/computer icons in file choosers come from the OS shell.
@@ -164,7 +167,7 @@ document, dirty flag, render context and game pixels unchanged.
 
 | Slot | Shows |
 |---|---|
-| Left | `EditorNotices.hint` while a tool sets it (Session 5), else the window's hint for the current view, in `textSecondary`. |
+| Left | `EditorNotices.hint` while set, else the window's hint for the current view, in `textSecondary`. In the editable Scene view that is the active tool: its gesture hint during a drag or box (`ViewportToolState.gestureHint`, e.g. "Moving along X: Shift locks the main axis; Ctrl snaps to 1; Esc cancels"), else `toolHint(tool, …)`, which states the snapping state. |
 | Centre | The current notice on its level background: a drawn level glyph (`EditorGlyph.Info/Success/Warning/Error`) and the text in the level colour, an optional action, Dismiss for sticky levels; then the recent-messages button (`ChevronUp`, a Swing popup like other menus; clicking a row copies it). |
 | Right | Background progress (spinner and label), "N selected", Editing/Playing/Paused and "Unsaved", divided by vertical separators. |
 

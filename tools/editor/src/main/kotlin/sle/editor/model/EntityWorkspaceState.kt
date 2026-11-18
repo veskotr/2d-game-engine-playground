@@ -56,7 +56,6 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
     var selectedComponent: String?
         get() = componentSelection
         set(value) { if(componentSelection!=value) endGesture();componentSelection=value }
-    var snap by mutableStateOf(false)
     var document by mutableStateOf(freshDocument())
     private var savedDocument by mutableStateOf<EntityDocument?>(document)
     var assets by mutableStateOf<Map<Path, String>>(emptyMap())

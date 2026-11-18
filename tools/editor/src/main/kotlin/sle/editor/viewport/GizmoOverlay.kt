@@ -2,6 +2,7 @@ package sle.editor.viewport
 
 import androidx.compose.ui.graphics.Color
 import sle.editor.model.EntityDocument
+import sle.editor.viewport.tools.MoveHandles
 
 import org.lwjgl.opengl.GL11
 import org.lwjgl.opengl.GL15
@@ -38,12 +39,13 @@ internal class GizmoOverlay {
             draw(GL11.GL_LINES,lines)
         }
     }
-    /** The active entity: its outline (or edited shape) plus handles. */
-    fun draw(shape: GizmoShape, camera: PreviewCamera, entity: EntityDocument? = null, color: Color) = render(camera, color) { draw ->
+    /** The active entity: its outline (or edited shape) plus handles. [entityHandles] is false when a
+     * tool draws its own handles at the entity position (the Move tool's arrows). */
+    fun draw(shape: GizmoShape, camera: PreviewCamera, entity: EntityDocument? = null, color: Color, entityHandles: Boolean = true) = render(camera, color) { draw ->
         val lines=mutableListOf<Vec2>()
         if (shape.target == "Entity") {
             val p=camera.screen(shape.position)
-            lines.addAll(listOf(p-Vec2(24.0,0.0),p+Vec2(24.0,0.0),p-Vec2(0.0,24.0),p+Vec2(0.0,24.0)))
+            if(entityHandles) lines.addAll(listOf(p-Vec2(24.0,0.0),p+Vec2(24.0,0.0),p-Vec2(0.0,24.0),p+Vec2(0.0,24.0)))
             if(entity!=null) {
                 val bounds=entitySelectionBounds(entity,camera)
                 bounds.zipWithNext().forEach { (a,b) -> lines.add(a);lines.add(b) }
@@ -55,13 +57,34 @@ internal class GizmoOverlay {
         }
         draw(GL11.GL_LINES,lines)
         val squares=mutableListOf<Vec2>()
-        GizmoMath.handles(shape).forEach { handle ->
+        GizmoMath.handles(shape).filter { entityHandles || shape.target!="Entity" }.forEach { handle ->
             val p=camera.screen(GizmoMath.handleWorld(shape,handle))
             val r=if (handle.kind=="move") 5.0 else 4.0
             val a=p+Vec2(-r,-r); val b=p+Vec2(r,-r); val c=p+Vec2(r,r); val d=p+Vec2(-r,r)
             squares.addAll(listOf(a,b,c,a,c,d))
         }
         draw(GL11.GL_TRIANGLES,squares)
+    }
+    /** Move tool: X/Y arrows in the axis colours and the free-move square; the dragged handle uses [highlight]. */
+    fun moveHandles(origin: Vec2, camera: PreviewCamera, xColor: Color, yColor: Color, highlight: Color, active: DragAxis?) {
+        fun quad(a: Vec2, b: Vec2, half: Vec2) = listOf(a-half,b-half,b+half,a-half,b+half,a+half)
+        for((axis,color) in listOf(DragAxis.X to xColor,DragAxis.Y to yColor)) render(camera,if(active==axis) highlight else color) { draw ->
+            val direction=if(axis==DragAxis.X) Vec2(1.0,0.0) else Vec2(0.0,-1.0)
+            val side=Vec2(-direction.y,direction.x)
+            val start=origin+direction*(MoveHandles.SQUARE+2);val tip=origin+direction*(MoveHandles.ARROW-10)
+            draw(GL11.GL_TRIANGLES,quad(start,tip,side*1.0)+listOf(tip+side*5.0,tip-side*5.0,tip+direction*10.0))
+        }
+        render(camera,if(active==DragAxis.Free) highlight else xColor.copy(red=(xColor.red+yColor.red)/2,green=(xColor.green+yColor.green)/2,blue=(xColor.blue+yColor.blue)/2)) { draw ->
+            val r=MoveHandles.SQUARE
+            val corners=listOf(origin+Vec2(-r,-r),origin+Vec2(r,-r),origin+Vec2(r,r),origin+Vec2(-r,r))
+            if(active==DragAxis.Free) draw(GL11.GL_TRIANGLES,listOf(corners[0],corners[1],corners[2],corners[0],corners[2],corners[3]))
+            else draw(GL11.GL_LINES,(corners+corners.first()).zipWithNext().flatMap { (a,b) -> listOf(a,b) })
+        }
+    }
+    /** Box selection rectangle in viewport pixels. */
+    fun marquee(from: Vec2, to: Vec2, camera: PreviewCamera, color: Color) = render(camera, color) { draw ->
+        val corners=listOf(from,Vec2(to.x,from.y),to,Vec2(from.x,to.y),from)
+        draw(GL11.GL_LINES,corners.zipWithNext().flatMap { (a,b) -> listOf(a,b) })
     }
     private fun render(camera: PreviewCamera, color: Color, body: (draw: (Int, List<Vec2>) -> Unit) -> Unit) {
         val previousProgram=GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM)

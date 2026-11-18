@@ -84,6 +84,8 @@ detached windows and the native viewport:
 | Undo / Redo | Ctrl+Z / Ctrl+Y or Ctrl+Shift+Z | anywhere (the active document's one timeline) |
 | Delete / Duplicate | Delete or Backspace / Ctrl+D | Hierarchy or Scene view focused |
 | Select All | Ctrl+A | Hierarchy or Scene view focused |
+| Select tool / Move tool | Q / W | Hierarchy or Scene view focused |
+| Frame Selected | F | Hierarchy or Scene view focused (View → Fit still frames everything) |
 | Play (Resume) / Pause / Stop | F5 / F6 / Shift+F5 | anywhere |
 | Run Project | Ctrl+F5 | anywhere |
 
@@ -272,8 +274,13 @@ picking, but can still be selected from the menu.
 - **CircleCollider / CircleZone:** drag the center for offset, or a radius handle.
 - **SpriteRenderer:** drag its center to change its local offset; edge/corner
   handles edit its own size. These edits leave Transform and colliders unchanged.
-- **Shift** while dragging or **Snap 0.1** snaps authored values to 0.1 units.
-  Arrow keys nudge by 0.1 world units; Shift+arrows use 1 world unit.
+- **Snapping** (the magnet toggle in the viewport toolbar, or **Tools → Turn Snapping
+  On/Off**) snaps positions, offsets and sizes to the move step; **Configure Snap…** (the
+  arrow beside the magnet, or the Tools menu) sets the move, rotate and scale steps. It is
+  off by default (move 1, rotate 15°, scale 0.1). Hold **Ctrl** during a drag or nudge to
+  invert snapping for that gesture. Hold **Shift** during a move drag to keep it on its
+  dominant axis. Arrow keys move to the next grid line while snapping, else by 0.1 world
+  units (Shift+arrows: 1).
 - **Escape** cancels the current drag. **Undo / Redo** (**Ctrl+Z / Ctrl+Y**, or
   Ctrl+Shift+Z) restore complete edits; pressed during a drag, they cancel it.
 
@@ -295,6 +302,25 @@ The camera stays fixed while editing component values. Middle-drag or
 Alt+left-drag pans the editor camera. **Fit** finishes a drag and reframes the
 entity. Mouse-wheel zoom is available between drags. Switching tabs retains edits.
 Resize during a drag cancels it so picking cannot use stale camera dimensions.
+
+### Scene view tools and snapping
+
+The Scene view has two tools in its toolbar and in the **Tools** menu:
+
+- **Select (Q):** click picks; Shift- or Ctrl-click adds or removes; dragging on empty
+  space draws a box that selects every entity whose selection bounds it touches (Shift or
+  Ctrl adds to the selection); dragging a selected entity moves the selection.
+- **Move (W):** the active entity shows a red X arrow, a green Y arrow and a square. Drag
+  an arrow to move along that world axis, or the square to move freely; dragging an
+  entity's body still works. The whole selection moves as one undo step.
+
+**F** frames the selection; **Fit** still frames everything. The status bar shows the
+active tool's hint, and what Shift and Ctrl do during a drag. Snap settings are saved per
+user: per project in `.sle/editor-state.json`, else beside the standalone layout
+(`snap-settings.json`). Positions snap in world space, also under rotated or mirrored
+parents; right-click creation and Assets drops land on the move step while snapping is on.
+The Scene and Prefab grids follow the move step (every tenth line is a major line; a step
+too fine for the zoom level is drawn coarser).
 
 To run the actual desktop manipulation regression:
 `gradlew.bat run --args=--gizmo-smoke` (with the native editor bridge built).

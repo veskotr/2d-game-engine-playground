@@ -23,6 +23,26 @@ class ProjectWorkspaceDocumentsTest {
         } finally { workspace.close() }
     }
 
+    @Test fun snapSettingsFollowTheOpenProjectOrTheStandalonePrefs() {
+        val project=ProjectFiles.create(Files.createTempDirectory("snap-project").resolve("Game"),"Game")
+        val standalone=sle.editor.viewport.SnapSettingsStore(Files.createTempDirectory("snap-standalone"))
+        val appearance=sle.editor.ui.theme.EditorAppearanceState(sle.editor.ui.theme.EditorAppearanceStore(Files.createTempDirectory("snap-appearance")))
+        val workspace=sle.editor.workspace.EditorWorkspace(Result.success(EntityWorkspaceState(emptyMap())),
+            Result.success(SceneWorkspaceState(emptyMap()) { it }),appearance=appearance,snapStore=standalone)
+        try {
+            val user=sle.editor.viewport.SnapSettings(true,8.0)
+            workspace.snap.update(user);assertEquals(user,standalone.load())
+            workspace.project.activate(project)
+            assertEquals(sle.editor.viewport.SnapSettings(),workspace.snap.settings,"a project without snap state uses the defaults")
+            val projectSnap=sle.editor.viewport.SnapSettings(false,0.5,45.0,0.25)
+            workspace.snap.update(projectSnap)
+            assertEquals(projectSnap,ProjectFiles.editorState(project).snap);assertEquals(user,standalone.load())
+            workspace.project.close();assertEquals(user,workspace.snap.settings)
+            workspace.project.activate(project);assertEquals(projectSnap,workspace.snap.settings)
+            assertTrue(workspace.saveProjectEditorState());assertEquals(projectSnap,ProjectFiles.editorState(project).snap)
+        } finally { workspace.close() }
+    }
+
     @Test fun legacyProjectWithoutStartupOrLocalStateOpensWithoutRewritingContent() {
         var project=ProjectFiles.create(Files.createTempDirectory("scene-legacy").resolve("Game"),"Game")
         project=ProjectFiles.save(project,project.document.copy(startupScene=null))

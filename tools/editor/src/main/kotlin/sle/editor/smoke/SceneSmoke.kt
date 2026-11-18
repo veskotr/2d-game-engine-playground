@@ -18,7 +18,8 @@ import javax.imageio.ImageIO
 import kotlin.math.roundToInt
 
 internal suspend fun runSceneSmoke(canvas: EngineCanvas,scene: SceneWorkspaceState,
-    notices: sle.editor.ui.EditorNotices? = null,selectTreeNode: (suspend (String)->Unit)? = null) {
+    notices: sle.editor.ui.EditorNotices? = null,selectTreeNode: (suspend (String)->Unit)? = null,
+    tools: sle.editor.viewport.tools.ViewportToolState? = null,snap: sle.editor.viewport.SnapService? = null) {
     val robot=Robot()
     val folder=Path.of(System.getProperty("sle.smokeReport")).parent
     suspend fun ready() {
@@ -100,6 +101,7 @@ internal suspend fun runSceneSmoke(canvas: EngineCanvas,scene: SceneWorkspaceSta
         key(KeyEvent.VK_ESCAPE)
         check(scene.selection.isEmpty) { "Esc did not clear the Hierarchy selection" }
     }
+    if(tools!=null && snap!=null) runSceneToolsStage(canvas,scene,tools,snap,robot,folder,::ready)
     println("SCENE_MULTI_SELECT_SMOKE_PASS ctrl-click/multi-move/multi-delete/undo"+(if(notices!=null) "/delete-notice" else "")+(if(selectTreeNode!=null) "/hierarchy-ctrl-click/ctrl-a/escape" else ""))
     click(GizmoShape.from(other.document,"SpriteRenderer")!!.center)
     check(scene.selectedKey==other.document.key && scene.selection.size==1) { "Plain click did not reduce the selection: ${scene.selection.keys}" }
@@ -142,4 +144,81 @@ internal suspend fun runSceneSmoke(canvas: EngineCanvas,scene: SceneWorkspaceSta
         it.setValue("SpriteRenderer",listOf("texture"),JsonPrimitive("assets/textures/tile2.png"))
     }).serialize())
     println("SCENE_EDITOR_SMOKE_PASS entities=$count import-copy/select/move/undo/structure/invalid-draft/save/relocate/open textured=$textured cyan=$cyan package=$moved")
+}
+
+/**
+ * L1 S5 tools, driven by Robot with the native canvas focused: W and Q switch tools through the
+ * shortcut dispatcher, a Move arrow drag snaps on its axis as one undo step, Shift keeps a square
+ * drag on its dominant axis, a marquee selects by bounds and F frames the selection.
+ */
+private suspend fun runSceneToolsStage(canvas: EngineCanvas,scene: SceneWorkspaceState,tools: sle.editor.viewport.tools.ViewportToolState,
+    snap: sle.editor.viewport.SnapService,robot: Robot,folder: Path,ready: suspend ()->Unit) {
+    fun cursor(pixel: Vec2) { val origin=canvas.locationOnScreen;robot.mouseMove(origin.x+pixel.x.roundToInt(),origin.y+pixel.y.roundToInt()) }
+    fun rounded(pixel: Vec2)=Vec2(pixel.x.roundToInt().toDouble(),pixel.y.roundToInt().toDouble())
+    suspend fun key(code: Int,ctrl: Boolean=false) {
+        if(ctrl) robot.keyPress(KeyEvent.VK_CONTROL)
+        robot.keyPress(code);robot.keyRelease(code)
+        if(ctrl) robot.keyRelease(KeyEvent.VK_CONTROL)
+        delay(160)
+    }
+    suspend fun click(pixel: Vec2) { cursor(pixel);robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);delay(160) }
+    /** [held] modifiers go down after the button, so they shape the drag rather than the click. */
+    suspend fun drag(from: Vec2,to: Vec2,held: List<Int> = emptyList()) {
+        cursor(from);robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);delay(80)
+        held.forEach { robot.keyPress(it) }
+        for(i in 1..8) { cursor(from+(to-from)*(i/8.0));delay(35) }
+        robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);held.asReversed().forEach { robot.keyRelease(it) };delay(150);ready()
+    }
+    fun world(key: String)=sle.editor.model.ScenePose.from(scene.worldDocument(key)).position
+    val crate=scene.entities.first { it.document.name=="Crate A" }.document.key
+    val other=scene.entities.first { it.document.name=="Crate B" }.document.key
+    var camera=canvas.previewCamera()!!
+    val crates=listOf(crate,other).mapNotNull { sle.editor.viewport.entityScreenBounds(scene.worldDocument(it),camera) }.reduce { a,b -> a.union(b) }
+    // An empty spot up and left of both crates: the marquee start, and a focus click that clears the selection.
+    val empty=(0 until canvas.width step 12).flatMap { x -> (0 until canvas.height step 12).map { y -> Vec2(x.toDouble(),y.toDouble()) } }
+        .filter { it.x<crates.min.x-8 && it.y<crates.min.y-8 && it.x>8 && it.y>8 }
+        .filter { sle.editor.viewport.ScenePicking.pick(scene,camera,it)==null &&
+            sle.editor.viewport.tools.marqueeHits(scene,camera,it-Vec2(4.0,4.0),it+Vec2(4.0,4.0)).isEmpty() }
+        .minByOrNull { (it-crates.min).length() } ?: error("No empty viewport spot above the crates")
+    click(empty)
+    check(scene.selection.isEmpty) { "Clicking empty space did not clear the selection" }
+    key(KeyEvent.VK_W)
+    check(tools.active==sle.editor.viewport.tools.ViewportToolId.Move) { "W did not switch to the Move tool with the canvas focused" }
+    click(sle.editor.viewport.GizmoShape.from(scene.worldDocument(crate),"SpriteRenderer")!!.center.let(camera::screen))
+    check(scene.selection.keys==listOf(crate)) { "Move tool click did not select Crate A: ${scene.selection.keys}" }
+    snap.update(sle.editor.viewport.SnapSettings(enabled=true,move=8.0));delay(120);ready()
+    val start=world(crate);val steps=scene.history.undoLabels.size
+    val handles=canvas.toolHandles().associateBy { it.axis }
+    val arrow=handles[sle.editor.viewport.DragAxis.X] ?: error("Move arrows missing: $handles")
+    val grab=(arrow.from+arrow.to)*0.5
+    drag(grab,grab+Vec2(70.0,30.0))
+    val alongX=world(crate)
+    check(alongX.y==start.y && alongX.x>start.x && kotlin.math.abs(alongX.x/8-Math.rint(alongX.x/8))<1e-9) { "X arrow did not snap on X only: $start -> $alongX" }
+    check(scene.history.undoLabels.size==steps+1 && scene.history.undoLabel=="Move Crate A") { "Arrow drag was not one step: ${scene.history.undoLabels.takeLast(2)}" }
+    ImageIO.write(robot.createScreenCapture(Rectangle(canvas.locationOnScreen,canvas.size)),"png",folder.resolve("scene-move-tool.png").toFile())
+    // Shift held during a square drag keeps the dominant axis; Ctrl turns snapping off for it.
+    val square=canvas.toolHandles().first { it.axis==sle.editor.viewport.DragAxis.Free }.let { (it.from+it.to)*0.5 }
+    drag(square,square+Vec2(12.0,-55.0),held=listOf(KeyEvent.VK_SHIFT,KeyEvent.VK_CONTROL))
+    val alongY=world(crate)
+    check(alongY.x==alongX.x && alongY.y>alongX.y) { "Shift did not keep the square drag on Y: $alongX -> $alongY" }
+    check(kotlin.math.abs(alongY.y/8-Math.rint(alongY.y/8))>1e-6) { "Ctrl did not turn snapping off for the drag: $alongY" }
+    key(KeyEvent.VK_Z,ctrl=true);key(KeyEvent.VK_Z,ctrl=true);ready()
+    check(world(crate)==start) { "Undo did not restore the tool drags: ${world(crate)} vs $start" }
+    snap.update(sle.editor.viewport.SnapSettings());delay(120)
+    key(KeyEvent.VK_Q)
+    check(tools.active==sle.editor.viewport.tools.ViewportToolId.Select) { "Q did not switch back to the Select tool" }
+    // Marquee: drag on empty space; what it selects is exactly what its box intersects.
+    camera=canvas.previewCamera()!!
+    val end=crates.max+Vec2(10.0,10.0)
+    drag(empty,end)
+    val expected=sle.editor.viewport.tools.marqueeHits(scene,camera,rounded(empty),rounded(end)).toSet()
+    check(crate in expected && other in expected && scene.selection.keys.toSet()==expected) { "Marquee selected ${scene.selection.keys}, expected $expected" }
+    ImageIO.write(robot.createScreenCapture(Rectangle(canvas.locationOnScreen,canvas.size)),"png",folder.resolve("scene-marquee.png").toFile())
+    // F frames the selection: the view centres on its bounds.
+    val bounds=scene.selection.keys.mapNotNull { sle.editor.viewport.entityWorldBounds(scene.worldDocument(it)) }.reduce { a,b -> a.union(b) }
+    key(KeyEvent.VK_F);delay(200);ready()
+    val framed=canvas.previewCamera()!!
+    val center=framed.origin+framed.size*0.5
+    check(framed!=camera && (center-bounds.center).length()<framed.size.y*0.02) { "F did not frame the selection: center=$center bounds=${bounds.center}" }
+    println("SCENE_TOOLS_SMOKE_PASS keys-with-native-focus/move-arrow-snap/one-step/shift-axis/ctrl-invert/marquee/frame-selected")
 }

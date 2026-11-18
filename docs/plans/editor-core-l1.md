@@ -1,6 +1,6 @@
 # L1 — Editor core: commands, history, selection, status bar, viewport tools
 
-**Status:** Planned 2026-11-17. Sessions 1–4 implemented and validated (see Progress); sessions 5–7 not started.
+**Status:** Planned 2026-11-17. Sessions 1–5 implemented and validated (see Progress); sessions 6–7 not started.
 **Parent:** [editor-game-workflows.md](editor-game-workflows.md) §5, base layer
 **L1** (roadmap items 0.1, 0.2, 0.4, 1.1, 1.2 and rule R3).
 **Request:** Plan L1 only. Tilemaps and the other layers come later.
@@ -271,22 +271,22 @@ is shippable alone.
 
 ### Session 5: Viewport tool framework, Select/Move tools, snapping, Frame Selected
 
-- [ ] Add a `viewport/tools/ViewportTool` interface: id, label, icon, chord,
+- [x] Add a `viewport/tools/ViewportTool` interface: id, label, icon, chord,
   cursor, `hint(ctx)`, `press/drag/release/key/cancel`, `handles()`,
   `draw(overlay)`.
   - `ToolHost` in `NativeViewportOwner` keeps right-click, pan, zoom and
     entity-drag-to-Assets ahead of the tool.
   - Switching tools finishes the gesture; Escape cancels it.
   - The active tool is per-user editor state, not undoable.
-- [ ] **Select (Q):**
+- [x] **Select (Q):**
   - click picks; Shift/Ctrl toggles
   - dragging on empty space draws a marquee; entities whose selection bounds
     intersect it are selected (Shift adds)
   - dragging a selected entity still moves it, as in today's behaviour
-- [ ] **Move (W):** X/Y axis arrows and a centre square for free movement. Body
+- [x] **Move (W):** X/Y axis arrows and a centre square for free movement. Body
   drag remains. Shift constrains to the dominant axis. Multi-selection moves as
   one group.
-- [ ] **Snapping:** add `viewport/SnapService` with enabled, move/rotate/scale
+- [x] **Snapping:** add `viewport/SnapService` with enabled, move/rotate/scale
   steps and Ctrl inversion. Snap world positions, then convert to local through
   the parent pose. It applies to move drags, arrow nudges (one step when
   snapping, else 0.1 or Shift 1), click-to-create positions and asset drops.
@@ -294,22 +294,22 @@ is shippable alone.
   - Toolbar: a snap toggle plus Configure Snap… (a small form dialog).
   - Persist through `ProjectEditorState`, which gains optional fields so old
     files still parse.
-- [ ] **Grid follows snap** (Engine, small): a bridge call sets the editor grid
+- [x] **Grid follows snap** (Engine, small): a bridge call sets the editor grid
   spacing and major-line interval in the native renderer. Add a native
   integration check that the setting only affects editor drawing. Bump the
   engine version per CONTRIBUTING.
-- [ ] **Frame Selected (F):** fit the camera to the selection bounds. Fit
+- [x] **Frame Selected (F):** fit the camera to the selection bounds. Fit
   (frame all) stays available.
-- [ ] Viewport toolbar: a tool group (Q/W/E/R as `EditorToggle` icons with chord
+- [x] Viewport toolbar: a tool group (Q/W/E/R as `EditorToggle` icons with chord
   tooltips), snap toggle, Configure Snap. Add a Tools menu with the same
   commands. Tool hints go to the status bar.
-- [ ] Tests:
+- [x] Tests:
   - snapping math: negative values, rotated or mirrored parents, world→local
   - marquee bounds with rotated sprites
   - switching tools finishes the gesture
   - one undo step per drag and per nudge burst
   - persistence of snap settings, including old state files
-- [ ] Smokes: update `--gizmo-smoke` and `--scene-smoke` (Shift semantics);
+- [x] Smokes: update `--gizmo-smoke` and `--scene-smoke` (Shift semantics);
   add tool switching via keys with native focus and a marquee drag.
 
 ### Session 6: Rotate and Scale tools
@@ -916,3 +916,169 @@ Desktop smokes need an unlocked interactive Windows session.
   - No editor version bump (planned for S7).
 - Next: Session 5 (viewport tools and snapping), only when requested. Tool hints go to
   `workspace.notices.hint`.
+
+### Session 5 handoff — 2026-11-17
+
+- Start state: `feat/project-foundation` at 2fda133 (Session 4). Only the untracked starter-assets
+  zip and `docs/plans/editor-game-workflows.md` were present; both were left alone. Nothing was
+  committed.
+- Evidence check ("Current code"): it matched. `GizmoMath.drag` took a `snap: Boolean` that
+  rounded to 0.1; `ViewportGizmos.move` snapped with `state.snap || event.isShiftDown`; the
+  "Snap 0.1" checkbox was in `GizmoControls`. The native grid was not set by the bridge at all:
+  `EntityPreviewSystem::submitOverlay` drew a power-of-ten grid from the view size, with no
+  major lines. The Scene-mode picking and pending-single logic lived inline in
+  `NativeViewportOwner.mousePressed`.
+- Implemented (editor, paths under `tools/editor/src/main/kotlin/sle/editor/`):
+  - `viewport/SnapService.kt`: `SnapSettings(enabled, move, rotateDegrees, scale)` with validated
+    ranges and the decision #4 defaults (off; 1, 15°, 0.1); `SnapMath.value/point/next` (symmetric
+    half-away-from-zero rounding, results cleaned to the step's decimals, never −0.0; `next` moves
+    to the next grid line in a direction); `SnapService` (Compose state, `active(invert)`,
+    `moveStep(invert)`, `placement`, `toggle`, `update` persists, `load` does not).
+  - `viewport/SnapSettingsStore.kt`: JSON codec (`{"enabled","move","rotate","scale"}`, missing
+    fields default) and the standalone store `snap-settings.json` beside the standalone layout.
+  - `GizmoMath.drag(…, snap: Double?, axis: DragAxis)`: `DragAxis` Free/X/Y constrains the
+    pointer and snaps only the moved axes. Entity positions are snapped as given, which in the Scene
+    view is world space; `SceneWorkspaceState.applyWorldDocument` converts to local afterwards.
+  - `ViewportGizmos`: takes the `SnapService`; `press(point, camera)`, `pressMove(point, camera,
+    axis)` for tool handles, `move(point, shift, ctrl)` (Ctrl inverts snapping, Shift keeps the
+    dominant axis of a move handle), `constrainedAxis` for hints, and `nudge(direction, shift,
+    ctrl)`: the next grid line while snapping, else 0.1 / Shift 1. Multi-selection groups and
+    `NudgeMergeKey` merging are unchanged; the active entity decides the delta.
+  - `viewport/tools/`: `ViewportToolId` (Select Q, Move W), `ViewportToolState` (active tool and
+    gesture hint; `activate` finishes the running gesture first), the `ViewportTool` interface
+    (`cursor`, `hint`, `press/drag/release/key/cancel/finish`, `gestureHint`, `handles`, `draw`),
+    `ToolHost`, `MoveHandles` geometry, `PickingTool` (click, Shift/Ctrl toggle, marquee on empty
+    space with Shift/Ctrl adding, body drag, pending single), `SelectTool`, `MoveTool` (arrows and
+    square win over picking), `marqueeHits`, `toolHint`, `formatStep`.
+  - `NativeViewportOwner`: owns a `ToolHost`; right-click, pan, zoom and entity drag to Assets stay
+    ahead of it. Scene left-button gestures and keys go to the active tool; the Entity tab still
+    calls `ViewportGizmos` directly (decision #5). The presenter shows the tool cursor. The overlay
+    draws the Move arrows (`viewportXAxis`/`viewportYAxis`, the dragged one in
+    `selectionOutline`) and the marquee; the Move tool hides the small entity cross/square. The
+    owner pushes `snap.gridSpacing` with a major interval of 10 to the bridge whenever it changes
+    and after every session recreation. `frameBounds` (F) zooms and pans the editor camera;
+    right-click creation positions go through `snap.placement` (Ctrl at the right-click inverts).
+  - `viewport/EntitySelection.kt`: `Bounds`, `entityWorldPoints`/`entityWorldBounds`/
+    `entityScreenBounds` (rotated corners, enabled and visible shapes, camera view, position);
+    `entitySelectionBounds` now builds on them. `frameView` is the pure Frame Selected math.
+  - `SceneWorkspaceState.selectBox(keys, additive)`.
+  - Commands (`command/ToolCommands.kt`): Select Tool (Q), Move Tool (W) and Frame Selected (F),
+    scoped to the Scene view and the Hierarchy and disabled outside the Scene view (with a reason);
+    Snapping (toggle) and Configure Snap… without chords. `CommandContext` gains `tools` and
+    `snap`; `EditorActions` gains `frameSelected` and `configureSnap`.
+  - Menus: a **Tools** menu (Select Tool, Move Tool, Turn Snapping On/Off, Configure Snap…);
+    View gains Frame Selected beside Fit. Help → Keyboard Shortcuts lists Q/W/F from the
+    registry; its mouse section adds box select, Shift axis lock and Ctrl inversion and drops
+    "Shift snaps".
+  - UI: `EditorIconToggle` and the `ToolSelect`, `ToolMove` and `Snap` glyphs;
+    `ui/ViewportToolControls.kt` (the Q/W group in the Scene view, the magnet toggle and a
+    Configure Snap… button in the Scene and Prefab viewport toolbars; tooltips show chords and
+    the step) and `SnapSettingsDialog` (toggle, move/rotate/scale steps, validation).
+  - Status bar: in the editable Scene view the left slot shows the gesture hint during a drag or
+    box, else the active tool's hint with the snapping state.
+  - Persistence: `ProjectEditorState.snap` is optional; a missing block parses as before, a
+    damaged block falls back to defaults with a notice and keeps the rest; writers that pass no
+    snap keep the stored one. `EditorWorkspace` owns `snap` and `tools`, loads snap settings on
+    project open/close (project `.sle/` state or the standalone store) and saves each change at
+    once. Smokes use a temporary standalone store.
+  - Removed: `EntityWorkspaceState.snap` and the "Snap 0.1" checkbox.
+  - Asset drops land on the move step while snapping; otherwise they keep the old whole-unit
+    rounding.
+- Native (engine 0.17.0 → **0.18.0**, MINOR for the feature):
+  - `EditorGrid{spacing, majorEvery}` and `EntityPreviewSystem::gridLines` (spacing 0 keeps the
+    automatic grid; too-dense grids step up by the major interval; at most ~102 lines per axis;
+    major lines above minor ones, both below axes and entity marks).
+  - `Runtime::setEditorGrid/getEditorGrid` (invalid values rejected); both overlay call sites
+    pass it. Systems keeps its existing dependencies; nothing new was linked.
+  - Bridge `NativeEngine.setEditorGrid(session, spacing, majorEvery)`.
+  - Tests: `integration_entity_authoring_path` checks the grid math (CI-run), and the new
+    windowed `integration_editor_grid_path` checks that the setting changes Scene view pixels
+    but not Game view pixels, transforms, the game camera or the editor camera, and that
+    restoring the automatic grid restores the Scene pixels.
+- Deliberate choices (correct them if wrong):
+  - E/R are not registered: a stub would add disabled buttons and menu items with no behaviour.
+    S6 adds them to `ViewportToolId`, `ToolHost` and the glyph map.
+  - The marquee works in both tools, as in Unity. It selects by the unpadded screen-space
+    selection bounds, so a rotated sprite's bounding box corners count (that is the plan's
+    "selection bounds intersect").
+  - Ctrl also inverts snapping for arrow nudges and right-click creation. Drops use the toggle
+    only (the drop carries no modifier state).
+  - Shift-click still toggles; Shift pressed during a move drag locks the dominant axis. Shift
+    held at the press of a Move arrow or square starts a constrained drag (handles win).
+  - Move arrows use world axes (no Local/Global toggle in L1).
+  - The active tool is kept for the editor session, not saved; snap settings are saved.
+  - Shape offsets, sizes and radii (scene shape mode and the Prefab tab) snap to the move step in
+    local units, as the old 0.1 snap did.
+  - Frame Selected is in View beside Fit, not duplicated in Tools.
+- Tests (`tools/editor/src/test/kotlin/sle/editor/`):
+  - `viewport/SnapServiceTest` (7): negative and half values, decimal cleaning, next grid line,
+    Ctrl inversion and placement, invalid settings; a snapped drag under a rotated and mirrored
+    parent (world snapped, local = world relative to the parent), Ctrl+Shift drag, an X-arrow
+    drag that keeps an off-grid Y; snapped nudge bursts as one step and the 0.1/1 steps;
+    creation under a parent; JSON codec and the standalone store, including a broken file.
+  - `viewport/tools/ViewportToolsTest` (7): marquee bounds with a 45° sprite; box select replace,
+    Shift add, empty clear, Esc cancel, click and Shift-click; Move arrows keep their axis,
+    switching tools mid-drag commits one step and ignores later events, Esc cancels a Move drag;
+    the square moves a multi-selection as one snapped step; hints; tool commands, chords and
+    enabled rules; `frameView`.
+  - `project/ProjectTest.snapSettingsAreOptionalPerUserProjectState`: an old state file without
+    snap, round trip, writers that keep snap, a damaged block.
+  - `project/ProjectWorkspaceDocumentsTest.snapSettingsFollowTheOpenProjectOrTheStandalonePrefs`.
+    It found a real bug: a successful project save also wrote the project's settings into the
+    standalone prefs (an `?:` fallthrough); fixed.
+  - `GizmoTest` call sites now use the new `drag` signature.
+- Smoke changes:
+  - `--gizmo-smoke` (Prefab tab): snapping through `SnapService` (move 0.1), a Ctrl+Shift drag
+    that stays on X and is unsnapped and one undo step, a snapped nudge to the next grid line,
+    then a plain 0.1 nudge.
+  - `--scene-smoke` gains `SCENE_TOOLS_SMOKE_PASS`: a focus click on empty space, **W** by Robot
+    with the native canvas focused, a click select, a snapped X-arrow drag (move 8) as one step
+    "Move Crate A" (`scene-move-tool.png`), a Shift+Ctrl square drag that stays on Y and is
+    unsnapped, Ctrl+Z ×2, **Q**, a marquee drag that selects exactly what `marqueeHits` reports
+    and both crates (`scene-marquee.png`), and **F** centring the view on the selection.
+  - `EngineCanvas.toolHandles()` and `frameBounds()` support them.
+- Commands run (Windows; Gradle from `tools/editor` through `gradle.ps1`, JDK 21):
+  - Native, from the repository root:
+    - `cmake --build build/debug --config Debug`: run 1 failed only in
+      `integration_entity_authoring_path` (a newline escape my edit script broke); after the fix
+      the two grid targets and `sle_editor_native` built.
+    - `ctest --test-dir build/debug -C Debug -R '^(integration_entity_authoring_path|integration_editor_grid_path)$' --output-on-failure`:
+      2/2 passed (the windowed test ran, not skipped).
+    - `cmake --build build/debug --config Debug` then `ctest --test-dir build/debug -C Debug --output-on-failure`:
+      build passed; **77/77 tests passed**.
+  - `compileKotlin`: failed once (recursive type inference between `project` and `snap` in
+    `EditorWorkspace`; explicit types fixed it), then on the old `state.snap` in `GizmoSmoke`, then
+    passed.
+  - `test --tests "sle.editor.viewport.*" --tests "sle.editor.command.*"`: the tests ran (one
+    wrong expectation of mine in `SnapServiceTest`: 40/16 rounds to 48), but the command did not
+    return because its output was piped through `head`; it was stopped.
+  - `build`: 320 tests, 1 failure (the standalone-prefs fallthrough above). After the fix:
+    **`build` passed, 320 tests, 0 failures, 2 existing skips.**
+  - `run --args=--gizmo-smoke` (from Git Bash): failed at the existing first stage
+    ("Transparent collider interior intercepted sprite click"). **The Windows session was locked**
+    (LockApp and LogonUI running; a desktop capture showed the lock screen), so Robot input never
+    reached the editor. This run is not evidence either way.
+  - `--scene-smoke` and `--context-menu-smoke`: not run then, for the same reason.
+  - 2026-11-18, with the desktop unlocked (LogonUI gone), each smoke ran once from Git Bash and
+    passed on the first run:
+    - `run --args=--gizmo-smoke`: `VIEWPORT_GIZMO_SMOKE_PASS picking/box/circle/independent-sprite/
+      move/snap/ctrl-invert/shift-axis/step-nudge/nudge/undo/redo/cancel/save/open`. So the
+      locked-session failure above was the lock, not a regression.
+    - `run --args=--scene-smoke`: `SCENE_TOOLS_SMOKE_PASS keys-with-native-focus/move-arrow-snap/
+      one-step/shift-axis/ctrl-invert/marquee/frame-selected`, `SCENE_MULTI_SELECT_SMOKE_PASS`,
+      `SCENE_EDITOR_SMOKE_PASS`, `EDITOR_UI_SCALE_PASS`, `SCENE_TREE_COMPONENT_HANDOFF_PASS`,
+      `SANDBOX_DESKTOP_PASS`, `SCENE_ENTITY_SANDBOX_SWITCH_PASS`. `build/reports/scene-move-tool.png`
+      shows the Move arrows on Crate A over the 8-unit grid; `scene-marquee.png` shows both crates
+      selected after the marquee, with the default grid back.
+    - `run --args=--context-menu-smoke`: `CONTEXT_MENU_SMOKE_PASS`,
+      `DETACHED_DELETE_PLAYBACK_SMOKE_PASS`, `MENU_KEYBOARD_SMOKE_PASS`,
+      `AUXILIARY_APPEARANCE_SMOKE_PASS`.
+- Docs: editor README (shortcut rows, snapping bullet, "Scene view tools and snapping"),
+  SceneEditor topic (tools and snapping bullet), UI_DESIGN (`EditorIconToggle` and glyphs, the
+  status bar's tool hint, grid and overlay tokens), Help → Keyboard Shortcuts.
+- Not done:
+  - No manual walk; the toolbar group, dialog, arrows and marquee have not been looked at in
+    either theme.
+  - No editor version bump (planned for S7).
+- Next: Session 6 (Rotate and Scale tools, Pivot/Center), only when requested. `SnapSettings`
+  already holds the rotate and scale steps.

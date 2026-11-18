@@ -130,12 +130,17 @@ internal fun editorApplicationMenus(
         "View" to listOf(
             EditorMenuEntry("Scene") { ctx.actions.showScene(false) },EditorMenuEntry("Game") { ctx.actions.showScene(true) },
             EditorMenuEntry("Prefab Workspace",ctx.editable) { ctx.actions.openPrefabWorkspace() },
-            entry(ViewCommands.fit),
+            entry(ViewCommands.fit),entry(sle.editor.command.ToolCommands.frameSelected),
             EditorMenuEntry.Separator,
             EditorMenuEntry("Appearance",children=sle.editor.ui.theme.EditorThemeMode.entries.map { mode -> EditorMenuEntry(mode.name) { onTheme(mode) } }),
             EditorMenuEntry("Density",children=sle.editor.ui.theme.EditorDensity.entries.map { density -> EditorMenuEntry(density.name) { onDensity(density) } }),
             EditorMenuEntry("UI Scale",children=listOf(0.75f,0.85f,1f).map { scale -> EditorMenuEntry("${(scale*100).toInt()}%") { onScale(scale) } }),
         ) + assetEntries,
+        "Tools" to sle.editor.command.ToolCommands.tools.map(::entry) + listOf(
+            EditorMenuEntry.Separator,
+            sle.editor.command.ToolCommands.toggleSnap.menuEntry(ctx,keymap,sle.editor.command.ToolCommands.toggleSnapLabel(ctx)),
+            entry(sle.editor.command.ToolCommands.configureSnap),
+        ),
         "Help" to listOf(
             entry(ViewCommands.keyboardShortcuts),
             EditorMenuEntry("About SLE Editor…") { EditorDialogs.showMessageDialog(null,"SLE Editor\nKotlin Compose Desktop · SLE native renderer\nScene and prefab authoring", "About",JOptionPane.INFORMATION_MESSAGE) },

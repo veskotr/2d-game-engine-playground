@@ -15,11 +15,13 @@ internal class EditorEngineSession(
     onFailure: (Throwable) -> Unit = {},
     onStatus: (String) -> Unit = {},
     previewSmoke: Boolean = false,
+    snap: SnapService = SnapService(),
+    tools: sle.editor.viewport.tools.ViewportToolState = sle.editor.viewport.tools.ViewportToolState(),
 ) : AutoCloseable {
     var onFrame = onFrame
     var onFailure = onFailure
     var onStatus = onStatus
-    internal val owner = NativeViewportOwner(smoke,{n,m -> this.onFrame(n,m)},{this.onFailure(it)},{this.onStatus(it)},previewSmoke)
+    internal val owner = NativeViewportOwner(smoke,{n,m -> this.onFrame(n,m)},{this.onFailure(it)},{this.onStatus(it)},previewSmoke,snap,tools)
     private var host: JFrame? = null
     fun start() {
         check(EventQueue.isDispatchThread())
@@ -90,6 +92,7 @@ internal class EditorEngineSession(
     fun setSceneView(game: Boolean, onError: (String)->Unit) = owner.setSceneView(game,onError)
     fun finishGesture() = owner.finishGesture()
     fun fitEntity() = owner.fitEntity()
+    fun frameBounds(bounds: Bounds) = owner.frameBounds(bounds)
     fun zoomEntity(factor: Float) = owner.zoomEntity(factor)
     fun setViewRequest(view: ViewId, request: ViewRequest?) {
         check(EventQueue.isDispatchThread())

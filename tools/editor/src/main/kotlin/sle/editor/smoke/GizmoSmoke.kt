@@ -3,6 +3,9 @@ package sle.editor.smoke
 import sle.editor.model.EntityWorkspaceState
 import sle.editor.viewport.EngineCanvas
 import sle.editor.viewport.GizmoShape
+import sle.editor.viewport.SnapMath
+import sle.editor.viewport.SnapService
+import sle.editor.viewport.SnapSettings
 import sle.editor.viewport.Vec2
 
 import kotlinx.coroutines.delay
@@ -16,7 +19,7 @@ import java.nio.file.Path
 import javax.imageio.ImageIO
 import kotlin.math.*
 
-internal suspend fun runGizmoSmoke(canvas: EngineCanvas, state: EntityWorkspaceState) {
+internal suspend fun runGizmoSmoke(canvas: EngineCanvas, state: EntityWorkspaceState, snap: SnapService) {
     val robot=Robot()
     suspend fun ready() {
         repeat(100) { if (canvas.authoringReady()) { delay(80); return }; delay(30) }
@@ -30,11 +33,13 @@ internal suspend fun runGizmoSmoke(canvas: EngineCanvas, state: EntityWorkspaceS
         if (control) robot.keyRelease(KeyEvent.VK_CONTROL)
         delay(140); ready()
     }
-    suspend fun drag(from: Vec2,to: Vec2,cancel: Boolean = false) {
+    /** [held] modifiers are pressed after the button, so they act on the drag rather than the click. */
+    suspend fun drag(from: Vec2,to: Vec2,cancel: Boolean = false,held: List<Int> = emptyList()) {
         move(pixel(from)); robot.mousePress(InputEvent.BUTTON1_DOWN_MASK); delay(80)
+        held.forEach { robot.keyPress(it) }
         for (i in 1..6) { move(pixel(from+(to-from)*(i/6.0))); delay(40) }
         if (cancel) key(KeyEvent.VK_ESCAPE)
-        robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK); delay(160); ready()
+        robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK); held.asReversed().forEach { robot.keyRelease(it) }; delay(160); ready()
     }
     // Activate the desktop window before the first drag, including on Windows
     // sessions where the initial click is consumed solely for activation.
@@ -86,12 +91,25 @@ internal suspend fun runGizmoSmoke(canvas: EngineCanvas, state: EntityWorkspaceS
     val scaled=GizmoShape.from(state.document,"SpriteRenderer")!!
     check(scaled.size.x>sprite.size.x && scaled.size.y>sprite.size.y) { "Sprite size handle failed" }
     check(state.document.components["Transform"]==transformBeforeSprite && state.document.components["BoxCollider"]==colliderBeforeSprite) { "Sprite resizing changed collider/transform" }
-    state.selectedTarget="Entity"; state.snap=true; delay(100)
+    // Snapping comes from the per-user SnapService (Configure Snap); Ctrl inverts it for one drag
+    // or nudge and Shift keeps a move on its dominant axis.
+    state.selectedTarget="Entity"; snap.update(SnapSettings(enabled=true,move=0.1)); delay(100)
+    fun onStep(value: Double) = abs(value*10-round(value*10))<1e-6
     drag(scaled.position,scaled.position+Vec2(0.24,0.16))
     val entity=GizmoShape.from(state.document,"Entity")!!
-    check(abs(entity.position.x*10-round(entity.position.x*10))<1e-6) { "Move did not snap" }
+    check(onStep(entity.position.x) && onStep(entity.position.y)) { "Move did not snap: ${entity.position}" }
+    val snappedSteps=state.history.undoLabels.size
+    drag(entity.position,entity.position+Vec2(0.37,0.05),held=listOf(KeyEvent.VK_CONTROL,KeyEvent.VK_SHIFT))
+    val free=GizmoShape.from(state.document,"Entity")!!.position
+    check(abs(free.y-entity.position.y)<1e-9 && free.x>entity.position.x+0.2) { "Shift did not keep the drag on X: ${entity.position} -> $free" }
+    check(!onStep(free.x)) { "Ctrl did not turn snapping off for the drag: $free" }
+    check(state.history.undoLabels.size==snappedSteps+1) { "A drag was not one undo step" }
     key(KeyEvent.VK_RIGHT)
-    check(GizmoShape.from(state.document,"Entity")!!.position.x>entity.position.x+0.09) { "Keyboard nudge failed" }
+    val nudged=GizmoShape.from(state.document,"Entity")!!.position
+    check(abs(nudged.x-SnapMath.next(free.x,0.1,1))<1e-9 && nudged.y==free.y) { "Snapped nudge did not reach the next step: $free -> $nudged" }
+    snap.update(SnapSettings(enabled=false,move=0.1))
+    key(KeyEvent.VK_RIGHT)
+    check(abs(GizmoShape.from(state.document,"Entity")!!.position.x-(nudged.x+0.1))<1e-9) { "Keyboard nudge failed" }
     val persisted=state.document
     val path=Path.of(System.getProperty("sle.smokeReport")).resolveSibling("gizmo-edited.sleprefab")
     state.save(path); state.newDocument(); state.open(path); ready()
@@ -111,7 +129,7 @@ internal suspend fun runGizmoSmoke(canvas: EngineCanvas, state: EntityWorkspaceS
     check(handles>30) { "Editor handles missing from desktop: $handles" }
     val report=File(System.getProperty("sle.smokeReport")).parentFile.resolve("gizmo-editor.png")
     ImageIO.write(desktop,"png",report)
-    println("VIEWPORT_GIZMO_SMOKE_PASS picking/box/circle/independent-sprite/move/snap/nudge/undo/redo/cancel/save/open handles=$handles image=$report")
+    println("VIEWPORT_GIZMO_SMOKE_PASS picking/box/circle/independent-sprite/move/snap/ctrl-invert/shift-axis/step-nudge/nudge/undo/redo/cancel/save/open handles=$handles image=$report")
 }
 
 /** Fixtures built for engine-sized shapes: add a component without the editor's practical

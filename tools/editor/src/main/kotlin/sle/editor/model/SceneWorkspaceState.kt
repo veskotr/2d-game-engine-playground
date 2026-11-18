@@ -163,6 +163,18 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     }
     /** A plain press on an entity that is already selected keeps the set and makes it active. */
     fun activate(key: String) { if(key in selection && key!=selectedKey) { selected?.endGesture();selection.activate(key) } }
+    /** Box select: [keys] (in scene order) replace the selection, or join it when [additive]. The
+     * active entity stays active when it is still selected; selection is never an undo step. */
+    fun selectBox(keys: List<String>,additive: Boolean) {
+        val hits=keys.filter(::exists).distinct()
+        if(additive && hits.isEmpty()) return
+        selected?.endGesture()
+        when {
+            additive -> selection.set((selection.keys+hits).distinct(),selectedKey ?: hits.first())
+            hits.isEmpty() -> selection.clear()
+            else -> selection.set(hits,selectedKey?.takeIf { it in hits } ?: hits.first())
+        }
+    }
     /** Ctrl+A: every entity, keeping the active one when there is one. */
     fun selectAll() { selected?.endGesture();selection.set(entities.map { it.document.key },selectedKey ?: entities.firstOrNull()?.document?.key) }
     fun addEntity(position: Vec2?=null) = createEntity(position=position)

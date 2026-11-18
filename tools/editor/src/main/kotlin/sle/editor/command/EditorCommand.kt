@@ -35,6 +35,10 @@ internal data class CommandContext(
     val focusedPanel: PanelId? = null,
     val modalOpen: Boolean = false,
     val textInputFocused: Boolean = false,
+    /** The Scene view's active tool (per-user state). */
+    val tools: sle.editor.viewport.tools.ViewportToolState? = null,
+    /** Snap steps and toggle (per user, per project). */
+    val snap: sle.editor.viewport.SnapService? = null,
     val actions: EditorActions = EditorActions.None,
 ) {
     val documentKind get() = if(mode != ViewportMode.Entity || linked) DocumentKind.Scene else DocumentKind.Prefab
@@ -57,6 +61,10 @@ internal interface EditorActions {
     fun showPanel(panel: PanelId) {}
     fun finishGesture() {}
     fun fit() {}
+    /** Fits the Scene view to the selected entities. */
+    fun frameSelected() {}
+    /** Opens the Configure Snap dialog. */
+    fun configureSnap() {}
     fun runProject() {}
     fun showKeyboardShortcuts() {}
     object None : EditorActions

@@ -66,4 +66,4 @@ existing component masks.
 
 ## Deep Reference
 
-- `docs/BOX2D_PHYSICS_INTEGRATION_PLAN.md`
+- `docs/archive/BOX2D_PHYSICS_INTEGRATION_PLAN.md`

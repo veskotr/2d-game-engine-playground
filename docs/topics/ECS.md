@@ -34,5 +34,5 @@ Transform fields should be changed through existing setters so dirty flags and h
 
 ## Deep Reference
 
-- `docs/COMPONENT_SYSTEM_GUIDE.md`
-- `docs/SCENE_ECS_CURRENT.md`
+- `docs/archive/COMPONENT_SYSTEM_GUIDE.md`
+- `docs/archive/SCENE_ECS_CURRENT.md`

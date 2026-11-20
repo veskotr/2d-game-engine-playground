@@ -53,7 +53,7 @@ This file is the compact rulebook for code and documentation work.
 - Update docs in the same task as code behavior changes.
 - Keep new docs small and topic-specific.
 - Put temporary progress in the relevant task plan; see `PLANS.md`.
-- Treat `docs/CURRENT_TASK.md` as historical unless explicitly refreshed.
+- Treat `docs/archive/CURRENT_TASK.md` as historical unless explicitly refreshed.
 - Put durable decisions in `docs/PROJECT_MEMORY.md`.
 - Put rules and invariants here.
 - Update affected `docs/modules/*.md` and `docs/topics/*.md`.

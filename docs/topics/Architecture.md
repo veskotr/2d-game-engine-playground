@@ -36,6 +36,6 @@ Applications and examples consume these modules.
 
 ## Deep References
 
-- `docs/ARCHITECTURE_VERIFIED.md`
-- `docs/ARCHITECTURE.md`
-- `docs/CODEBASE_ARCHITECTURE_ANALYSIS.md`
+- `docs/archive/ARCHITECTURE_VERIFIED.md`
+- `docs/archive/ARCHITECTURE.md`
+- `docs/archive/CODEBASE_ARCHITECTURE_ANALYSIS.md`

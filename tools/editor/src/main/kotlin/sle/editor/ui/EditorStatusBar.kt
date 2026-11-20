@@ -101,7 +101,7 @@ internal fun EditorStatusBar(notices: EditorNotices, status: EditorStatus, modif
                 } }
                 if(status.selectionCount>0) items+={ StatusText("${status.selectionCount} selected") }
                 status.playState?.let { state -> items+={ StatusText(state) } }
-                if(status.dirty) items+={ EditorTooltip("The active document has unsaved changes") { StatusText("Unsaved",c.textPrimary) } }
+                if(status.dirty) items+={ StatusText("Unsaved",c.textPrimary, help = "The active document has unsaved changes") }
                 items.forEachIndexed { index,item ->
                     if(index>0) EditorSeparator(Modifier.height(m.iconSmall),vertical=true)
                     item()
@@ -112,8 +112,8 @@ internal fun EditorStatusBar(notices: EditorNotices, status: EditorStatus, modif
 }
 
 @Composable
-private fun StatusText(text: String, color: Color = LocalEditorColors.current.textSecondary) =
-    Text(text,color=color,style=LocalEditorTypography.current.secondary,maxLines=1,softWrap=false)
+private fun StatusText(text: String, color: Color = LocalEditorColors.current.textSecondary, help: String = text) =
+    EditorLabel(text,color=color,style=LocalEditorTypography.current.secondary,maxLines=1,softWrap=false,help=help)
 
 @Composable
 private fun NoticeChip(notices: EditorNotices, notice: EditorNotice, modifier: Modifier) {

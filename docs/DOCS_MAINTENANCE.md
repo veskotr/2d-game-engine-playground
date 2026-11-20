@@ -12,8 +12,8 @@ Update documentation when the facts it describes change:
 - A task-specific plan following [PLANS.md](../PLANS.md) for substantial work.
 
 Do not require updates to every context file for each task. Keep temporary progress
-in the relevant plan. `CURRENT_TASK.md` is a historical handoff unless explicitly
-updated for a current request; its presence does not authorize continuing old work.
+in the relevant plan. Keep historical handoffs and superseded references in
+[archive/](archive/), and original editor design materials in [design/editor/](design/editor/).
 
 Older long-form references and implementation plans may describe past states or
 future intent. Verify relevant claims against code. Correct or mark stale sections

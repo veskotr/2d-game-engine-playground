@@ -29,5 +29,5 @@ visibility or recreating cached documents; see [Chunks](Chunks.md).
 
 ## Deep Reference
 
-- `docs/UI_PROGRESS.md`
-- `docs/UI_IMPLEMENTATION_PLAN.md`
+- `docs/archive/UI_PROGRESS.md`
+- `docs/archive/UI_IMPLEMENTATION_PLAN.md`

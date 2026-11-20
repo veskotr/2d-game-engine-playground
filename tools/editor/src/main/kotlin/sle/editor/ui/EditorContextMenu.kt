@@ -92,7 +92,7 @@ internal fun buildEditorPopup(entries: List<EditorMenuEntry>, appearance: MenuAp
         return result.apply {
             isOpaque=true
             isEnabled=entry.enabled
-            toolTipText=entry.help
+            toolTipText=entry.help?.takeIf { it.isNotBlank() } ?: entry.label
             background=appearance.surface;foreground=appearance.foreground;font=appearance.font
             putClientProperty(EditorIcons.MENU_ICON_KEY,entry.icon)
             icon=EditorIcons.menuIcon(entry.icon,entry.label,appearance)

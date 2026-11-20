@@ -1,5 +1,6 @@
 package sle.editor.ui
 
+import sle.editor.ui.controls.EditorLabel
 import sle.editor.project.assets.LocalProjectAssets
 import sle.editor.files.chooseTexture
 import sle.editor.scripts.LocalNewScriptBehavior
@@ -42,14 +43,14 @@ internal fun EntityWorkspace(state: EntityWorkspaceState, embedded: Boolean = fa
                     }
                 },Modifier.weight(1f),showLabel=false)
             }
-            if (state.fieldErrors.isNotEmpty()) Text("Finish the highlighted fields before saving.", color = MaterialTheme.colors.error)
+            if (state.fieldErrors.isNotEmpty()) EditorLabel("Finish the highlighted fields before saving.", color = MaterialTheme.colors.error)
             sle.editor.ui.controls.EditorToggle("Assets (${state.assets.size})",assetsExpanded,{ assetsExpanded = it },
                 style=sle.editor.ui.controls.EditorButtonStyle.Ghost)
             if (state.assets.isNotEmpty() && (!embedded || assetsExpanded)) {
                 Column(Modifier.fillMaxWidth().heightIn(max = m.compactListMaxHeight).verticalScroll(rememberScrollState())) {
                     state.assets.forEach { (path, name) ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Text(name, Modifier.weight(1f), style = MaterialTheme.typography.caption)
+                            EditorLabel(name, Modifier.weight(1f), style = MaterialTheme.typography.caption)
                             sle.editor.ui.controls.EditorButton("Unlist",{ state.removeAsset(path) },style=sle.editor.ui.controls.EditorButtonStyle.Ghost)
                         }
                     }
@@ -92,7 +93,7 @@ internal fun InspectorComponent(state: EntityWorkspaceState, component: String, 
         { expanded -> state.endGesture();state.inspectorSections.setExpanded(identity,component,expanded) },actions=actions,
         headingModifier=sle.editor.ui.inspector.detailsComponentMenu(state,component,readOnly)) {
         if (sle.editor.model.isEventArea(component) && "RigidBody" !in state.document.components) {
-            Text("Add a Rigid Body on this entity to receive zone events.", color = MaterialTheme.colors.error)
+            EditorLabel("Add a Rigid Body on this entity to receive zone events.", color = MaterialTheme.colors.error)
         }
         if (component == "Tags") {
             TagMembership(state, tags, readOnly)

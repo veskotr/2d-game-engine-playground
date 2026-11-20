@@ -1,7 +1,7 @@
 package sle.editor.ui.inspector
 
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -87,8 +87,8 @@ internal fun BehaviourParameterFields(state: EntityWorkspaceState, script: JsonO
         if (!hasProperties && openScript == null) return@forEach
         key(state, state.document.key, attachment, asset) {
             if (openScript != null) ScriptSourceRow(attachment) { openScript(asset) }
-            else Text(attachment, style = MaterialTheme.typography.subtitle2)
-            discovery.error?.let { Text(it, color = MaterialTheme.colors.error, style = MaterialTheme.typography.caption) }
+            else EditorLabel(attachment, style = MaterialTheme.typography.subtitle2)
+            discovery.error?.let { EditorLabel(it, color = MaterialTheme.colors.error, style = MaterialTheme.typography.caption) }
             if (catalog != null) key(discovery) {
                 val overrides = (entry["parameters"] as? JsonObject).orEmpty()
                 catalog.fields.keys.forEach { path ->

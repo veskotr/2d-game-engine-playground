@@ -8,7 +8,7 @@
 
 **Tech Stack:** Existing Kotlin/JVM, Compose Desktop Material, Swing/AWT, JDK 21 and Windows native viewport; no dependency upgrade.
 
-**Spec:** Root `SLE_EDITOR_UI_DESIGN.md`, `SLE_Design_Prompt.txt`, and [scope/shared constraints](README.md).
+**Spec:** `docs/design/editor/SLE_EDITOR_UI_DESIGN.md`, `docs/design/editor/SLE_Design_Prompt.txt`, and [scope/shared constraints](README.md).
 
 ## Global constraints
 

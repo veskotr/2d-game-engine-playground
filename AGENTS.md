@@ -11,7 +11,7 @@ Lua 5.4, OpenGL, Box2D, and XML UI. Systems owns runtime orchestration.
 - Treat code and CMake targets as evidence of current behavior. Plans and old
   “verified” documents can describe historical or unfinished work.
 - The user's current request defines the task. Do not resume work merely because
-  `docs/CURRENT_TASK.md` or a roadmap says it is active.
+  `docs/archive/CURRENT_TASK.md` or a roadmap says it is active.
 
 ## Repository map
 

@@ -13,12 +13,14 @@ SLE is a modular C++ 2D game engine with ECS scene data, Lua scripting, command-
 ## Repository Layout
 
 - `EngineModules/` - engine modules (`Core`, `Events`, `Platform`, `Renderer`, `Resources`, `Scene`, `Physics`, `Scripting`, `UI`, `Systems`)
+- `engine_app/` - standalone launcher configured by `engine.json`
 - `examples/` - runnable sample applications
 - `assets/` - shared runtime assets
 - `tests/` - smoke, integration, and harness tests
-- `docs/` - constraints, module docs, topic docs, and historical references
+- `docs/` - [module and topic guides, plans, design sources, and archived references](docs/README_DOCUMENTATION.md)
 - `cmake/` - dependency setup and CMake helpers
 - `tools/editor/` - [Kotlin Compose Desktop editor with an embedded SLE viewport](tools/editor/README.md)
+- `tools/editor-native/` - C++ bridge between the editor and the engine
 
 ## Build
 

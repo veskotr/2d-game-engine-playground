@@ -85,9 +85,9 @@ internal fun AssetBrowserPanel(
                     EditorButton("Open in IDE", onClick = { onOpenScript(selected.path, id) },
                         style = EditorButtonStyle.Ghost)
                 }
-                Text(selected.name,style=LocalEditorTypography.current.heading)
-                Text(selected.path,style=MaterialTheme.typography.caption)
-                state.snapshot?.idsByPath?.get(selected.path)?.let { Text("UUID: $it",style=MaterialTheme.typography.caption) }
+                EditorLabel(selected.name,style=LocalEditorTypography.current.heading)
+                EditorLabel(selected.path,style=MaterialTheme.typography.caption)
+                state.snapshot?.idsByPath?.get(selected.path)?.let { EditorLabel("UUID: $it",style=MaterialTheme.typography.caption) }
                 if (commands != null && snapshot?.idsByPath?.containsKey(selected.path) == true && isTextureAsset(selected.path)) {
                     EditorSelect("Texture filter", snapshot.textureFilters[selected.path]?.label ?: "Default",
                         listOf("Default") + AssetTextureFilter.entries.map { it.label },
@@ -103,9 +103,9 @@ internal fun AssetBrowserPanel(
                         EditorButton("Assign New UUID…",onClick=commands.repair,enabled=!commands.busy,style=EditorButtonStyle.Ghost)
                     }
                 }
-                Text(type(selected),style=MaterialTheme.typography.caption)
-                if(selected.kind==AssetKind.File) Text(size(selected.size),style=MaterialTheme.typography.caption)
-                Text(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(selected.modified)),style=MaterialTheme.typography.caption)
+                EditorLabel(type(selected),style=MaterialTheme.typography.caption)
+                if(selected.kind==AssetKind.File) EditorLabel(size(selected.size),style=MaterialTheme.typography.caption)
+                EditorLabel(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(selected.modified)),style=MaterialTheme.typography.caption)
             }
         }
     }
@@ -142,19 +142,19 @@ internal fun AssetBrowserPanel(
                 // The entity-drag hint replaces the count in place: inserting a line would shift the
                 // folder rows under the pointer mid-drag and drop into the wrong folder.
                 val entityDrag=EntityDrag.dragging.takeIf { folderTargets }
-                Text(entityDrag?.let { "Drop ${it.label} on a folder to save it as a linked entity template · Esc cancels" }
+                EditorLabel(entityDrag?.let { "Drop ${it.label} on a folder to save it as a linked entity template · Esc cancels" }
                     ?: "${children.size} ${if(children.size==1) "item" else "items"}",color=if(entityDrag!=null) tokens.focusRing else tokens.textSecondary,style=MaterialTheme.typography.caption)
             }
             EditorSeparator()
-            sle.editor.ui.AssetDrag.dragging?.let { Text("Drop ${it.fileName} on the Scene view or Hierarchy",style=MaterialTheme.typography.caption,color=tokens.textSecondary,modifier=Modifier.padding(horizontal=metrics.panelPadding)) }
-            commands?.message?.let { Text(it,style=MaterialTheme.typography.caption,modifier=Modifier.padding(horizontal=metrics.panelPadding)) }
+            sle.editor.ui.AssetDrag.dragging?.let { EditorLabel("Drop ${it.fileName} on the Scene view or Hierarchy",style=MaterialTheme.typography.caption,color=tokens.textSecondary,modifier=Modifier.padding(horizontal=metrics.panelPadding)) }
+            commands?.message?.let { EditorLabel(it,style=MaterialTheme.typography.caption,modifier=Modifier.padding(horizontal=metrics.panelPadding)) }
             state.snapshot?.errors?.let { errors -> if(errors.isNotEmpty()) {
                 var showErrors by remember { mutableStateOf(false) }
                 EditorButton("${errors.size} asset issue(s): ${errors.first()}",{showErrors=true},style=EditorButtonStyle.Ghost)
                 val dialogAppearance=sle.editor.ui.theme.LocalEditorAppearance.current
                 if(showErrors) androidx.compose.ui.window.DialogWindow(onCloseRequest={showErrors=false},title="Asset issues") {
                     sle.editor.ui.EditorTheme(dialogAppearance) { Surface(Modifier.fillMaxSize()) {
-                        Column(Modifier.fillMaxSize().padding(metrics.panelPadding).verticalScroll(rememberScrollState())) { errors.forEach { Text(it);Spacer(Modifier.height(metrics.gap)) } }
+                        Column(Modifier.fillMaxSize().padding(metrics.panelPadding).verticalScroll(rememberScrollState())) { errors.forEach { EditorLabel(it);Spacer(Modifier.height(metrics.gap)) } }
                     } }
                 }
             } }
@@ -172,9 +172,9 @@ internal fun AssetBrowserPanel(
                 }
                 Column(Modifier.weight(1f).fillMaxHeight()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal=metrics.panelPadding,vertical=metrics.gap)) {
-                        Text("Name",Modifier.weight(1f),color=tokens.textSecondary,style=MaterialTheme.typography.caption)
-                        if(showType) Text("Type",Modifier.width(metrics.assetTypeWidth),color=tokens.textSecondary,style=MaterialTheme.typography.caption)
-                        if(showSize) Text("Size",Modifier.width(metrics.assetSizeWidth),color=tokens.textSecondary,style=MaterialTheme.typography.caption)
+                        EditorLabel("Name",Modifier.weight(1f),color=tokens.textSecondary,style=MaterialTheme.typography.caption)
+                        if(showType) EditorLabel("Type",Modifier.width(metrics.assetTypeWidth),color=tokens.textSecondary,style=MaterialTheme.typography.caption)
+                        if(showSize) EditorLabel("Size",Modifier.width(metrics.assetSizeWidth),color=tokens.textSecondary,style=MaterialTheme.typography.caption)
                     }
                     EditorSeparator()
                     Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -198,9 +198,9 @@ internal fun AssetBrowserPanel(
                                         snapshot?.thumbnailRevision ?: 0, measured("AssetThumbnail:${entry.path}"))
                                 } else TreeIcon(if(entry.kind==AssetKind.Directory) "Folder" else if(entry.kind==AssetKind.Link) "Link" else "File")
                                 Spacer(Modifier.width(metrics.gap))
-                                Text(entry.name,Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.body2)
-                                if(showType) Text(type(entry),Modifier.width(metrics.assetTypeWidth),color=tokens.textSecondary,style=MaterialTheme.typography.caption)
-                                if(showSize) Text(if(entry.kind==AssetKind.File) size(entry.size) else "—",Modifier.width(metrics.assetSizeWidth),color=tokens.textSecondary,style=MaterialTheme.typography.caption)
+                                EditorLabel(entry.name,Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.body2)
+                                if(showType) EditorLabel(type(entry),Modifier.width(metrics.assetTypeWidth),color=tokens.textSecondary,style=MaterialTheme.typography.caption)
+                                if(showSize) EditorLabel(if(entry.kind==AssetKind.File) size(entry.size) else "—",Modifier.width(metrics.assetSizeWidth),color=tokens.textSecondary,style=MaterialTheme.typography.caption)
                             }
                         }
                     }

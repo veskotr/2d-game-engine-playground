@@ -1,7 +1,7 @@
 package sle.editor.ui.inspector
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextRange
@@ -125,7 +125,7 @@ private fun InspectorPropertyRow(
     EditorPropertyRow(label, help = help, labelModifier = labelModifier) {
         Column(Modifier.weight(1f)) {
             content(readOnly)
-            if (invalid) Text(
+            if (invalid) EditorLabel(
                 if (property.kind in setOf(PropertyKind.Number, PropertyKind.Integer)) "Enter a valid number." else "Enter a valid JSON value.",
                 color = LocalEditorColors.current.error, style = sle.editor.ui.theme.LocalEditorTypography.current.secondary,
             )

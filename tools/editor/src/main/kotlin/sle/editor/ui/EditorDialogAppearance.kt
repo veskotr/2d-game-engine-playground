@@ -138,6 +138,18 @@ internal object EditorDialogAppearance {
                 textNonSelectionColor=color(colors.textPrimary);textSelectionColor=color(colors.textPrimary);borderSelectionColor=color(colors.focusRing)
             }
         }
+        if (component is JComponent && component.toolTipText.isNullOrBlank()) {
+            component.toolTipText = when (component) {
+                is AbstractButton -> component.text?.takeIf { it.isNotBlank() } ?: component.accessibleContext?.accessibleName
+                is JLabel -> component.text?.takeIf { it.isNotBlank() }
+                is JTextComponent, is JComboBox<*> -> {
+                    val prompt = (SwingUtilities.getAncestorOfClass(JOptionPane::class.java, component) as? JOptionPane)
+                        ?.takeIf { it.wantsInput }?.message as? String
+                    prompt ?: component.accessibleContext?.accessibleName?.takeIf { it.isNotBlank() } ?: "Input value"
+                }
+                else -> null
+            }
+        }
         if(component is JComponent && component.getClientProperty("sle.dialog.styled")!=true) {
             component.putClientProperty("sle.dialog.styled",true)
             component.addPropertyChangeListener("enabled") { style(component) }

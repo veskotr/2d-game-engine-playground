@@ -10,7 +10,7 @@ This is the first stop for project context. Prefer the small docs listed here be
 4. [DOCS_MAINTENANCE.md](DOCS_MAINTENANCE.md) - documentation ownership.
 5. [PROJECT_MEMORY.md](PROJECT_MEMORY.md) - durable context and known debt.
 
-`CURRENT_TASK.md` contains a historical chunked-world handoff. Confirm its status
+[The archived handoff](archive/CURRENT_TASK.md) contains a historical chunked-world handoff. Confirm its status
 against the current request and code before using it. Plans describe intent,
 not proof of completion.
 
@@ -55,26 +55,11 @@ not proof of completion.
 | Testing | `topics/Testing.md` |
 | Roadmap | `topics/Roadmap.md` |
 
-## Legacy And Deep References
+## Plans, Design, and Archive
 
-These files are still useful for detailed background, but they may overlap with the smaller docs:
-
-- `ARCHITECTURE_VERIFIED.md`
-- `ARCHITECTURE.md`
-- `IMPLEMENTATION_OVERVIEW.md`
-- `ENGINE_MASTER_PLAN.md`
-- `COMPONENT_SYSTEM_GUIDE.md`
-- `SCRIPTING_CURRENT.md`
-- `SCENE_ECS_CURRENT.md`
-- `RENDERING_CURRENT.md`
-- `UI_PROGRESS.md`
-- `UI_IMPLEMENTATION_PLAN.md`
-- `BOX2D_PHYSICS_INTEGRATION_PLAN.md`
-- `EVENT_SYSTEM_IMPLEMENTATION_PLAN.md`
-- `OPTIMIZATIONS_CURRENT.md`
-- `KNOWN_ISSUES.md`
-
-If a legacy doc conflicts with the small docs, verify against code and update both the relevant small doc and the legacy doc or mark the legacy doc stale.
+- [Implementation plans](plans/) record proposed work and implementation history.
+- [Editor design sources](design/editor/) contain the Little Forest brief, design specification, and starter asset archive.
+- [Archived engine documents](archive/) contain older architecture references, roadmaps, and handoffs. Verify historical claims against the source and the module and topic docs above.
 
 ## Agent workflow
 

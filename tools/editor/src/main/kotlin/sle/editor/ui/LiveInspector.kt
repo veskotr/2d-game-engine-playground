@@ -8,7 +8,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -32,7 +32,7 @@ import sle.editor.viewport.LiveSelection
 @Composable
 internal fun LiveHierarchy(snapshot: LiveInspection?, select: (LiveSelection) -> Unit) {
     Column(Modifier.fillMaxSize().padding(8.dp)) {
-        Text("Live Hierarchy")
+        EditorLabel("Live Hierarchy")
         if (snapshot == null) return@Column
         val depth = remember(snapshot.entities) {
             buildMap<Long, Int> {
@@ -67,19 +67,19 @@ internal fun LiveDetails(
     val selection = snapshot?.selection
     val openScript = LocalOpenScriptAttachment.current
     Column(Modifier.fillMaxSize().padding(8.dp)) {
-        Text("Live Details")
+        EditorLabel("Live Details")
         if (selection == null) {
-            Text("Select an entity in Live Hierarchy.")
+            EditorLabel("Select an entity in Live Hierarchy.")
             return@Column
         }
         val selected = snapshot.entities.first { it.id == selection.entity }
-        Text("${selected.label}  ·  ID ${selected.id}")
+        EditorLabel("${selected.label}  ·  ID ${selected.id}")
         val details = snapshot.details ?: return@Column
         key(selection) {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (details.isEmpty()) Text("No supported components.")
+                if (details.isEmpty()) EditorLabel("No supported components.")
                 for ((component, fields) in details) {
-                    Text(if (component == "Transform") "Transform (local)" else component,
+                    EditorLabel(if (component == "Transform") "Transform (local)" else component,
                         modifier = Modifier.padding(top = 8.dp))
                     when (fields) {
                         is JsonObject -> inspectorProperties(component, fields, catalog[component]).forEach {
@@ -90,9 +90,9 @@ internal fun LiveDetails(
                             val key = attachment.getValue("key").jsonPrimitive.content
                             val name = key.ifEmpty { "Primary" }
                             val asset = attachment.getValue("scriptAsset").jsonPrimitive.content
-                            Text("$name · ${attachment.getValue("status").jsonPrimitive.content}")
-                            Text(asset)
-                            Text("Order ${attachment.getValue("order").jsonPrimitive.content}")
+                            EditorLabel("$name · ${attachment.getValue("status").jsonPrimitive.content}")
+                            EditorLabel(asset)
+                            EditorLabel("Order ${attachment.getValue("order").jsonPrimitive.content}")
                             if (openScript != null && asset.isNotBlank()) {
                                 EditorButton("Open in IDE", { openScript(asset) })
                             }
@@ -105,12 +105,12 @@ internal fun LiveDetails(
                     if (component == "Transform" && keepPreview != null) {
                         var error by remember(keepPreview) { mutableStateOf<String?>(null) }
                         for (field in keepPreview.fields) {
-                            Text("${field.label}  ${field.authored.content} → ${field.runtime.content}")
+                            EditorLabel("${field.label}  ${field.authored.content} → ${field.runtime.content}")
                         }
                         EditorButton("Keep Changes", {
                             error = runCatching { keepChanges(keepPreview) }.exceptionOrNull()?.message
                         })
-                        error?.let { Text(it) }
+                        error?.let { EditorLabel(it) }
                     }
                 }
             }
@@ -126,15 +126,15 @@ private fun LiveProperty(property: EditorPropertyDefinition, catalog: ComponentD
             val values = property.axes.zip(property.axisLabels).joinToString("  ") { (axis, label) ->
                 "$label ${axis.value.jsonPrimitive.content}"
             }
-            Text("${property.displayLabel}  $values")
+            EditorLabel("${property.displayLabel}  $values")
         }
         value is JsonObject -> {
-            Text(property.displayLabel)
+            EditorLabel(property.displayLabel)
             Column(Modifier.padding(start = 8.dp)) {
                 for ((field, child) in value) LiveProperty(
                     propertyDefinition(property.component, property.path + field, child, catalog = catalog), catalog)
             }
         }
-        value is JsonPrimitive -> Text("${property.displayLabel}  ${value.content}")
+        value is JsonPrimitive -> EditorLabel("${property.displayLabel}  ${value.content}")
     }
 }

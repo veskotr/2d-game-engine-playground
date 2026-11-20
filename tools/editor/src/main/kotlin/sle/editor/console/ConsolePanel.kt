@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -80,9 +80,9 @@ internal fun ConsolePanel(
             EditorToggle("Pause on Lua Error", state.pauseOnLuaError, state::updatePauseOnLuaError)
         }
         if (state.dropped > 0)
-            Text("${state.dropped} older messages dropped", color = colors.warning, style = type.body)
+            EditorLabel("${state.dropped} older messages dropped", color = colors.warning, style = type.body)
         if (visible.isEmpty())
-            Text(if (state.rows.isEmpty()) "No engine messages" else "No matching messages",
+            EditorLabel(if (state.rows.isEmpty()) "No engine messages" else "No matching messages",
                 color = colors.textSecondary, style = type.body)
         SelectionContainer(Modifier.weight(1f)) {
             LazyColumn(Modifier.fillMaxSize(), reverseLayout = true, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -94,12 +94,12 @@ internal fun ConsolePanel(
                         ConsoleSeverity.DEBUG -> colors.textSecondary
                     }
                     Column {
-                        Text("${entry.severity.name}  ${entry.message}" + if (count > 1) "  ×$count" else "",
+                        EditorLabel("${entry.severity.name}  ${entry.message}" + if (count > 1) "  ×$count" else "",
                             color = tint, style = type.body)
                         entry.lua?.let { source ->
                             val context = listOfNotNull(source.entity.takeIf { it != 0L }?.let { "Entity $it" },
                                 source.behaviour.takeIf { it.isNotEmpty() }).joinToString(" · ")
-                            if (context.isNotEmpty()) Text(context, color = colors.textSecondary, style = type.body)
+                            if (context.isNotEmpty()) EditorLabel(context, color = colors.textSecondary, style = type.body)
                             if (source.file.isNotEmpty()) {
                                 val filename = remember(source.file) { source.path?.fileName?.toString() ?: source.file }
                                 val label = if (source.line > 0) "$filename:${source.line}" else filename
@@ -108,7 +108,7 @@ internal fun ConsolePanel(
                                 }, help = source.location, style = EditorButtonStyle.Ghost)
                             }
                             if (source.traceback.isNotEmpty())
-                                Text(source.traceback, color = colors.textSecondary, style = type.body)
+                                EditorLabel(source.traceback, color = colors.textSecondary, style = type.body)
                         }
                     }
                 }

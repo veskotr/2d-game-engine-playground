@@ -58,27 +58,31 @@ fun launchThemeGallery(captureDirectory: java.nio.file.Path? = null, inspectors:
         EditorTheme(appearance) {
             Surface(Modifier.fillMaxSize()) {
                 Column(Modifier.verticalScroll(scroll).padding(LocalEditorMetrics.current.panelPadding),verticalArrangement=Arrangement.spacedBy(LocalEditorMetrics.current.gap)) {
-                    Text("Little Forest",style=MaterialTheme.typography.h5)
+                    EditorLabel("Little Forest",style=MaterialTheme.typography.h5)
                     Row {
                         EditorButton("Font 100%",{fontScale=1f})
                         EditorButton("Font 150%",{fontScale=1.5f})
                     }
                     if(inspectors) sle.editor.ui.inspector.InspectorGallery() else CompactControlsGallery()
                     Row {
-                        EditorThemeMode.entries.forEach { mode -> Button(onClick={appearance=appearance.copy(mode=mode)}) { Text(mode.name) } }
-                        EditorDensity.entries.forEach { density -> Button(onClick={appearance=appearance.copy(density=density)}) { Text(density.name) } }
+                        EditorThemeMode.entries.forEach { mode -> EditorTooltip("Use the ${mode.name} theme") { Button(onClick={appearance=appearance.copy(mode=mode)}) { Text(mode.name) } } }
+                        EditorDensity.entries.forEach { density -> EditorTooltip("Use ${density.name} density") { Button(onClick={appearance=appearance.copy(density=density)}) { Text(density.name) } } }
                     }
-                    Text("System body: Player / Игрок — Position X 128.0",color=LocalEditorColors.current.textPrimary)
-                    Text("Secondary metadata",color=LocalEditorColors.current.textSecondary)
+                    EditorLabel("System body: Player / Игрок — Position X 128.0",color=LocalEditorColors.current.textPrimary)
+                    EditorLabel("Secondary metadata",color=LocalEditorColors.current.textSecondary)
                     var text by remember { mutableStateOf("Player") }
-                    OutlinedTextField(text,{text=it},label={Text("Name")})
+                    EditorTooltip("Name") { OutlinedTextField(text,{text=it},label={Text("Name")}) }
                     var clicks by remember { mutableStateOf(0) }
                     var checked by remember { mutableStateOf(true) }
-                    Row { Button({clicks++}) { Text("Primary ($clicks)") };Button({},enabled=false) { Text("Disabled") };Checkbox(checked,{checked=it}) }
+                    Row {
+                        EditorTooltip("Increment the click count") { Button({clicks++}) { Text("Primary ($clicks)") } }
+                        EditorTooltip("Disabled button") { Button({},enabled=false) { Text("Disabled") } }
+                        EditorTooltip("Toggle the example checkbox") { Checkbox(checked,{checked=it}) }
+                    }
                     Row { EditorIcons.kinds.forEach { Icon(EditorIcons.painter(it),it,Modifier.size(LocalEditorMetrics.current.icon),tint=LocalEditorColors.current.accent) } }
                     val c=LocalEditorColors.current
                     listOf(Triple("Error",c.error,c.errorBackground),Triple("Warning",c.warning,c.warningBackground),Triple("Success",c.success,c.successBackground),Triple("Information",c.info,c.infoBackground)).forEach { (text,fg,bg) ->
-                        Surface(color=bg) { Text(text,color=fg,modifier=Modifier.padding(8.dp)) }
+                        Surface(color=bg) { EditorLabel(text,color=fg,modifier=Modifier.padding(8.dp)) }
                     }
                 }
             }

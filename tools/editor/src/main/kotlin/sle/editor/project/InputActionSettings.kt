@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,7 +33,7 @@ internal fun InputActionSettings(
         Column(verticalArrangement = Arrangement.spacedBy(gap)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap),
                 verticalAlignment = Alignment.CenterVertically) {
-                Text(name, Modifier.weight(1f))
+                EditorLabel(name, Modifier.weight(1f))
                 EditorButton("Add key", { capturing = name }, enabled = enabled && capturing != name)
                 EditorButton("Remove action", {
                     if (capturing == name) capturing = null
@@ -43,7 +43,7 @@ internal fun InputActionSettings(
             for (binding in bindings) {
                 Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
                     val label = checkNotNull(engineKeyName(binding.key))
-                    Text(label)
+                    EditorLabel(label)
                     EditorButton("Remove key", { onChange(actions + (name to (bindings - binding))) },
                         enabled = enabled, help = "Remove $label from $name")
                 }
@@ -52,7 +52,7 @@ internal fun InputActionSettings(
                 val focus = remember { FocusRequester() }
                 var prompt by remember { mutableStateOf("Press a key") }
                 Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
-                    Text(prompt, Modifier.weight(1f).focusRequester(focus).onPreviewKeyEvent { event ->
+                    EditorLabel(prompt, Modifier.weight(1f).focusRequester(focus).onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent true
                         val code = (event.nativeKeyEvent as? KeyEvent)?.let(::engineKey) ?: -1
                         val binding = KeyboardBinding(code)

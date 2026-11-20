@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,14 +20,14 @@ internal fun CollisionLayerSettings(layers: CollisionLayers, onChange: (Collisio
     for (slot in slots) {
         SettingsField("Layer ${slot + 1}", layers.customLabel(slot), { onChange(layers.withLabel(slot, it)) }, enabled)
     }
-    Text("Allowed pairs", style = MaterialTheme.typography.subtitle2)
+    EditorLabel("Allowed pairs", style = MaterialTheme.typography.subtitle2)
     val scroll = rememberScrollState()
     Row {
         Column(Modifier.width(116.dp)) {
             Spacer(Modifier.height(32.dp))
             for (slot in slots) {
                 Box(Modifier.height(32.dp), contentAlignment = Alignment.CenterStart) {
-                    Text("${slot + 1}  ${layers.customLabel(slot)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    EditorLabel("${slot + 1}  ${layers.customLabel(slot)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -36,7 +36,7 @@ internal fun CollisionLayerSettings(layers: CollisionLayers, onChange: (Collisio
                 Row {
                     for (slot in slots) {
                         Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                            Text((slot + 1).toString())
+                            EditorLabel((slot + 1).toString())
                         }
                     }
                 }

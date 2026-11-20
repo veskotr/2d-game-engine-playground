@@ -1,6 +1,6 @@
 # Editor resource provenance
 
-Copied from `SLE_Starter_Assets_Handjet_v1 (1).zip`, root `SLE_Starter_Assets_v1/`.
+Copied from `docs/design/editor/SLE_Starter_Assets_Handjet_v1 (1).zip`, root `SLE_Starter_Assets_v1/`.
 Archive SHA-256: `365b6ffe9cb23c5322a3380c0e345f64d8dc16871f35620d33dd58aeb2196ffb`.
 
 SLE icons and mascot are the supplied approved SLE graphics. SVG originals and

@@ -877,9 +877,9 @@ private fun launchEditor(args: Array<String>) = application {
                             }
                         }
                         sle.editor.ui.controls.EditorSeparator()
-                        if(failed) Text(status,Modifier.padding(horizontal=m.panelPadding,vertical=m.gap),color=MaterialTheme.colors.error)
+                        if(failed) EditorLabel(status,Modifier.padding(horizontal=m.panelPadding,vertical=m.gap),color=MaterialTheme.colors.error)
                         if(!ready && !failed) LinearProgressIndicator(Modifier.fillMaxWidth())
-                        if(inspector?.fieldErrors?.isNotEmpty()==true) Text("Finish the highlighted fields. Preview keeps the last valid values.",Modifier.padding(horizontal=m.panelPadding,vertical=m.gap),color=MaterialTheme.colors.error)
+                        if(inspector?.fieldErrors?.isNotEmpty()==true) EditorLabel("Finish the highlighted fields. Preview keeps the last valid values.",Modifier.padding(horizontal=m.panelPadding,vertical=m.gap),color=MaterialTheme.colors.error)
                         if(!entity && !game) DisposableEffect(panelCanvas) {
                             val view=panelCanvas
                             val key=Any()

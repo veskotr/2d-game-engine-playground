@@ -61,9 +61,9 @@ internal fun SceneEntityInspector(state: SceneWorkspaceState,editable: Boolean=t
                 EditorPropertyRow("Parent",help=SINGLE_ENTITY_REASON) {
                     EditorSelect("Parent",parent,listOf(parent),{},Modifier.weight(1f),enabled=false,help=SINGLE_ENTITY_REASON,showLabel=false)
                 }
-                Text(state.selectedEntities.joinToString(", ") { it.document.name.ifBlank { "(Unnamed entity)" } },
+                EditorLabel(state.selectedEntities.joinToString(", ") { it.document.name.ifBlank { "(Unnamed entity)" } },
                     color=LocalEditorColors.current.textSecondary,style=LocalEditorTypography.current.secondary)
-                Text("Select a single entity to edit its components.",color=LocalEditorColors.current.textSecondary,style=LocalEditorTypography.current.secondary)
+                EditorLabel("Select a single entity to edit its components.",color=LocalEditorColors.current.textSecondary,style=LocalEditorTypography.current.secondary)
             }
         } else if(selected==null) {
             EditorPanelHeader("Scene")
@@ -89,7 +89,7 @@ internal fun SceneEntityInspector(state: SceneWorkspaceState,editable: Boolean=t
                             state.reparent(selected.document.key,if(index==0) null else state.entities.filter { it!==selected }[index-1].document.key)
                         } },Modifier.weight(1f),enabled=editable,showLabel=false)
                 }
-                if(selected.fieldErrors.isNotEmpty()) Text("Finish the highlighted fields before saving.",color=MaterialTheme.colors.error)
+                if(selected.fieldErrors.isNotEmpty()) EditorLabel("Finish the highlighted fields before saving.",color=MaterialTheme.colors.error)
             }
             Column(verticalArrangement=Arrangement.spacedBy(m.borderWidth)) {
                 ComponentSections(selected,readOnly=!editable,scene=true,tags=tags) { component ->

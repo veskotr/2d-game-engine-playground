@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Surface
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,13 +43,13 @@ internal fun ScriptEditorSettingsDialog(
                 Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(metrics.gap)) {
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(metrics.gap)) {
-                        Text("IDE executable")
+                        EditorLabel("IDE executable")
                         EditorTextField(executable, { executable = it }, "IDE executable", Modifier.fillMaxWidth())
-                        Text("Enter one argument per row. Use {file} for the source path and {line} for the line number.")
-                        Text("File arguments")
+                        EditorLabel("Enter one argument per row. Use {file} for the source path and {line} for the line number.")
+                        EditorLabel("File arguments")
                         EditorTextField(fileArguments, { fileArguments = it }, "File arguments",
                             Modifier.fillMaxWidth(), singleLine = false)
-                        Text("Line arguments (optional)")
+                        EditorLabel("Line arguments (optional)")
                         EditorTextField(lineArguments, { lineArguments = it }, "Line arguments",
                             Modifier.fillMaxWidth(), singleLine = false)
                     }

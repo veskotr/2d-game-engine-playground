@@ -1,7 +1,7 @@
 package sle.editor.ui.inspector
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import kotlinx.serialization.json.*
@@ -78,11 +78,11 @@ internal fun InspectorGallery() {
         val paneWidth=maxWidth/2
         Row(Modifier.fillMaxWidth().heightIn(min=paneWidth)) {
             Column(Modifier.weight(1f).height(paneWidth*1.5f)) {
-                Text("Entity Template details")
+                EditorLabel("Entity Template details")
                 EntityWorkspace(prefab,embedded=true)
             }
             Column(Modifier.weight(1f).height(paneWidth*1.5f)) {
-                Text("Scene details")
+                EditorLabel("Scene details")
                 SceneEntityInspector(scene)
             }
         }

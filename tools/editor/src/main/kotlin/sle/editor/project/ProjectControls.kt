@@ -180,19 +180,25 @@ private fun ProjectSettingsDialog(
             Surface(Modifier.fillMaxSize()) {
                 Column(Modifier.padding(metrics.panelPadding),verticalArrangement=Arrangement.spacedBy(metrics.gap)) {
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(metrics.gap)) {
-                        Text("Startup", style = MaterialTheme.typography.subtitle2)
+                        EditorLabel("Startup", style = MaterialTheme.typography.subtitle2)
                         SettingsField("Project name",name,{name=it},!busy,measured("ProjectName"))
                         Box(measured("StartupScene")) {
                             var expanded by remember { mutableStateOf(false) }
                             EditorButton("Startup: "+(startupScenes.firstOrNull { it.first==startup }?.second ?: startup ?: "None"),{expanded=true},enabled=!busy)
                             DropdownMenu(expanded && !busy,onDismissRequest={expanded=false}) {
-                                DropdownMenuItem(onClick={startup=null;expanded=false}) { Text("None") }
-                                startupScenes.forEach { (id,label) -> DropdownMenuItem(onClick={startup=id;expanded=false}) { Text(label) } }
+                                EditorTooltip("Start without opening a scene", Modifier.fillMaxWidth()) {
+                                    DropdownMenuItem(onClick={startup=null;expanded=false}) { Text("None") }
+                                }
+                                startupScenes.forEach { (id,label) ->
+                                    EditorTooltip("Open $label at startup", Modifier.fillMaxWidth()) {
+                                        DropdownMenuItem(onClick={startup=id;expanded=false}) { Text(label) }
+                                    }
+                                }
                             }
                         }
-                        Text("Assets: ${project.document.assetRoot}",style=MaterialTheme.typography.caption)
+                        EditorLabel("Assets: ${project.document.assetRoot}",style=MaterialTheme.typography.caption)
                         Divider()
-                        Text("Game", style = MaterialTheme.typography.subtitle2)
+                        EditorLabel("Game", style = MaterialTheme.typography.subtitle2)
                         SettingsField("Game window title",title,{title=it},!busy,measured("GameTitle"))
                         SettingsField("Width",width,{width=it},!busy,measured("GameWidth"),numeric=true)
                         SettingsField("Height",height,{height=it},!busy,numeric=true)
@@ -200,28 +206,28 @@ private fun ProjectSettingsDialog(
                         EditorCheckBox("VSync",vsync,{vsync=it},enabled=!busy)
                         SettingsField("Target FPS",fps,{fps=it},!busy,numeric=true,help="0 = unlimited")
                         Divider()
-                        Text("Art Style", style = MaterialTheme.typography.subtitle2)
+                        EditorLabel("Art Style", style = MaterialTheme.typography.subtitle2)
                         val legacy = "Legacy defaults"
                         EditorSelect("Preset", artStyle?.label ?: legacy, listOf(legacy) + ProjectArtStyle.entries.map { it.label },
                             { selected -> artStyle = ProjectArtStyle.entries.firstOrNull { it.label == selected } },
                             enabled = !busy)
                         Divider()
-                        Text("Sorting Layers", style = MaterialTheme.typography.subtitle2)
+                        EditorLabel("Sorting Layers", style = MaterialTheme.typography.subtitle2)
                         SortingLayerSettings(sortingLayers, { sortingLayers = it }, enabled = !busy)
                         Divider()
-                        Text("Tags", style = MaterialTheme.typography.subtitle2)
+                        EditorLabel("Tags", style = MaterialTheme.typography.subtitle2)
                         TagSettings(tags, { tags = it }, enabled = !busy)
                         Divider()
-                        Text("Collision", style = MaterialTheme.typography.subtitle2)
+                        EditorLabel("Collision", style = MaterialTheme.typography.subtitle2)
                         CollisionLayerSettings(collisionLayers, { collisionLayers = it }, enabled = !busy)
                         Divider()
-                        Text("Input Actions", style = MaterialTheme.typography.subtitle2)
+                        EditorLabel("Input Actions", style = MaterialTheme.typography.subtitle2)
                         InputActionSettings(inputActions, { inputActions = it }, enabled = !busy)
                         Divider()
-                        Text("Project Editor Scripts", style = MaterialTheme.typography.subtitle2)
+                        EditorLabel("Project Editor Scripts", style = MaterialTheme.typography.subtitle2)
                         EditorButton(if (scriptTrust == true) "Revoke Trust" else "Trust Editor Scripts",
                             { setScriptTrust(scriptTrust != true) }, enabled = !busy && !scriptTrustBusy)
-                        (formError ?: error)?.let { Text(it,color=LocalEditorColors.current.error) }
+                        (formError ?: error)?.let { EditorLabel(it,color=LocalEditorColors.current.error) }
                     }
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(metrics.gap,androidx.compose.ui.Alignment.End)) {
                         EditorButton("Cancel",onDismiss,enabled=!busy)

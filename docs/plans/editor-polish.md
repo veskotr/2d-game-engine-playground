@@ -115,7 +115,7 @@ Confirm smoke flag names in current `Main.kt` before execution. Interactive JNI 
 ## Progress / handoff
 
 - Planning: inspected repository instructions, README, CONTRIBUTING, constraints, editor docs, project creation/local-state code, export controls/destination, drag payload and relevant test inventory.
-- Pre-existing edits: numerous editor files, Projects documentation and `SLE_Design_Prompt.txt`; an untracked starter-assets archive. All must be preserved. Capture fresh `git status --short` at execution time.
+- Pre-existing edits: numerous editor files, Projects documentation and `docs/design/editor/SLE_Design_Prompt.txt`; an untracked starter-assets archive. All must be preserved. Capture fresh `git status --short` at execution time.
 - Planning-session baseline: no product code changed and no build/test run at that time.
 - Session 1 (2026-11-17): implemented staged empty Main creation with asset sidecar/startup UUID; optional project-relative `lastScene` local state with scale-write merging; recovery reads remembered then startup scene with notices and activation/revision guards; settings refresh preserves scene drafts; successful scene opens/saves record recovery state; normal exit saves scale without clearing recovery state. New/Open now include Project/Scene/Prefab; atomic user-local recent-project history keeps ten normalized paths. Smokes use isolated recent-history directories.
 - Regression-driven fixes: staging must use `toRealPath()` before existing asset-boundary validation on Windows. Desktop dirty-switch smoke exposed a Compose redraw reentry from asynchronous modal confirmation; `confirmProjectChange` posts the prompt to the Swing event queue. Applied to project and document asynchronous re-confirmation.

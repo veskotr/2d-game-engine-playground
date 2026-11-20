@@ -32,8 +32,8 @@ In Progress.
 
 ## Files Changed For This Task
 
-- `docs/CURRENT_TASK.md`
-- `docs/TILED_CHUNKED_WORLD_PLAN.md`
+- `docs/archive/CURRENT_TASK.md`
+- `docs/archive/TILED_CHUNKED_WORLD_PLAN.md`
 - `EngineModules/Systems/include/sle/engine/TiledMapLoader.hpp`
 - `EngineModules/Systems/src/TiledMapLoader.cpp`
 - `EngineModules/Systems/src/SceneLoader.cpp`

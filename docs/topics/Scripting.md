@@ -28,8 +28,8 @@ Chunk suspension pauses entity updates while preserving Lua instances. Subscript
 
 ## Deep Reference
 
-- `docs/SCRIPTING_CURRENT.md`
-- `docs/LUA_IMPLEMENTATION_QUICKSTART.md`
+- `docs/archive/SCRIPTING_CURRENT.md`
+- `docs/archive/LUA_IMPLEMENTATION_QUICKSTART.md`
 
 Scene-defined keys can be resolved with `Engine.findEntityByKey(key)` (ID or nil).
 Resolve them again after scene replacement; see [scene authoring](Scenes.md).

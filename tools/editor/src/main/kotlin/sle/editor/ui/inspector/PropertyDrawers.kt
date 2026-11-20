@@ -6,7 +6,7 @@ import sle.editor.project.assets.caption
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -182,7 +182,7 @@ private fun SpriteRegionPicker(state: EntityWorkspaceState, path: String, readOn
         listOf(manual) + labels.keys,
         onSelect = { state.setSpriteRegion(labels[it]?.id) }, enabled = !readOnly)
     if (current != null && selected == null)
-        Text("The sprite uses the full texture.", color = LocalEditorColors.current.error)
+        EditorLabel("The sprite uses the full texture.", color = LocalEditorColors.current.error)
 }
 
 /** Thumbnail and pixel size of the sprite texture, with a one-click "use image size". */
@@ -196,13 +196,13 @@ private fun TexturePreview(
     val canSetSize = !readOnly && catalog?.fields?.get(sizePath)?.readOnly != true &&
         !catalog.hasReadOnlyDescendants(sizePath)
     val image=remember(path) { runCatching { javax.imageio.ImageIO.read(java.io.File(path)) }.getOrNull() }
-    if(image==null) { Text("Image not found or unsupported",color=LocalEditorColors.current.textSecondary,style=sle.editor.ui.theme.LocalEditorTypography.current.secondary);return }
+    if(image==null) { EditorLabel("Image not found or unsupported",color=LocalEditorColors.current.textSecondary,style=sle.editor.ui.theme.LocalEditorTypography.current.secondary);return }
     val bitmap=remember(image) { androidx.compose.ui.graphics.painter.BitmapPainter(image.toComposeImageBitmapCompat(),filterQuality=androidx.compose.ui.graphics.FilterQuality.None) }
     Row(Modifier.padding(top=m.gap/2),horizontalArrangement=Arrangement.spacedBy(m.gap),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
         androidx.compose.foundation.Image(bitmap,"Texture preview",Modifier.size(m.button*2).background(LocalEditorColors.current.inputBackground),
             contentScale=androidx.compose.ui.layout.ContentScale.Fit)
         Column(verticalArrangement=Arrangement.spacedBy(m.gap/2)) {
-            Text("${image.width} × ${image.height} px",color=LocalEditorColors.current.textSecondary,style=sle.editor.ui.theme.LocalEditorTypography.current.secondary)
+            EditorLabel("${image.width} × ${image.height} px",color=LocalEditorColors.current.textSecondary,style=sle.editor.ui.theme.LocalEditorTypography.current.secondary)
             if (property.component == "SpriteRenderer" && property.path == listOf("texture")) EditorButton("Use image size",{
                 state.setValue("SpriteRenderer",sizePath,buildJsonObject { put("x",image.width);put("y",image.height) })
             },enabled=canSetSize && "size" in (state.document.components["SpriteRenderer"] as? JsonObject).orEmpty(),help="Set the sprite size to the texture's pixel size")

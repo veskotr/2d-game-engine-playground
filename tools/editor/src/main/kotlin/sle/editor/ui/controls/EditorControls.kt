@@ -23,6 +23,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import sle.editor.ui.theme.*
@@ -74,9 +75,21 @@ internal fun EditorTooltip(help: String?, modifier: Modifier = Modifier, content
     if(help.isNullOrBlank()) Box(modifier) { content() } else TooltipArea(modifier=modifier,tooltip={
         Surface(color=LocalEditorColors.current.tooltipBackground,shape=RoundedCornerShape(LocalEditorMetrics.current.controlRadius)) {
             Text(help,color=LocalEditorColors.current.tooltipText,style=LocalEditorTypography.current.secondary,
-                modifier=Modifier.padding(horizontal=LocalEditorMetrics.current.controlPadding,vertical=LocalEditorMetrics.current.gap))
+                modifier=Modifier.widthIn(max=360.dp).padding(horizontal=LocalEditorMetrics.current.controlPadding,vertical=LocalEditorMetrics.current.gap),
+                maxLines=12,overflow=TextOverflow.Ellipsis)
         }
     },content=content)
+}
+
+/** Full label text stays available on hover when its layout truncates it. */
+@Composable
+internal fun EditorLabel(text: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified,
+    style: androidx.compose.ui.text.TextStyle = LocalTextStyle.current, maxLines: Int = Int.MAX_VALUE,
+    softWrap: Boolean = true, overflow: TextOverflow = TextOverflow.Clip, textAlign: TextAlign? = null,
+    help: String = text) {
+    EditorTooltip(help, modifier) {
+        Text(text, color = color, style = style, maxLines = maxLines, softWrap = softWrap, overflow = overflow, textAlign = textAlign)
+    }
 }
 
 /** [primary] is kept for existing callers and maps to [EditorButtonStyle.Primary]. */
@@ -92,7 +105,7 @@ internal fun EditorButton(label: String, onClick: () -> Unit, modifier: Modifier
     val pressed by source.collectIsPressedAsState()
     val focused by source.collectIsFocusedAsState()
     val colors=controlColors(style,enabled,selected,hovered,pressed)
-    EditorTooltip(help,modifier) {
+    EditorTooltip(help?.takeIf { it.isNotBlank() } ?: label,modifier) {
         Box(Modifier.controlChrome(colors,focused)
             .clickable(source,null,enabled,role=Role.Button,onClick=onClick)
             .heightIn(min=minHeight).padding(horizontal=m.controlPadding,vertical=m.controlVerticalPadding),
@@ -139,7 +152,7 @@ internal fun EditorGlyphButton(label: String, onClick: () -> Unit, modifier: Mod
     val focused by source.collectIsFocusedAsState()
     val colors=controlColors(style,enabled,selected,hovered,pressed)
     val tint=if(enabled && style==EditorButtonStyle.Ghost && !hovered && !selected) LocalEditorColors.current.textSecondary else colors.content
-    EditorTooltip(help,modifier) {
+    EditorTooltip(help?.takeIf { it.isNotBlank() } ?: label,modifier) {
         Box(Modifier.controlChrome(colors,focused)
             .clickable(source,null,enabled,role=Role.Button,onClick=onClick)
             .semantics { contentDescription=label }
@@ -203,7 +216,7 @@ internal fun EditorTab(label: String, selected: Boolean, onClick: () -> Unit, mo
     val hovered by source.collectIsHoveredAsState()
     val focused by source.collectIsFocusedAsState()
     val underline=c.accent
-    EditorTooltip(help,modifier) {
+    EditorTooltip(help?.takeIf { it.isNotBlank() } ?: label,modifier) {
         Box(Modifier.fillMaxHeight()
             .background(when { selected -> c.surface;hovered -> c.hoverBackground;else -> Color.Transparent })
             .then(if(focused) Modifier.border(m.borderWidth,c.focusRing) else Modifier)
@@ -256,8 +269,8 @@ internal fun EditorEmptyState(title: String, message: String? = null, modifier: 
             // Branding is the only use of the decorative brand face (Handjet).
             if(brand) Image(androidx.compose.ui.res.painterResource("sle/editor/branding/sle-256.png"),null,
                 Modifier.size(m.button*1.5f),alpha=.9f)
-            Text(title,style=if(brand) t.brand else t.heading,color=LocalEditorColors.current.textPrimary)
-            if(message!=null) Text(message,style=t.secondary,color=LocalEditorColors.current.textSecondary,
+            EditorLabel(title,style=if(brand) t.brand else t.heading,color=LocalEditorColors.current.textPrimary)
+            if(message!=null) EditorLabel(message,style=t.secondary,color=LocalEditorColors.current.textSecondary,
                 textAlign=androidx.compose.ui.text.style.TextAlign.Center)
             if(action!=null) Box(Modifier.padding(top=m.gap)) { action() }
         }
@@ -284,7 +297,7 @@ internal fun EditorTextField(value: TextFieldValue, onValueChange: (TextFieldVal
     // Shortcuts leave plain keys (Delete, arrows, letters) to a focused field.
     val textFocus=remember { Any() }
     DisposableEffect(textFocus) { onDispose { sle.editor.workspace.TextInputFocus.report(textFocus,false) } }
-    EditorTooltip(help,modifier) {
+    EditorTooltip(help?.takeIf { it.isNotBlank() } ?: label,modifier) {
         BasicTextField(value,onValueChange,Modifier.fillMaxWidth().then(
             if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
             .onFocusChanged { sle.editor.workspace.TextInputFocus.report(textFocus,it.isFocused);onFocusChange(it.isFocused) }
@@ -352,33 +365,35 @@ internal fun EditorNumberField(edit: NumberEdit, label: String, modifier: Modifi
         })
     if (presentation?.hasSlider == true) {
         var sliderEditing by remember(edit) { mutableStateOf(false) }
-        Text(presentation.sliderLabel(authoredValue), style = LocalEditorTypography.current.secondary)
-        Slider(
-            value = presentation.sliderPosition(authoredValue),
-            onValueChange = { position ->
-                if (enabled && !readOnly && (!sliderEditing || edit.active)) {
-                    presentation.sliderText(position)?.let { generated ->
-                        if (generated.toDouble() != edit.text.toDoubleOrNull() || edit.invalid) {
-                            if (!sliderEditing) edit.blur()
-                            sliderEditing = true
-                            edit.updateText(generated, true)
+        EditorLabel(presentation.sliderLabel(authoredValue), style = LocalEditorTypography.current.secondary)
+        EditorTooltip(help?.takeIf { it.isNotBlank() } ?: "Adjust $label", Modifier.fillMaxWidth()) {
+            Slider(
+                value = presentation.sliderPosition(authoredValue),
+                onValueChange = { position ->
+                    if (enabled && !readOnly && (!sliderEditing || edit.active)) {
+                        presentation.sliderText(position)?.let { generated ->
+                            if (generated.toDouble() != edit.text.toDoubleOrNull() || edit.invalid) {
+                                if (!sliderEditing) edit.blur()
+                                sliderEditing = true
+                                edit.updateText(generated, true)
+                            }
                         }
                     }
-                }
-            },
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "$label slider" }
-                .onPreviewKeyEvent {
-                    if (enabled && !readOnly && it.type == KeyEventType.KeyDown && it.key == Key.Escape) {
-                        edit.cancel()
-                        true
-                    } else false
                 },
-            enabled = enabled && !readOnly,
-            onValueChangeFinished = {
-                if (sliderEditing && enabled && !readOnly) edit.commit()
-                sliderEditing = false
-            },
-        )
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "$label slider" }
+                    .onPreviewKeyEvent {
+                        if (enabled && !readOnly && it.type == KeyEventType.KeyDown && it.key == Key.Escape) {
+                            edit.cancel()
+                            true
+                        } else false
+                    },
+                enabled = enabled && !readOnly,
+                onValueChangeFinished = {
+                    if (sliderEditing && enabled && !readOnly) edit.commit()
+                    sliderEditing = false
+                },
+            )
+        }
     }
 }
 
@@ -415,10 +430,11 @@ internal fun EditorVectorField(label: String, axes: List<Pair<String,NumberEdit>
         axes.forEach { (axis,edit) ->
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(m.gap)) {
-                    Text(axis.uppercase(),Modifier.widthIn(min=m.gap*2),color=LocalEditorColors.current.textSecondary,style=LocalEditorTypography.current.secondary)
+                    EditorLabel(axis.uppercase(),Modifier.widthIn(min=m.gap*2),color=LocalEditorColors.current.textSecondary,
+                        style=LocalEditorTypography.current.secondary,help="$label ($axis)")
                     EditorNumberField(edit,"$label $axis",Modifier.weight(1f),enabled,readOnly,help=axis)
                 }
-                if(edit.invalid) Text("$axis: Invalid number",color=LocalEditorColors.current.error,style=LocalEditorTypography.current.secondary)
+                if(edit.invalid) EditorLabel("$axis: Invalid number",color=LocalEditorColors.current.error,style=LocalEditorTypography.current.secondary)
             }
         }
     }
@@ -433,7 +449,7 @@ internal fun EditorCheckBox(label: String, checked: Boolean, onCheckedChange: (B
     val hovered by source.collectIsHoveredAsState()
     val focused by source.collectIsFocusedAsState()
     val shape=RoundedCornerShape(m.controlRadius)
-    EditorTooltip(help,modifier) {
+    EditorTooltip(help?.takeIf { it.isNotBlank() } ?: label,modifier) {
         Row(Modifier.background(if(hovered && enabled) c.hoverBackground else Color.Transparent,shape)
             .then(if(focused) Modifier.border(m.focusBorderWidth,c.focusRing,shape) else Modifier)
             .toggleable(checked,source,null,enabled,Role.Checkbox,onCheckedChange)
@@ -466,7 +482,7 @@ internal fun EditorSelect(label: String, value: String, choices: List<String>, o
     val focused by source.collectIsFocusedAsState()
     val shape=RoundedCornerShape(m.controlRadius)
     Box(modifier) {
-        EditorTooltip(help) {
+        EditorTooltip(help?.takeIf { it.isNotBlank() } ?: "$label: $value") {
             Row(Modifier.then(if(showLabel) Modifier else Modifier.fillMaxWidth())
                 .background(when { !enabled -> c.disabledBackground;showLabel && hovered -> c.hoverBackground;showLabel -> c.surfaceRaised;else -> c.inputBackground },shape)
                 .border(if(focused) m.focusBorderWidth else m.borderWidth,when { focused -> c.focusRing;!enabled || showLabel -> c.borderSubtle;hovered -> c.textSecondary;else -> c.border },shape)
@@ -481,8 +497,12 @@ internal fun EditorSelect(label: String, value: String, choices: List<String>, o
             }
         }
         DropdownMenu(expanded && enabled,onDismissRequest={expanded=false}) {
-            choices.forEach { choice -> DropdownMenuItem(onClick={expanded=false;onSelect(choice)},
-                modifier=Modifier.heightIn(min=m.treeRow)) { Text(choice,style=LocalEditorTypography.current.body) } }
+            choices.forEach { choice ->
+                EditorTooltip(choice, Modifier.fillMaxWidth()) {
+                    DropdownMenuItem(onClick={expanded=false;onSelect(choice)},
+                        modifier=Modifier.heightIn(min=m.treeRow)) { Text(choice,style=LocalEditorTypography.current.body) }
+                }
+            }
         }
     }
 }
@@ -522,7 +542,7 @@ internal fun EditorInspectorSection(title: String, expanded: Boolean, onExpanded
             .padding(start=m.gap,end=m.gap),
             verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(m.gap)) {
             EditorGlyphIcon(if(expanded) EditorGlyph.ChevronDown else EditorGlyph.ChevronRight,c.textSecondary)
-            EditorTooltip(title,Modifier.weight(1f)) {
+            EditorTooltip(if (expanded) "Collapse $title" else "Expand $title",Modifier.weight(1f)) {
                 Text(title,style=LocalEditorTypography.current.heading,maxLines=1,overflow=TextOverflow.Ellipsis)
             }
             actions()
@@ -543,7 +563,7 @@ internal fun EditorTreeRow(label: String, selected: Boolean, onClick: () -> Unit
     val m=LocalEditorMetrics.current
     val hovered by source.collectIsHoveredAsState()
     val focused by source.collectIsFocusedAsState()
-    EditorTooltip(help,modifier) {
+    EditorTooltip(help?.takeIf { it.isNotBlank() } ?: label,modifier) {
         Row(Modifier.fillMaxWidth()
             .background(when { selected -> c.selectedBackground;hovered && enabled -> c.hoverBackground;else -> Color.Transparent })
             .then(if(active) Modifier.drawBehind { drawRect(c.accent,size=size.copy(width=m.tabUnderline.toPx())) } else Modifier)

@@ -52,4 +52,4 @@ The live scene EventBus keeps its address and subscription-token sequence.
 
 ## Deep Reference
 
-- `docs/EVENT_SYSTEM_IMPLEMENTATION_PLAN.md`
+- `docs/archive/EVENT_SYSTEM_IMPLEMENTATION_PLAN.md`

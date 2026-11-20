@@ -1,5 +1,5 @@
 > Historical architecture reference. Claims and examples describe an earlier state.
-> For current dependencies and boundaries, use [Architecture](topics/Architecture.md)
+> For current dependencies and boundaries, use [Architecture](../topics/Architecture.md)
 > and the relevant module/topic documents; verify behavior against source.
 
 # SLE (Simple Little Engine) - Comprehensive Codebase Analysis

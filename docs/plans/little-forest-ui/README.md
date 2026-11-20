@@ -5,8 +5,8 @@ validation and outstanding interactive checks. 2026-11-16.
 
 ## Scope and decisions
 
-Implement `SLE_Design_Prompt.txt` using `SLE_EDITOR_UI_DESIGN.md` and
-`SLE_Starter_Assets_Handjet_v1 (1).zip`. The user requested exploration and
+Implement `docs/design/editor/SLE_Design_Prompt.txt` using `docs/design/editor/SLE_EDITOR_UI_DESIGN.md` and
+`docs/design/editor/SLE_Starter_Assets_Handjet_v1 (1).zip`. The user requested exploration and
 self-contained implementation sessions to reduce context costs. They confirmed
 that this work is for the editor; engine changes come later.
 

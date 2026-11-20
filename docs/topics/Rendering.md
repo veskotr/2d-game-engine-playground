@@ -44,5 +44,5 @@ clearing the engine cache cannot revoke external shared ownership.
 
 ## Deep Reference
 
-- `docs/RENDERING_CURRENT.md`
-- `docs/OPTIMIZATIONS_CURRENT.md`
+- `docs/archive/RENDERING_CURRENT.md`
+- `docs/archive/OPTIMIZATIONS_CURRENT.md`

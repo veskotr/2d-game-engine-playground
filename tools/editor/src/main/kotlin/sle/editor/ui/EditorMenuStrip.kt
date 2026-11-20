@@ -42,6 +42,7 @@ internal fun EditorMenuStrip(
             border=BorderFactory.createMatteBorder(0,0,1,0,appearance.separator)
             labels.forEach { label ->
                 add(JMenu(label).apply {
+                    toolTipText=label
                     setUI(EditorSubmenuUI(appearance))
                     font=appearance.font;foreground=appearance.foreground;background=appearance.surface
                     isOpaque=true
@@ -81,7 +82,10 @@ internal fun EditorMenuStrip(
         }
     }
     SideEffect {
-        if(titleLabel.text!=title) titleLabel.text=title
+        if(titleLabel.text!=title) {
+            titleLabel.text=title
+            titleLabel.toolTipText=title.takeIf { it.isNotBlank() }
+        }
         SwingUtilities.invokeLater {
             bar.components.filterIsInstance<JMenu>().filter { it.isShowing }.forEach { menu ->
                 val point=SwingUtilities.convertPoint(menu,0,0,window.contentPane)
@@ -152,5 +156,5 @@ internal fun editorApplicationMenus(
 
 /** Help → Keyboard Shortcuts, generated from the command registry. */
 internal fun showKeyboardShortcuts(keymap: Keymap = standardKeymap) {
-    EditorDialogs.showMessageDialog(null,JLabel(keyboardShortcutsHtml(keymap)),"Keyboard Shortcuts",JOptionPane.PLAIN_MESSAGE)
+    EditorDialogs.showMessageDialog(null,JLabel(keyboardShortcutsHtml(keymap)).apply { toolTipText="Editor keyboard shortcuts" },"Keyboard Shortcuts",JOptionPane.PLAIN_MESSAGE)
 }

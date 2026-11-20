@@ -2,7 +2,7 @@
 
 ## Source Of Truth
 
-Use `docs/ENGINE_MASTER_PLAN.md` for detailed sequencing until the roadmap is split further.
+See the [archived master plan](../archive/ENGINE_MASTER_PLAN.md) for historical sequencing.
 
 ## Current Direction
 
@@ -12,8 +12,8 @@ Use `docs/ENGINE_MASTER_PLAN.md` for detailed sequencing until the roadmap is sp
 
 ## Planning Rules
 
-- Track the active task in `docs/CURRENT_TASK.md`.
-- Keep long-lived priorities in this file or `docs/ENGINE_MASTER_PLAN.md`.
+- Track substantial active work in a task-specific plan under [docs/plans](../plans/).
+- Keep long-lived priorities in this file.
 - Move completed implementation notes into module/topic docs.
 
 ## Update This File When

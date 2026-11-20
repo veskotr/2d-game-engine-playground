@@ -1,7 +1,7 @@
 # SLE editor UI design system (Little Forest)
 
 The implemented reference for the editor's look and behavior. The original brief is
-[`SLE_EDITOR_UI_DESIGN.md`](../../SLE_EDITOR_UI_DESIGN.md); this file records what the
+[`docs/design/editor/SLE_EDITOR_UI_DESIGN.md`](../../docs/design/editor/SLE_EDITOR_UI_DESIGN.md); this file records what the
 code actually provides. To add UI, follow [HOW_TO_ADD_UI_FEATURES.md](HOW_TO_ADD_UI_FEATURES.md).
 Paths are relative to `src/main/kotlin/sle/editor/`.
 
@@ -75,6 +75,7 @@ share one baseline. Feature code never sets `fontSize`.
 | `EditorCheckBox(showLabel=)`, `EditorSelect(showLabel=)` | Booleans and dropdowns; inside a property row pass `showLabel=false`. |
 | `EditorPropertyRow` | Label column (`propertyLabelFraction`, 36%) + editor column that fills; stacks below `propertyStackThreshold`. |
 | `EditorInspectorSection` | Collapsible section; the whole header toggles; trailing action slot. |
+| `EditorLabel` | Standalone label with full text or specific help on hover. |
 | `EditorPanelHeader`, `EditorTreeRow`, `EditorTooltip`, `EditorEmptyState` | Sub-panel headings, tree/list rows, tooltips, centered empty panels. |
 | `ui/EditorStatusBar.kt` → `EditorStatusBar(notices, EditorStatus(…))` | The main window's bottom bar; see [Status bar and notices](#status-bar-and-notices). |
 

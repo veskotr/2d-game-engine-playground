@@ -83,9 +83,9 @@ internal fun SnapSettingsDialog(current: SnapSettings, onDismiss: () -> Unit, on
                         StepField("Move step", move, { move = it }, "World units; the Scene grid follows this step")
                         StepField("Rotate step (°)", rotate, { rotate = it }, "Degrees, for the Rotate tool")
                         StepField("Scale step", scale, { scale = it }, "For the Scale tool")
-                        Text("Hold Ctrl during a drag or nudge to invert snapping for that gesture.", style = LocalEditorTypography.current.secondary,
+                        EditorLabel("Hold Ctrl during a drag or nudge to invert snapping for that gesture.", style = LocalEditorTypography.current.secondary,
                             color = LocalEditorColors.current.textSecondary)
-                        formError?.let { Text(it, color = LocalEditorColors.current.error) }
+                        formError?.let { EditorLabel(it, color = LocalEditorColors.current.error) }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(metrics.gap, Alignment.End)) {
                         EditorButton("Cancel", onDismiss)

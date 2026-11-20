@@ -2,7 +2,7 @@ package sle.editor.scripts
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.Surface
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,10 +43,10 @@ internal fun ScriptCreationDialog(
                     EditorSelect("Template", template?.label ?: "Loading templates…", templates.map { it.label },
                         { label -> filename = templates.first { it.label == label }.filename },
                         Modifier.fillMaxWidth(), enabled = !busy && templates.isNotEmpty())
-                    Text("Destination relative to the project asset root")
+                    EditorLabel("Destination relative to the project asset root")
                     EditorTextField(destination, { destination = it }, "Destination",
                         Modifier.fillMaxWidth(), enabled = !busy)
-                    error?.let { Text(it, color = androidx.compose.material.MaterialTheme.colors.error) }
+                    error?.let { EditorLabel(it, color = androidx.compose.material.MaterialTheme.colors.error) }
                     Spacer(Modifier.weight(1f))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(metrics.gap, Alignment.End)) {
                         EditorButton("Cancel", onDismiss, enabled = !busy)

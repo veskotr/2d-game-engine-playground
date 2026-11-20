@@ -2,7 +2,7 @@ package sle.editor.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
@@ -24,7 +24,7 @@ internal fun TagMembership(state: EntityWorkspaceState, definitions: Map<String,
     }
     val metrics = LocalEditorMetrics.current
     Column(Modifier.padding(horizontal = metrics.panelPadding, vertical = metrics.gap)) {
-        if (definitions.isEmpty() && ids.isEmpty()) Text("Define tags in Project Settings.")
+        if (definitions.isEmpty() && ids.isEmpty()) EditorLabel("Define tags in Project Settings.")
         for ((id, name) in definitions.entries.sortedBy { it.value }) {
             key(id) {
                 EditorCheckBox(name, id in ids, { setMembership(id, it) }, enabled = !readOnly)

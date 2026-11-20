@@ -4,7 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.Text
+import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -34,11 +34,11 @@ internal fun LuaProfilerPanel(
     Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         EditorToggle("Capture Lua", state.capture, state::updateCapture)
         if (latest == null) {
-            Text("Enable capture and run or step the scene to collect samples.", color = colors.textSecondary, style = type.body)
+            EditorLabel("Enable capture and run or step the scene to collect samples.", color = colors.textSecondary, style = type.body)
             return@Column
         }
         val peak = samples.maxOf { it.elapsed }.coerceAtLeast(1L)
-        Text("Lua ${milliseconds(latest.elapsed)} ms · Peak ${milliseconds(peak)} ms · VM ${latest.memory / 1024} KiB",
+        EditorLabel("Lua ${milliseconds(latest.elapsed)} ms · Peak ${milliseconds(peak)} ms · VM ${latest.memory / 1024} KiB",
             color = colors.textPrimary, style = type.body)
         Canvas(Modifier.fillMaxWidth().height(44.dp)) {
             val width = size.width / 120
@@ -48,10 +48,10 @@ internal fun LuaProfilerPanel(
                 drawRect(colors.info, Offset(x, size.height - height), Size(width, height))
             }
         }
-        Text("Explicit GC ${milliseconds(latest.gc)} ms · Automatic GC is included in Lua time",
+        EditorLabel("Explicit GC ${milliseconds(latest.gc)} ms · Automatic GC is included in Lua time",
             color = colors.textSecondary, style = type.body)
         if (latest.omittedRows > 0)
-            Text("${latest.omittedRows} lower-time rows omitted", color = colors.textSecondary, style = type.body)
+            EditorLabel("${latest.omittedRows} lower-time rows omitted", color = colors.textSecondary, style = type.body)
         val entities = live?.takeIf { it.scene == latest.scene }?.entities?.associateBy { it.id }.orEmpty()
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(latest.rows) { row ->
@@ -59,12 +59,12 @@ internal fun LuaProfilerPanel(
                 val label = entity?.label ?: if (row.entity == 0L) "Scene" else "Entity #${row.entity}"
                 val behaviour = row.behaviour.ifBlank { if (row.entity == 0L) "Globals" else "Primary" }
                 Column {
-                    Text("$label · $behaviour · ${milliseconds(row.totalNs)} ms", color = colors.textPrimary, style = type.body)
+                    EditorLabel("$label · $behaviour · ${milliseconds(row.totalNs)} ms", color = colors.textPrimary, style = type.body)
                     val phases = listOf("Init", "Update", "Callback", "Chunk").mapIndexed { index, phase ->
                         "$phase ${row.calls[index]} (${milliseconds(row.elapsed[index])} ms)"
                     }
-                    Text(phases.joinToString(" · "), color = colors.textSecondary, style = type.body)
-                    Text("Allocated ${row.allocated} B · Freed ${row.freed} B",
+                    EditorLabel(phases.joinToString(" · "), color = colors.textSecondary, style = type.body)
+                    EditorLabel("Allocated ${row.allocated} B · Freed ${row.freed} B",
                         color = colors.textSecondary, style = type.body)
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (entity != null && live != null)

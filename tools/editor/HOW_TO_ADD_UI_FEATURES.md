@@ -143,7 +143,9 @@ store) adds a watched `NoticeSource` there. Test the result with an `EditorNotic
   `contentDescription`, and a focus ring independent of selection).
 - Give icon-only buttons a label (it becomes the tooltip and accessible name).
 - Do not rely on green alone: errors use `error`, warnings `warning`, plus text.
-- Labels stay horizontal; long text ellipsizes with a tooltip rather than clipping.
+- Use `EditorLabel` for standalone labels. It shows the full text on hover. Shared buttons,
+  fields, selectors, and checkboxes use their labels as tooltips by default. Supply `help` for
+  units, shortcuts, or disabled reasons.
 
 ## Checklist before merging a UI change
 

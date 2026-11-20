@@ -97,6 +97,7 @@ internal suspend fun runEditorAppearanceSmoke(
         setAppearance(mode);showScene(false);scene.select(key);delay(700)
         check(EditorWindowChrome.darkCaption(window)?.let { it==(mode==EditorThemeMode.Dark) } ?: true) { "Main caption not themed for $mode" }
         capture(window,"scene-$m")
+        runAuxiliaryAppearanceSmoke(window,workspace.appearance)
         // Validation: an intermediate numeric draft is invalid but keeps the last valid value.
         val before=scene.document()
         scene.selected!!.editField("Transform",listOf("rotation"),JsonPrimitive(0.0),"-")

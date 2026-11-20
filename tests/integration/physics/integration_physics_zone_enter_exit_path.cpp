@@ -7,11 +7,18 @@
 
 #include <iostream>
 
-int main() {
+int runZone(uint16_t zoneCategory, uint16_t zoneMask, uint16_t movingCategory,
+            uint16_t movingMask, bool blockFirstPair, bool expectContact) {
     sle::events::EventBus bus;
     sle::physics::PhysicsWorld world({0.0f, -9.81f});
     world.setFixedTimestep(1.0f / 120.0f);
     world.setEventBus(&bus);
+    sle::physics::CollisionMatrix matrix{};
+    if (blockFirstPair) {
+        matrix[0] |= 2;
+        matrix[1] |= 1;
+    }
+    world.setBlockedCollisionPairs(matrix);
 
     int zoneEnterCount = 0;
     int zoneExitCount = 0;
@@ -41,6 +48,8 @@ int main() {
 
     sle::components::BoxZoneComponent zone;
     zone.size = {90.0f, 20.0f};
+    zone.categoryBits = zoneCategory;
+    zone.maskBits = zoneMask;
     zone.zoneId = "phase1_trigger";
     world.createBoxZone(zoneBodyId, zone);
 
@@ -50,6 +59,8 @@ int main() {
     world.setBodyEntityId(movingBodyId, 4002);
 
     sle::components::BoxColliderComponent movingCollider;
+    movingCollider.categoryBits = movingCategory;
+    movingCollider.maskBits = movingMask;
     movingCollider.size = {8.0f, 8.0f};
     world.createBoxFixture(movingBodyId, movingCollider);
 
@@ -65,15 +76,23 @@ int main() {
 
     bus.flushQueue();
 
-    if (zoneEnterCount == 0) {
-        std::cerr << "Expected at least one queued ZoneEnterEvent after flushQueue\n";
+    if ((zoneEnterCount != 0) != expectContact) {
+        std::cerr << "Unexpected ZoneEnterEvent count after flushQueue\n";
         return 1;
     }
 
-    if (zoneExitCount == 0) {
-        std::cerr << "Expected at least one queued ZoneExitEvent after flushQueue\n";
+    if ((zoneExitCount != 0) != expectContact) {
+        std::cerr << "Unexpected ZoneExitEvent count after flushQueue\n";
         return 1;
     }
 
     return 0;
+}
+
+int main() {
+    return runZone(1, 2, 2, 1, false, true) ||
+           runZone(1, 2, 2, 1, true, false) ||
+           runZone(2, 1, 1, 2, true, false) ||
+           runZone(5, 2, 2, 5, true, true) ||
+           runZone(5, 2, 2, 1, true, false);
 }

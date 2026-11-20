@@ -10,6 +10,32 @@ class NumberEditTest {
     private fun number(state: EntityWorkspaceState) = state.numberEdit("Transform", listOf("rotation"))
     private fun value(state: EntityWorkspaceState) = state.document.components.getValue("Transform").jsonObject.getValue("rotation").jsonPrimitive.double
 
+    @Test fun generatedValuesUseOwnerHistoryWithoutClampingTyping() {
+        val state = state()
+        val edit = number(state)
+        val control = NumberPresentation(NumericPresentation(0.25, 4.0, 0.25, 2, "×", true), null, false)
+        edit.updateText("6", true)
+        edit.commit()
+        assertEquals(1f, control.sliderPosition(value(state)))
+        assertEquals(6.0, value(state))
+        assertEquals("0.25", control.sliderText(0f))
+        assertEquals("4", control.sliderText(1f))
+        assertEquals("1.48", control.stepText("1.2345", 1))
+        val positive = NumberPresentation(NumericPresentation(0.25, 4.0, 0.25, 2, null, true),
+            NumericConstraints(0.0, null, true, false), false)
+        assertNull(positive.stepText("0.25000000000000000000000000000000000000000000000001", -1))
+        edit.updateText(assertNotNull(control.sliderText(0.5f)), true)
+        edit.updateText(assertNotNull(control.sliderText(0.75f)), true)
+        assertSame(edit, number(state))
+        edit.commit()
+        state.undo()
+        assertEquals(6.0, value(state))
+        assertEquals("7", NumberPresentation(NumericPresentation(null, null, 1.0, 2, null, false),
+            null, true).stepText("6", 1))
+        assertNull(NumberPresentation(NumericPresentation(2.0, 1.0, -1.0, null, null, true),
+            null, false).sliderText(1f))
+    }
+
     @Test fun jsonNumbersAreFiniteAndLocaleIndependent() {
         for (text in listOf("-2", "0.25", "1e-3", "-2.5E+2")) assertNotNull(NumberOptions().parse(text),text)
         for (text in listOf("", "-", "0.", "1e", "+1", "01", "NaN", "Infinity", "1e999", "1,5", "true", "[]", "\"2\""))
@@ -18,6 +44,30 @@ class NumberEditTest {
         assertNull(NumberOptions(min=0.0,max=2.0).parse("3"))
         assertNotNull(NumberOptions(min=0.0,max=2.0).parse("2"))
     }
+    @Test fun integerStepsEmitWholeTokensInsideHardBounds() {
+        assertEquals("1e2", NumberOptions().parse("1e2")?.content)
+        val presentation = NumberPresentation(NumericPresentation(null, null, 1.0, null, null, false),
+            NumericConstraints(0.0, 65535.0, false, false), true)
+        assertEquals("65535", presentation.stepText("65534", 1))
+        assertNull(presentation.stepText("65535", 1))
+        assertNull(presentation.stepText("0", -1))
+    }
+
+    @Test fun exponentDraftSurvivesCommitAndRedoWhileSerializationKeepsNumericValue() {
+        val state = state()
+        val edit = number(state)
+        edit.focus()
+        edit.input("-2.5E+2")
+        assertTrue(edit.commit())
+        assertEquals("-2.5E+2", edit.text)
+        state.undo()
+        assertEquals(0.0, value(state))
+        state.redo()
+        assertEquals("-2.5E+2", edit.text)
+        val serialized = EntityDocument.parse(state.document.serialize())
+        assertEquals(-250.0, serialized.components.getValue("Transform").jsonObject.getValue("rotation").jsonPrimitive.double)
+    }
+
     @Test fun previewsCommitAsOneUndoAndRedo() {
         val state=state();val edit=number(state)
         edit.focus();edit.input("1");edit.input("1.25");assertEquals(1.25,value(state))

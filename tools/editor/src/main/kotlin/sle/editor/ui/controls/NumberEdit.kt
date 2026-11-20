@@ -1,6 +1,10 @@
 package sle.editor.ui.controls
 
 import kotlinx.serialization.json.JsonPrimitive
+import sle.editor.model.NumericConstraints
+import sle.editor.model.NumericPresentation
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 /** Constraints are caller supplied, never inferred from the component catalog. */
 data class NumberOptions(val min: Double? = null, val max: Double? = null) {
@@ -49,4 +53,69 @@ internal class NumberEdit(
     }
     fun blur() { if (active) finish();token = null }
     fun cancel() { if (active) revert();token = null }
+}
+
+/** Suggested limits govern slider movement; only hard limits constrain keyboard steps. */
+internal class NumberPresentation(
+    private val ui: NumericPresentation,
+    private val hard: NumericConstraints?,
+    private val integer: Boolean,
+) {
+    private val min = ui.min?.takeIf { it.isFinite() }?.let(BigDecimal::valueOf)
+    private val max = ui.max?.takeIf { it.isFinite() }?.let(BigDecimal::valueOf)
+    private val step = ui.step?.takeIf { it.isFinite() && it > 0 && (!integer || it % 1 == 0.0) }
+        ?.let(BigDecimal::valueOf)
+    val canStep get() = step != null
+    val hasSlider get() = ui.slider && min != null && max != null && min < max &&
+        (!integer || step != null && min.stripTrailingZeros().scale() <= 0 && max.stripTrailingZeros().scale() <= 0)
+
+    fun sliderPosition(value: Double): Float {
+        if (!hasSlider || !value.isFinite()) return 0f
+        val start = checkNotNull(min)
+        val end = checkNotNull(max)
+        return (BigDecimal.valueOf(value).coerceIn(start, end) - start)
+            .divide(end - start, java.math.MathContext.DECIMAL64).toFloat()
+    }
+
+    fun sliderText(position: Float): String? {
+        if (!hasSlider || !position.isFinite()) return null
+        val start = checkNotNull(min)
+        val end = checkNotNull(max)
+        if (position <= 0f) return generatedText(start)
+        if (position >= 1f) return generatedText(end)
+        val raw = start + (end - start) * BigDecimal(position.toString())
+        val snapped = step?.let { start + raw.subtract(start).divide(it, 0, RoundingMode.HALF_UP) * it } ?: rounded(raw)
+        return generatedText(snapped.coerceIn(start, end))
+    }
+
+    fun stepText(text: String, direction: Int): String? {
+        val increment = step ?: return null
+        val parsed = NumberOptions().parse(text) ?: return null
+        val value = parsed.content.toBigDecimalOrNull()?.takeIf { it.scale() in -400..400 }
+            ?: BigDecimal.valueOf(parsed.content.toDouble())
+        val stepped = value + increment * BigDecimal.valueOf(direction.toLong())
+        val precision = ui.precision?.coerceIn(0, 16)
+        val generated = if (integer || precision == null) stepped else
+            stepped.setScale(maxOf(precision, increment.stripTrailingZeros().scale()), RoundingMode.HALF_UP)
+        return generatedText(generated)
+    }
+
+    fun sliderLabel(value: Double): String {
+        val formatted = rounded(BigDecimal.valueOf(value))
+        return listOfNotNull(formatted.stripTrailingZeros().toPlainString(), ui.unit).joinToString(" ")
+    }
+
+    private fun rounded(value: BigDecimal): BigDecimal =
+        ui.precision?.coerceIn(0, 16)?.let { value.setScale(it, RoundingMode.HALF_UP) } ?: value
+
+    private fun generatedText(value: BigDecimal): String? {
+        val numeric = value.toDouble()
+        if (!numeric.isFinite()) return null
+        val lower = hard?.min
+        val upper = hard?.max
+        if (lower != null && (numeric < lower || numeric == lower && hard.minExclusive)) return null
+        if (upper != null && (numeric > upper || numeric == upper && hard.maxExclusive)) return null
+        if (integer && value.stripTrailingZeros().scale() > 0) return null
+        return value.stripTrailingZeros().toPlainString()
+    }
 }

@@ -4,19 +4,27 @@
 #include <chrono>
 #include <sle/core/Log.hpp>
 #include <sle/engine/Runtime.hpp>
+#include "ProjectSettings.hpp"
 #include <sle/engine/ProjectRuntime.hpp>
 #include <thread>
 #include <sle/engine/Context.hpp>
 #include <sle/engine/CameraSystem.hpp>
 #include <sle/scene/components/Transform.hpp>
+#include <sle/scene/ChunkActivity.hpp>
 #include <sle/engine/EntityAuthoring.hpp>
 #include <sle/engine/SceneAuthoring.hpp>
 #include <sle/events/ScriptEvents.hpp>
 #include <sle/resources/Resources.hpp>
 
+#include "ComponentRegistry.hpp"
+#include "ScriptBehaviours.hpp"
+#include "SceneEntityName.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
+#include <tuple>
 #include <string>
 
 namespace sle
@@ -100,6 +108,8 @@ namespace sle
             camera.setViewport(static_cast<float>(config.width),static_cast<float>(config.height));
             const auto loaded=loadScene(project.startupScene());
             if (!loaded.ok()) return loaded;
+            physicsWorld->setBlockedCollisionPairs(project.collisionMatrix());
+            resetInputActions(project.inputActions());
             authoredSceneKeys.clear();
             for (const auto& entity : project.sceneDocument(project.startupScene()).at("entities")) authoredSceneKeys.push_back(entity.at("key").get<std::string>());
             setPhysicsDebugEnabled(false);setEmbeddedPaused(false);
@@ -126,6 +136,7 @@ namespace sle
         auto result = sceneManager.loadScene(sceneName, *this, scene);
         if (result.ok())
         {
+            embeddedStepRequested = false;
             if (entityPreview)
             {
                 camera.setViewport(static_cast<float>(config.width), static_cast<float>(config.height));
@@ -302,6 +313,46 @@ namespace sle
         if (embeddedPaused) audioSystem.setPaused(true);
     }
 
+    void Runtime::setEditorAssetRoot(std::filesystem::path root, std::string_view artStyle)
+    {
+        setEditorProjectSettings(std::move(root), artStyle.empty()
+            ? nlohmann::json::object() : nlohmann::json{{"artStyle", artStyle}});
+    }
+
+    std::string Runtime::projectTagId(const std::string& name) const
+    {
+        if (!projectContext) return {};
+        const auto& tags = projectContext->tagsByName();
+        const auto found = tags.find(name);
+        return found == tags.end() ? std::string{} : found->second;
+    }
+
+    void Runtime::setEditorProjectSettings(std::filesystem::path root, const nlohmann::json& settings)
+    {
+        const auto textureDefault = detail::artStyleFilter(settings);
+        const auto blockedPairs = detail::blockedCollisionPairs(settings);
+        detail::projectTags(settings);
+        auto actions = detail::projectInputActions(settings);
+        editorInputActions = std::move(actions);
+        editorTextureDefault = textureDefault;
+        editorBlockedPairs = blockedPairs;
+        if (root.empty()) {
+            editorAssetRoot.clear();
+            return;
+        }
+        std::error_code error;
+        editorAssetRoot = std::filesystem::canonical(root, error);
+    }
+
+    renderer::TextureFilter Runtime::spriteTextureFilter(const std::string& path) const
+    {
+        if (!projectContext && editorAssetRoot.empty()) return renderer::TextureFilter::Default;
+        const std::filesystem::path asset(path);
+        if (projectContext) return projectContext->textureFilter(asset);
+        return ProjectRuntime::previewTextureFilter(editorAssetRoot, asset,
+            editorTextureDefault.value_or(renderer::TextureFilter::Default));
+    }
+
     Result<bool> Runtime::loadEntityPreview(const nlohmann::json& document, bool preserveView)
     {
         if (!embedded || !initialized) return Result<bool>::error("Embedded runtime is not initialized");
@@ -327,6 +378,7 @@ namespace sle
         uiSystem.setDocumentVisible(debugFpsDocumentIndex, false);
         entityPreview = true;
         fitPreview = !keepView;
+        embeddedStepRequested = false;
         setEmbeddedPaused(true);
         renderSystem.setPhysicsDebugEnabled(true);
         renderer.setClearColor({0.09f, 0.10f, 0.12f, 1.0f});
@@ -371,6 +423,8 @@ namespace sle
         if (!registerSceneFromData("editor_play",canonical,"editor.scene.json")) return Result<bool>::error("Cannot register scene play");
         const auto loaded=loadScene("editor_play");
         if (!loaded.ok()) return loaded;
+        physicsWorld->setBlockedCollisionPairs(editorBlockedPairs);
+        resetInputActions(editorInputActions);
         authoredSceneKeys.clear();
         for (const auto& e : canonical.at("entities")) authoredSceneKeys.push_back(e.at("key").get<std::string>());
         setPhysicsDebugEnabled(false);
@@ -459,13 +513,163 @@ namespace sle
         return result;
     }
 
+    nlohmann::json Runtime::liveHierarchy() const {
+        auto rows = nlohmann::json::array();
+        std::vector<entity::Entity> pending(scene.getRoots().rbegin(), scene.getRoots().rend());
+        const auto& registry = scene.getRegistry();
+        const auto& keys = sceneManager.getAuthoredEntityKeys();
+        while (!pending.empty()) {
+            const auto entity = pending.back();
+            pending.pop_back();
+            if (!registry.hasEntity(entity)) continue;
+            const auto key = keys.find(entity.getID());
+            nlohmann::json row = {{"id", entity.getID()}, {"parent", scene.getParent(entity).getID()},
+                {"authoredKey", key == keys.end() ? nlohmann::json(nullptr) : nlohmann::json(key->second)}};
+            if (const auto* name = registry.getComponent<detail::SceneEntityName>(entity))
+                row["name"] = name->value;
+            rows.push_back(std::move(row));
+            const auto& children = scene.getChildren(entity);
+            pending.insert(pending.end(), children.rbegin(), children.rend());
+        }
+        return {{"sceneInstance", sceneManager.getSceneInstance()}, {"entities", std::move(rows)}};
+    }
+
+    nlohmann::json Runtime::liveComponents(uint64_t sceneInstance, uint32_t entityId) const {
+        const auto& registry = scene.getRegistry();
+        const entity::Entity entity(entityId);
+        if (sceneInstance != sceneManager.getSceneInstance() || !registry.hasEntity(entity))
+            return nullptr;
+
+        auto result = nlohmann::json::object();
+        for (const auto* name : {"Transform", "SpriteRenderer"}) {
+            auto snapshot = componentdata::descriptors().at(name).get(registry, entity);
+            if (!snapshot.is_null()) result[name] = std::move(snapshot);
+        }
+        if (const auto* script = registry.getComponent<components::ScriptComponent>(entity)) {
+            auto attachments = nlohmann::json::array();
+            for (const auto& spec : detail::scriptSpecs(*script)) {
+                const char* status = !script->enabled || !spec.enabled ? "Disabled" :
+                    scriptEngine.hasBehaviour(entityId, spec.key) ? "Loaded" : "Not loaded";
+                attachments.push_back({{"key", spec.key}, {"scriptAsset", spec.scriptAsset},
+                    {"order", spec.order}, {"status", status},
+                    {"canReload", script->enabled && spec.enabled &&
+                        entity::isChunkActive(registry, entity, components::ChunkSubsystem::Scripts) &&
+                        (projectContext || [&] {
+                            if (editorAssetRoot.empty()) return false;
+                            try {
+                                (void)ProjectRuntime::resolveEditorSource(editorAssetRoot, std::filesystem::u8path(spec.scriptAsset));
+                                return true;
+                            } catch (const std::exception&) {
+                                return false;
+                            }
+                        }())}});
+            }
+            result["Script"] = std::move(attachments);
+        }
+        return result;
+    }
+
+    void Runtime::reloadEmbeddedBehaviour(uint64_t sceneInstance, uint32_t entityId,
+        const std::string& key, const std::string& asset)
+    {
+        if (!embedded || !initialized || entityPreview || (!projectContext && editorAssetRoot.empty()) ||
+            sceneInstance != sceneManager.getSceneInstance())
+            return;
+
+        auto& registry = scene.getRegistry();
+        const auto matches = [&](entity::Entity entity, const std::string& behaviour, const std::string& path) {
+            const auto* script = registry.getComponent<components::ScriptComponent>(entity);
+            if (!script || !script->enabled ||
+                !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Scripts))
+                return false;
+            const auto specs = detail::scriptSpecs(*script);
+            return std::any_of(specs.begin(), specs.end(), [&](const auto& spec) {
+                return spec.key == behaviour && spec.enabled && spec.scriptAsset == path;
+            });
+        };
+        if (!matches(entity::Entity(entityId), key, asset)) {
+            Log::warn("Script reload skipped because the selected attachment changed");
+            return;
+        }
+
+        std::filesystem::path sourcePath;
+        try {
+            sourcePath = projectContext ? std::filesystem::u8path(projectContext->resolveAsset(asset)) :
+                ProjectRuntime::resolveEditorSource(editorAssetRoot, std::filesystem::u8path(asset));
+        } catch (const std::exception& error) {
+            Log::error("Script reload could not resolve {}: {}", asset, error.what());
+            return;
+        }
+        const auto path = sourcePath.generic_string();
+        std::ifstream file(sourcePath, std::ios::binary);
+        if (!file) {
+            Log::error("Could not open script for reload: {}", path);
+            return;
+        }
+        std::string source;
+        char buffer[4096];
+        while (file.read(buffer, sizeof(buffer))) source.append(buffer, sizeof(buffer));
+        source.append(buffer, static_cast<std::size_t>(file.gcount()));
+        if (file.bad() || !file.eof()) {
+            Log::error("Could not read script for reload: {}", path);
+            return;
+        }
+        struct Target {
+            entity::Entity entity;
+            scripting::ScriptBehaviourSpec spec;
+            uint64_t generation;
+        };
+        std::vector<Target> targets;
+        registry.view<components::ScriptComponent>([&](auto entity, const auto& script) {
+            if (!script.enabled || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Scripts)) return;
+            for (const auto& spec : detail::scriptSpecs(script)) {
+                if (spec.enabled && (spec.scriptAsset == asset || spec.scriptAsset == path))
+                    targets.push_back({entity, spec, scriptEngine.getBehaviourGeneration(entity.getID(), spec.key)});
+            }
+        });
+        std::stable_sort(targets.begin(), targets.end(), [](const auto& a, const auto& b) {
+            return std::tuple(a.spec.order, a.entity.getID()) < std::tuple(b.spec.order, b.entity.getID());
+        });
+        for (const auto& target : targets) {
+            const auto id = target.entity.getID();
+            const auto& spec = target.spec;
+            using Reload = scripting::BehaviourReloadResult;
+            Reload result = Reload::AttachmentChanged;
+            if (scriptEngine.getBehaviourGeneration(id, spec.key) == target.generation)
+                result = scriptEngine.reloadBehaviour(id, spec.key, spec.scriptAsset, source,
+                    [&] { return matches(target.entity, spec.key, spec.scriptAsset); }, path);
+            const auto label = spec.key.empty() ? "Primary" : spec.key;
+            switch (result) {
+            case Reload::Restarted:
+                scriptSystem.recordBehaviourReload(id, spec.key, spec.scriptAsset, true);
+                Log::info("Reloaded {} for entity {} ({})", path, id, label);
+                break;
+            case Reload::InitFailed:
+                if (matches(target.entity, spec.key, spec.scriptAsset) && !scriptEngine.hasBehaviour(id, spec.key))
+                    scriptSystem.recordBehaviourReload(id, spec.key, spec.scriptAsset, false);
+                Log::warn("Reloaded {} for entity {} ({}) but initialization failed", path, id, label);
+                break;
+            case Reload::AttachmentChanged:
+                Log::warn("Skipped reload of {} for entity {} ({}) because the attachment changed", path, id, label);
+                break;
+            case Reload::StageFailed:
+                // The Lua diagnostic already records the source, entity and attachment.
+                break;
+            }
+        }
+    }
+
     Result<bool> Runtime::advanceEmbeddedFrame(float dt, bool allowDebugInput)
     {
         if (!embedded || !initialized)
             return Result<bool>::error("Embedded runtime is not initialized");
         if (!std::isfinite(dt) || dt < 0.0f)
             return Result<bool>::error("Embedded advance requires finite nonnegative dt");
-        if (embeddedPaused) return Result<bool>::success(true);
+        if (embeddedPaused) {
+            if (!std::exchange(embeddedStepRequested, false)) return Result<bool>::success(true);
+            dt = 1.0f / 60.0f;
+            allowDebugInput = false;
+        }
         processPendingSceneSwitch();
         if (allowDebugInput) handleDebugInput();
         (void)advanceSimulation(dt);
@@ -487,17 +691,26 @@ namespace sle
     {
         if (!embedded || embeddedPaused == paused) return;
         embeddedPaused = paused;
+        embeddedStepRequested = false;
         Input::releaseAll();
         audioSystem.setPaused(paused);
+    }
+
+    bool Runtime::requestEmbeddedStep()
+    {
+        if (!embedded || !initialized || !embeddedPaused || entityPreview) return false;
+        embeddedStepRequested = true;
+        return true;
     }
 
     void Runtime::processPendingSceneSwitch()
     {
         const std::string previousSceneName = sceneManager.getCurrentSceneName();
-        auto switchResult = sceneManager.processPendingSwitch(*this, scene);
+        bool errorReported = false;
+        auto switchResult = sceneManager.processPendingSwitch(*this, scene, errorReported);
         if (!switchResult.ok())
         {
-            Log::error("Failed to switch pending scene: {}", switchResult.error());
+            if (!errorReported) Log::error("Failed to switch pending scene: {}", switchResult.error());
         }
         else if (previousSceneName != sceneManager.getCurrentSceneName())
         {
@@ -505,10 +718,42 @@ namespace sle
         }
     }
 
+    void Runtime::resetInputActions(const InputActionMap& actions)
+    {
+        activeInputActions = actions;
+        inputActionStates.clear();
+        for (const auto& [name, keys] : activeInputActions)
+            inputActionStates.try_emplace(name);
+        Input::releaseAll();
+    }
+
+    input::KeyState Runtime::inputAction(std::string_view name) const
+    {
+        const auto found = inputActionStates.find(name);
+        return found == inputActionStates.end() ? input::KeyState{} : found->second;
+    }
+
+    bool Runtime::isActionKeyBound(int key) const
+    {
+        return std::ranges::any_of(activeInputActions, [key](const auto& action) {
+            return std::ranges::find(action.second, key) != action.second.end();
+        });
+    }
+
+    void Runtime::sampleInputActions()
+    {
+        for (const auto& [name, keys] : activeInputActions)
+        {
+            auto& state = inputActionStates.at(name);
+            const bool down = std::ranges::any_of(keys, Input::isKeyDown);
+            state = {down, down && !state.down, !down && state.down};
+        }
+    }
+
     void Runtime::handleDebugInput()
     {
         if (gameViewOverride) return;
-        if (Input::isKeyPressed(static_cast<int>(Input::Key::F3)))
+        if (!isActionKeyBound(GLFW_KEY_F3) && Input::isKeyPressed(GLFW_KEY_F3))
         {
             const bool enabled = !renderSystem.isPhysicsDebugEnabled();
             renderSystem.setPhysicsDebugEnabled(enabled);
@@ -521,6 +766,7 @@ namespace sle
     {
         using Clock = std::chrono::high_resolution_clock;
         using Ms = std::chrono::duration<double, std::milli>;
+        sampleInputActions();
         frameDeltaTime = dt;
         fpsUiAccumulator += dt;
         ++fpsUiFrameCount;
@@ -722,7 +968,7 @@ namespace sle
 
             handleDebugInput();
 
-            if (Input::isKeyDown(GLFW_KEY_ESCAPE))
+            if (!isActionKeyBound(GLFW_KEY_ESCAPE) && Input::isKeyDown(GLFW_KEY_ESCAPE))
                 break;
 
             hostWidth=window.getWidth(); hostHeight=window.getHeight();

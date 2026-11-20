@@ -610,9 +610,27 @@ sle_add_integration_test(
 foreach(mode IN ITEMS discovery launch)
     add_test(NAME integration_package_${mode}_path
         COMMAND ${CMAKE_COMMAND} -DENGINE_APP=$<TARGET_FILE:engine_app>
+            -DSAMPLER_TEST=$<TARGET_FILE:integration_project_play_path>
             -DFIXTURE=$<TARGET_FILE:integration_game_package_path>
             -DSOURCE_ROOT=${PROJECT_SOURCE_DIR} -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR} -DMODE=${mode}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/systems/integration_package_launch_path.cmake)
 endforeach()
 set_tests_properties(integration_package_discovery_path PROPERTIES LABELS "integration;systems")
 set_tests_properties(integration_package_launch_path PROPERTIES LABELS "integration;systems;windowed")
+
+if(SLE_BUILD_EDITOR)
+    sle_add_integration_test(
+        integration_editor_log_queue_path
+        editor/integration_editor_log_queue_path.cpp
+        editor
+        LINK_LIBS sle::core
+    )
+    target_include_directories(integration_editor_log_queue_path PRIVATE ${CMAKE_SOURCE_DIR}/tools/editor-native)
+endif()
+
+sle_add_integration_test(
+    integration_editor_lua_host_path
+    editor/integration_editor_lua_host_path.cpp
+    "editor;scripting"
+    LINK_LIBS sle::scripting
+)

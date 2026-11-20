@@ -39,6 +39,20 @@ int l_findEntityByKey(lua_State* L)
     else lua_pushinteger(L, entity.id);
     return 1;
 }
+int l_findEntitiesByTag(lua_State* L)
+{
+    luaL_checktype(L, 1, LUA_TSTRING);
+    std::size_t length = 0;
+    const char* name = lua_tolstring(L, 1, &length);
+    const auto matches = detail::getApi(L)->findEntitiesByTag(std::string(name, length));
+    lua_createtable(L, static_cast<int>(matches.size()), 0);
+    lua_Integer index = 1;
+    for (const auto entity : matches) {
+        lua_pushinteger(L, entity.id);
+        lua_rawseti(L, -2, index++);
+    }
+    return 1;
+}
 int l_registerScene(lua_State* L)
 {
     const char* name = luaL_checkstring(L, 1);
@@ -126,6 +140,7 @@ void registerComponentsTable(lua_State* L, int engineTable, ScriptApi* api)
     detail::setEngineFunction(L, engineTable, api, "getBehaviourKey", l_getBehaviourKey);
     detail::setEngineFunction(L, engineTable, api, "instantiatePrefab", l_instantiatePrefab);
     detail::setEngineFunction(L, engineTable, api, "findEntityByKey", l_findEntityByKey);
+    detail::setEngineFunction(L, engineTable, api, "findEntitiesByTag", l_findEntitiesByTag);
     detail::setEngineFunction(L, engineTable, api, "registerScene", l_registerScene);
     detail::setEngineFunction(L, engineTable, api, "registerSceneFromFile", l_registerSceneFromFile);
     lua_newtable(L);

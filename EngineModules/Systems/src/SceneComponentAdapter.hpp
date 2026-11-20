@@ -2,6 +2,7 @@
 #include "ComponentRegistry.hpp"
 #include "lua/components/ValueValidation.hpp"
 #include <optional>
+#include <string_view>
 
 namespace sle::detail {
 struct SceneComponentPatch
@@ -9,6 +10,7 @@ struct SceneComponentPatch
     componentdata::Json values;
     std::optional<std::string> texture;
     std::optional<float> legacyMass;
+    std::string regionId;
 };
 
 // Compatibility syntax only. Accepted component fields/defaults/ranges belong to
@@ -17,7 +19,7 @@ inline SceneComponentPatch adaptSceneComponent(const std::string& name, const co
 {
     using Json = componentdata::Json;
     if (!source.is_object()) throw std::invalid_argument("Component patch must be an object");
-    SceneComponentPatch result{source,{},{}};
+    SceneComponentPatch result{source,{},{},{}};
     auto& patch=result.values;
     auto alias=[&](const char* oldName, const char* canonical) {
         if (!patch.contains(oldName)) return;
@@ -57,6 +59,21 @@ inline SceneComponentPatch adaptSceneComponent(const std::string& name, const co
         lua::components::validate(patch["texture"],"str");
         result.texture=componentdata::resolveAssetPath(patch["texture"].get<std::string>());
         patch.erase("texture");
+    }
+    if (name=="SpriteRenderer" && patch.contains("regionId")) {
+        lua::components::validate(patch["regionId"],"str");
+        result.regionId = patch["regionId"].get<std::string>();
+        if (!result.regionId.empty()) {
+            const auto& id = result.regionId;
+            if (!result.texture || id.size() != 36)
+                throw std::invalid_argument("Named sprite region requires a texture and a UUID");
+            for (std::size_t i = 0; i < id.size(); ++i) {
+                const bool separator = i == 8 || i == 13 || i == 18 || i == 23;
+                if (separator ? id[i] != '-' : std::string_view("0123456789abcdef").find(id[i]) == std::string_view::npos)
+                    throw std::invalid_argument("Expected lowercase sprite region UUID");
+            }
+        }
+        patch.erase("regionId");
     }
     if (name=="RigidBody" && patch.contains("mass")) {
         // Historical serialized metadata; Box2D still derives mass from fixtures.

@@ -8,6 +8,8 @@ import sle.editor.project.ProjectWorkspaceState
 import java.awt.Desktop
 import java.nio.file.*
 import javax.swing.JFileChooser
+import javax.swing.JList
+import javax.swing.JScrollPane
 import javax.swing.JOptionPane
 
 internal data class ProjectAssetCommands(
@@ -18,13 +20,25 @@ internal data class ProjectAssetCommands(
     val busy: Boolean,val message: String?,
     val createFolder: ()->Unit={},val rename: ()->Unit={},val move: ()->Unit={},
     val delete: ()->Unit={},val recover: ()->Unit={},
+    val findReferences: (String) -> Unit = {},
+    val snapshot: AssetSnapshot? = null,
+    val projectRoot: Path? = null,
+    val assetRoot: Path? = null,
+    val editRegions: (String, (List<SpriteRegion>) -> List<SpriteRegion>) -> Unit = { _, _ -> },
+    val sliceTexture: (String, String) -> Unit = { _, _ -> },
+    val setTextureFilter: (String, AssetTextureFilter?) -> Unit = { _, _ -> },
 )
 internal val LocalProjectAssets=staticCompositionLocalOf<ProjectAssetCommands?> { null }
 
 @Composable
-internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetBrowserState?,owner: java.awt.Window,canMutate: ()->Boolean={true}): ProjectAssetCommands? {
+internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetBrowserState?,owner: java.awt.Window,canMutate: ()->Boolean={true},
+    onTextureFilterChanged: () -> Unit = {},
+    openDocument: (Path) -> Unit = {},
+    openProjectSettings: () -> Unit = {},
+): ProjectAssetCommands? {
     val opened=project.opened ?: return null
     val assetRoot=opened.root.resolve(opened.document.assetRoot)
+    val activation = project.activationRevision
     val scope=rememberCoroutineScope()
     var busy by remember(opened.file) { mutableStateOf(false) }
     var message by remember(opened.file) { mutableStateOf<String?>(null) }
@@ -87,6 +101,7 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
         managed { store -> withContext(Dispatchers.IO) { store.move(selected,destination) };"Moved to $destination" }
     }
     return ProjectAssetCommands(
+        projectRoot = opened.root, assetRoot = assetRoot,
         importFiles={
             val chooser=EditorFileChooser(assetRoot.toFile()).apply {
                 dialogTitle="Import files or folders into ${browser?.folder?.ifEmpty { "Assets" } ?: "Assets"}"
@@ -134,6 +149,65 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
                     require(path.fileName.toString().substringAfterLast('.').lowercase() in setOf("lua","json","xml","txt","md","png","jpg","jpeg","bmp","gif","wav","ogg","mp3","flac")) { "No external-open action for this file type; use Reveal" }
                     Desktop.getDesktop().open(path.toFile())
                 };null
+            }
+        },
+        findReferences = { path ->
+            run {
+                val results = withContext(Dispatchers.IO) { ProjectAssetOperations(opened).findReferences(path) }
+                if (project.activationRevision == activation) {
+                    val scopeText = "Saved files only: scenes, entity templates, and the project startup scene setting."
+                    if (results.isEmpty()) {
+                        EditorDialogs.showMessageDialog(owner, arrayOf(path, scopeText, "No direct references found."),
+                            "Find References", JOptionPane.INFORMATION_MESSAGE)
+                    } else {
+                        val sources = JList(results.map { it.source }.toTypedArray()).apply {
+                            selectionMode = javax.swing.ListSelectionModel.SINGLE_SELECTION
+                            visibleRowCount = results.size.coerceAtMost(10)
+                            selectedIndex = 0
+                        }
+                        val choice = EditorDialogs.showOptionDialog(owner, arrayOf(path, scopeText, JScrollPane(sources)),
+                            "Find References", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null,
+                            arrayOf("Open", "Close"), "Open")
+                        if (choice == 0 && project.activationRevision == activation) {
+                            results.getOrNull(sources.selectedIndex)?.let { reference ->
+                                val documentPath = reference.documentPath
+                                if (documentPath == null) openProjectSettings()
+                                else openDocument(assetRoot.resolve(documentPath))
+                            }
+                        }
+                    }
+                }
+                null
+            }
+        },
+        snapshot = browser?.snapshot,
+        editRegions = { path, edit ->
+            run {
+                withContext(Dispatchers.IO) { AssetIdentity.editRegions(opened.root, assetRoot, path, edit) }
+                if (current == opened) onTextureFilterChanged()
+                "Sprite regions saved"
+            }
+        },
+        sliceTexture = { path, dimensions ->
+            run {
+                withContext(Dispatchers.IO) {
+                    val (width, height) = parseRegionIntegers(dimensions, 2)
+                    val (imageWidth, imageHeight) = spriteImageSize(assetPath(opened.root, assetRoot, path))
+                    AssetIdentity.editRegions(opened.root, assetRoot, path) { existing ->
+                        val cells = sliceGrid(imageWidth, imageHeight, width, height)
+                        val rectangles = existing.map { listOf(it.x, it.y, it.width, it.height) }.toSet()
+                        existing + cells.filter { listOf(it.x, it.y, it.width, it.height) !in rectangles }
+                    }
+                }
+                if (current == opened) onTextureFilterChanged()
+                "Sprite grid saved"
+            }
+        },
+        setTextureFilter = { path, filter ->
+            run {
+                withContext(Dispatchers.IO) { AssetIdentity.writeFilter(opened.root, assetRoot, path, filter) }
+                if (current == opened) onTextureFilterChanged()
+                "Texture filter saved"
             }
         },
         repair={

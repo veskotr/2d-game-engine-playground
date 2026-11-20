@@ -1,5 +1,6 @@
 #include <sle/engine/ProjectRuntime.hpp>
 #include <sle/engine/Runtime.hpp>
+#include <sle/renderer/Texture.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
 #include <filesystem>
 #include <fstream>
@@ -45,6 +46,74 @@ int main() {
         write(original/"Assets/Scenes/second.scene.json",linked);
         const auto moved=root/"relocated";fs::rename(original,moved);fs::current_path(root);
         auto loaded=sle::ProjectRuntime::open(moved/"game.sleproject");check(loaded.ok(),loaded.error().c_str());
+        const auto texture = moved/"Assets/inherited.png";
+        std::ofstream{texture} << "fixture";
+        using Filter = sle::renderer::TextureFilter;
+        check(loaded.value().textureFilter(texture) == Filter::Default, "legacy sampler changed");
+        for (const auto& [style, expected] : {std::pair{"pixelArt", Filter::Nearest}, {"smooth", Filter::Linear}}) {
+            descriptor["settings"]["artStyle"] = style;
+            write(moved/"game.sleproject", descriptor);
+            const auto styled = sle::ProjectRuntime::open(moved/"game.sleproject");
+            check(styled.ok(), styled.error().c_str());
+            check(styled.value().textureFilter(texture) == expected, "project sampler was not inherited");
+            check(styled.value().textureFilter(moved/"outside.png") == Filter::Default, "external texture inherited sampler");
+        }
+        for (const auto& invalid : {Json(nullptr), Json(1), Json("invalid")}) {
+            descriptor["settings"]["artStyle"] = invalid;
+            write(moved/"game.sleproject", descriptor);
+            check(!sle::ProjectRuntime::open(moved/"game.sleproject").ok(), "invalid art style accepted");
+        }
+        descriptor["settings"] = Json::parse(R"({"collisionLayers":{"labels":["Player"],"blockedPairs":[[15,0],[3,3]]}})");
+        write(moved/"game.sleproject", descriptor);
+        const auto layered = sle::ProjectRuntime::open(moved/"game.sleproject");
+        check(layered.ok(), layered.error().c_str());
+        const auto& matrix = layered.value().collisionMatrix();
+        check(matrix[0] == (1u << 15) && matrix[15] == 1 && matrix[3] == (1u << 3),
+            "collision matrix did not preserve symmetric bit slots");
+        descriptor["settings"]["collisionLayers"]["blockedPairs"] = Json::parse("[[-1,0]]");
+        write(moved/"game.sleproject", descriptor);
+        check(!sle::ProjectRuntime::open(moved/"game.sleproject").ok(), "invalid collision slot accepted");
+        descriptor["settings"] = Json::parse(R"({"sortingLayers":[{"value":-3,"label":"Backdrop"},{"value":10,"label":"HUD"}]})");
+        write(moved/"game.sleproject", descriptor);
+        const auto sorted = sle::ProjectRuntime::open(moved/"game.sleproject");
+        check(sorted.ok(), sorted.error().c_str());
+        for (const auto& invalid : {R"([{"value":2,"label":"A"},{"value":2,"label":"B"}])",
+                                    R"([{"value":2147483648,"label":"A"}])",
+                                    R"([{"value":"2","label":"A"}])"}) {
+            descriptor["settings"]["sortingLayers"] = Json::parse(invalid);
+            write(moved/"game.sleproject", descriptor);
+            check(!sle::ProjectRuntime::open(moved/"game.sleproject").ok(), "invalid sorting layers accepted");
+        }
+        descriptor["settings"] = Json::parse(R"({"tags":[{"id":"tag-player","name":"Player"}]})");
+        write(moved/"game.sleproject", descriptor);
+        check(sle::ProjectRuntime::open(moved/"game.sleproject").ok(), "valid tag definition rejected");
+        for (const auto* invalid : {R"([{"id":"a","name":"Player"},{"id":"b","name":"Player"}])",
+                                    R"([{"id":"a","name":"Player"},{"id":"a","name":"Enemy"}])",
+                                    R"([{"id":"","name":"Player"}])",
+                                    R"([{"id":"a","name":""}])"}) {
+            descriptor["settings"]["tags"] = Json::parse(invalid);
+            write(moved/"game.sleproject", descriptor);
+            check(!sle::ProjectRuntime::open(moved/"game.sleproject").ok(), "invalid tag definitions accepted");
+        }
+        descriptor["settings"] = Json::parse(R"({"inputActions":[
+            {"name":"Jump","bindings":[{"kind":"key","key":32},{"kind":"key","key":87}]},
+            {"name":"Confirm","bindings":[{"kind":"key","key":335}]},
+            {"name":"Unbound","bindings":[]}
+        ]})");
+        write(moved/"game.sleproject", descriptor);
+        check(sle::ProjectRuntime::open(moved/"game.sleproject").ok(), "valid input actions rejected");
+        for (const auto* invalid : {R"([{"name":"Jump","bindings":[]},{"name":"Jump","bindings":[]}])",
+                                    R"([{"name":"","bindings":[]}])",
+                                    R"([{"name":"Jump","bindings":[{"kind":"mouse","key":32}]}])",
+                                    R"([{"name":"Jump","bindings":[{"kind":"key","key":2147483648}]}])",
+                                    R"([{"name":"Jump","bindings":[{"kind":"key","key":"32"}]}])",
+                                    R"([{"name":"Jump","bindings":[{"kind":"key","key":32},{"kind":"key","key":32}]}])"}) {
+            descriptor["settings"]["inputActions"] = Json::parse(invalid);
+            write(moved/"game.sleproject", descriptor);
+            check(!sle::ProjectRuntime::open(moved/"game.sleproject").ok(), "invalid input actions accepted");
+        }
+        descriptor.erase("settings");
+        write(moved/"game.sleproject", descriptor);
         const auto& project=loaded.value();
         check(project.engineConfig().width==640 && project.engineConfig().height==360 && project.engineConfig().targetFPS==30,"game settings lost");
         check(project.startupScene()==first,"startup UUID lost");
@@ -94,6 +163,39 @@ int main() {
         invalid=descriptor;invalid["game"]["targetFPS"]=-1;write(moved/"game.sleproject",invalid);
         check(!sle::ProjectRuntime::open(moved/"game.sleproject").ok(),"negative FPS accepted");
         write(moved/"game.sleproject",descriptor);
+        const auto image = moved/"Assets/sprite.png";
+        const auto imageMeta = moved/"Assets/sprite.png.slemeta";
+        std::ofstream(image) << "fixture";
+        const std::string imageId = "55555555-5555-4555-8555-555555555555";
+        meta(image, imageId);
+        auto defaultFilter = sle::ProjectRuntime::open(moved/"game.sleproject");
+        check(defaultFilter.ok(), defaultFilter.error().c_str());
+        check(defaultFilter.value().textureFilter(image) == sle::renderer::TextureFilter::Default,
+            "identity-only texture did not use default filtering");
+        Json imageMetadata = {{"format","sle-asset"},{"version",1},{"id",imageId}};
+        for (const auto* filter : {"nearest", "linear"}) {
+            imageMetadata["texture"] = {{"filter",filter}};
+            write(imageMeta, imageMetadata);
+            auto filtered = sle::ProjectRuntime::open(moved/"game.sleproject");
+            check(filtered.ok(), filtered.error().c_str());
+            const auto indexedImage = fs::path(filtered.value().resolveAsset("project-asset://" + imageId));
+            check(fs::equivalent(image, indexedImage), "indexed texture resolved to a different file");
+            const auto expectedLookup = std::string(filter) == "nearest"
+                ? sle::renderer::TextureFilter::Nearest : sle::renderer::TextureFilter::Linear;
+            check(filtered.value().textureFilter(indexedImage) == expectedLookup, "indexed path lost texture filter");
+            check(filtered.value().textureFilter(image) == expectedLookup, "texture path alias lost filter");
+            check(sle::ProjectRuntime::previewTextureFilter(filtered.value().assetRoot(), image) == expectedLookup,
+                "preview texture lookup lost filter");
+        }
+        imageMetadata["texture"]["filter"] = "invalid";
+        write(imageMeta, imageMetadata);
+        const auto rejected = sle::ProjectRuntime::open(moved/"game.sleproject");
+        check(!rejected.ok() && rejected.error().find(imageMeta.filename().generic_string()) != std::string::npos,
+            "invalid texture filter did not identify the sidecar");
+        imageMetadata["texture"]["filter"] = "nearest";
+        std::ofstream(imageMeta) << imageMetadata.dump() << " trailing data";
+        check(!sle::ProjectRuntime::open(moved/"game.sleproject").ok(), "trailing asset metadata content accepted");
+        meta(image, imageId);
         std::ofstream(moved/"Assets/Scripts/main.lua.slemeta")<<"bad json";
         check(!sle::ProjectRuntime::open(moved/"game.sleproject").ok(),"malformed metadata accepted");
         meta(moved/"Assets/Scripts/main.lua",script);

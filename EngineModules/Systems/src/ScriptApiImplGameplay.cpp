@@ -6,6 +6,9 @@
 #include <sle/scene/components/Transform.hpp>
 #include <sle/scene/TransformMath.hpp>
 
+#include <sle/scene/components/TagsComponent.hpp>
+
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -25,7 +28,8 @@ scripting::ScriptEntityRef ScriptApiImpl::instantiatePrefab(const std::string& p
         if(resolvedOverrides.is_object())
             for(auto& [entityKey,components]:resolvedOverrides.items())
                 components=runtime.resolveProjectComponents(components);
-        const auto result=PrefabLoader::instantiate(runtime.resolveProjectAsset(path),runtime.getScene(),key,resolvedOverrides,entity::Entity(parent.id));
+        const auto result=PrefabLoader::instantiate(runtime.resolveProjectAsset(path),runtime.getScene(),key,resolvedOverrides,entity::Entity(parent.id),
+            [this](const std::string& texture) { return runtime.spriteTextureFilter(texture); });
         if(!result.ok()) {error=result.error();return {};}
         return {result.value().getID()};
     } catch(const std::exception& failure) { error=failure.what();return {}; }
@@ -35,6 +39,20 @@ scripting::ScriptEntityRef ScriptApiImpl::instantiatePrefab(const std::string& p
 scripting::ScriptEntityRef ScriptApiImpl::findEntityByKey(const std::string& key) const
 {
     return {runtime.getScene().findEntityByKey(key).getID()};
+}
+
+std::vector<scripting::ScriptEntityRef> ScriptApiImpl::findEntitiesByTag(const std::string& name) const
+{
+    std::vector<scripting::ScriptEntityRef> matches;
+    const auto id = runtime.projectTagId(name);
+    if (id.empty()) return matches;
+
+    runtime.getScene().getRegistry().view<components::TagsComponent>([&](auto entity, const auto& tags) {
+        if (std::ranges::find(tags.ids, id) != tags.ids.end())
+            matches.push_back({entity.getID()});
+    });
+    std::ranges::sort(matches, {}, &scripting::ScriptEntityRef::id);
+    return matches;
 }
 
 bool ScriptApiImpl::setTransformScale(scripting::ScriptEntityRef entity, const glm::vec2& scale)

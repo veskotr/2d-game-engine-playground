@@ -1,6 +1,7 @@
 package sle.editor.model
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
@@ -46,6 +47,9 @@ internal class History(private val capacity: Int = CAPACITY) {
     private var collecting: MutableList<Entry>? = null
     private var applying = false
 
+    var revision by mutableLongStateOf(0L)
+        private set
+
     val canUndo get() = past.isNotEmpty()
     val canRedo get() = future.isNotEmpty()
     val undoLabel: String? get() = past.lastOrNull()?.label
@@ -66,6 +70,7 @@ internal class History(private val capacity: Int = CAPACITY) {
         val kept = (if (next != null) past.dropLast(1) else past) + (next ?: entry)
         (next ?: entry).time = now
         past = kept.takeLast(capacity); future = emptyList(); mergeable = next ?: entry
+        revision++
     }
 
     /** [mergeKey] lets consecutive groups merge like single steps (a nudge burst on a selection). */
@@ -92,6 +97,7 @@ internal class History(private val capacity: Int = CAPACITY) {
         val entry = past.lastOrNull() ?: return false
         apply(entry.undo)
         past = past.dropLast(1); future = future + entry; mergeable = null
+        revision++
         entry.undoSelection?.let(restoreSelection)
         return true
     }
@@ -101,11 +107,12 @@ internal class History(private val capacity: Int = CAPACITY) {
         val entry = future.lastOrNull() ?: return false
         apply(entry.redo)
         future = future.dropLast(1); past = (past + entry).takeLast(capacity); mergeable = null
+        revision++
         entry.redoSelection?.let(restoreSelection)
         return true
     }
 
-    fun clear() { past = emptyList(); future = emptyList(); mergeable = null }
+    fun clear() { past = emptyList(); future = emptyList(); mergeable = null; revision++ }
 
     private fun apply(action: () -> Unit) {
         applying = true

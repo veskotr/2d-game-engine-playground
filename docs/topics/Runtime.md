@@ -14,7 +14,7 @@ root `engine_app` executable uses to boot from `engine.json`.
 1. process pending scene switches
 2. clear transient input state and tick the timer
 3. poll window events; handle resize, debug toggle, and exit input
-4. flush deferred scene and global events
+4. sample project input actions and flush deferred scene and global events
 5. update independent chunk suspension gates (see [Chunks](Chunks.md))
 6. update animation
 7. update audio requests
@@ -96,11 +96,28 @@ Destroy the Runtime before releasing the host context. See
 Embedded hosts call `advanceEmbeddedFrame(dt, allowDebugInput)` once per owner frame, then
 `drawSceneView(width, height, gameView, fit)` zero or more times. Advance validates
 finite nonnegative dt and, when running, processes a pending scene switch and
-debug input, flushes deferred events, updates chunk gates, animation, audio,
+debug input, samples project input actions, flushes deferred events, updates chunk gates, animation, audio,
 scripts, state machines, physics, world transforms and the gameplay camera, then
 updates UI behaviors/bindings/clicks **once using that gameplay camera**. It does
 not clear a framebuffer or submit geometry. Chunk gates retain their established
 pre-simulation camera focus; drawing never recomputes them.
+
+Each play run takes a snapshot of its input map. Both loops sample held keys
+before deferred events and gameplay updates. Paused draws leave action state
+as-is. Step samples once. The editor allows bound keys to reach the focused
+Game view while paused so a step can use them. Pause transitions and Game
+focus loss clear held keys. The next simulation sample reports a release for
+an action that had been held.
+
+When an editor host requests a saved Lua behaviour reload, it calls
+`reloadEmbeddedBehaviour` on the owner thread before advancing the frame.
+The runtime checks the live scene and selected attachment, resolves the source
+under the active project's assets and takes a snapshot of matching active
+attachments. Lua stages the replacement chunk with private globals before
+calling the old instance's destroy hook and releasing its event subscriptions.
+New attachments to that source use the last staged revision during the same
+run. Queued scene events still dispatch normally to the subscriptions active
+when the event queue is flushed.
 
 Drawing accepts positive physical pixel dimensions and renders the current
 snapshot with the independent editor camera (Scene) or active gameplay camera
@@ -133,9 +150,27 @@ published frame snapshot. See [editor ownership](../../tools/editor/README.md#ow
 scene/UI without running gameplay, events or UI click/behavior callbacks. Stop is
 implemented by destroying the old Runtime in context, loading a new one and
 pausing it before its first gameplay tick. Stopped UI documents prepare layout
-and bindings without executing behaviors; deferred behaviors load when running
-resumes. The original render-only API remains available for that presentation.
+and bindings without executing behaviors. During paused Play,
+`requestEmbeddedStep()` queues one simulation advance at 1/60 s, including
+event dispatch, pending scene switches and UI updates. Requests coalesce
+before the next owner frame. Playback and audio stay paused, and additional
+draws leave the simulation untouched. Resume and runtime replacement clear
+a pending request. The original render-only API remains available for preview.
 
+
+## Embedded Play inspection
+
+The viewport owner polls a hierarchy snapshot at most every 100 ms during
+Play, with an immediate refresh after Step or a selection change. It requests
+component data only for the selected runtime entity. Hierarchy rows carry a
+parent ID and the authored key, if one was recorded at scene load. Runtime
+prefab spawns can register keys for gameplay without acquiring an authored key
+in the inspector.
+
+Selection uses the JNI run token, scene instance and runtime entity ID. The
+scene instance changes on scene replacement, including a reload of the same
+name. The owner publishes copied data to the editor. The Transform values in
+Details are local to the entity's parent.
 
 ## Live entity preview
 

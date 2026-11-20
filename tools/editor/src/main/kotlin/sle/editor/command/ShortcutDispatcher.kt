@@ -48,6 +48,8 @@ internal class ShortcutDispatcher(
         if(event.id != KeyEvent.KEY_PRESSED) return false
         val chord = KeyChord.of(event) ?: return false
         val ctx = context(event) ?: run { held.remove(event.keyCode);return false }
+        if (ctx.gameInputFocused && ctx.gameRunning && sle.editor.viewport.engineKey(event) in ctx.gameActionKeys)
+            return false
         val routed = route(keymap(), chord, ctx)
         if(routed.isEmpty()) return false
         if(event.keyCode in held && routed.none { it.repeatable }) { event.consume();return true }

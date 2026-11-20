@@ -201,7 +201,7 @@ core::Result<Json> expandScenePrefabs(const Json& source, const std::string& pat
 } // namespace detail
 
 core::Result<entity::Entity> PrefabLoader::instantiate(const std::string& path, entity::Scene& scene,
-    const std::string& key, const Json& overrides, entity::Entity parent)
+    const std::string& key, const Json& overrides, entity::Entity parent, const SceneLoader::TextureFilterLookup& textureFilter)
 {
     using Result=core::Result<entity::Entity>;
     // Snapshot complete hierarchy, including entities under an optional scene anchor.
@@ -227,9 +227,9 @@ core::Result<entity::Entity> PrefabLoader::instantiate(const std::string& path, 
             require(!scene.findEntityByKey(entry["key"].get<std::string>()).valid(),"instance key already exists: "+entry["key"].get<std::string>());
         const Json data={{"entities",entities}};
         entity::Scene staged;
-        const auto validation=SceneLoader::loadData(data,staged,path);
+        const auto validation=SceneLoader::loadData(data,staged,path,textureFilter);
         if (!validation.ok()) return Result::error(validation.error());
-        const auto loaded=SceneLoader::loadData(data,scene,path);
+        const auto loaded=SceneLoader::loadData(data,scene,path,textureFilter);
         if (!loaded.ok()) { rollback(); return Result::error(loaded.error()); }
         const auto root=scene.findEntityByKey(key);
         require(root.valid(),"instance root was not created");

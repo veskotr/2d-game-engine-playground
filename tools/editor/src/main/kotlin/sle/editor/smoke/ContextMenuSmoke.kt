@@ -1,11 +1,15 @@
 package sle.editor.smoke
 
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.toArgb
 import kotlinx.coroutines.delay
 import sle.editor.viewport.EngineCanvas
 import sle.editor.model.EntityWorkspaceState
 import sle.editor.model.SceneWorkspaceState
 import sle.editor.model.ScenePose
+import sle.editor.ui.EditorDialogAppearance
+import sle.editor.ui.EditorWindowChrome
+import sle.editor.ui.theme.editorColors
 import sle.editor.viewport.Vec2
 import java.awt.Rectangle
 import java.awt.Robot
@@ -25,7 +29,7 @@ internal suspend fun runContextMenuSmoke(
     shellBounds: Map<String,Rect>,
     workspace: sle.editor.workspace.EditorWorkspace,
 ) {
-    runAuxiliaryAppearanceSmoke(window)
+    runAuxiliaryAppearanceSmoke(window,workspace.appearance)
     val robot = Robot()
     suspend fun await(message: String, condition: () -> Boolean) {
         repeat(80) { if (condition()) return; delay(40) }
@@ -150,10 +154,18 @@ internal suspend fun runContextMenuSmoke(
     await("Text Delete failed: selection=${scene.selectedKey} count=${scene.entities.size} name=${scene.selected?.document?.name}") { scene.selectedKey==child && scene.entities.size==count+1 && scene.selected?.document?.name?.isEmpty()==true }
     scene.selected!!.rename("Camera")
     val dialog=JDialog(window,"Delete guard",java.awt.Dialog.ModalityType.APPLICATION_MODAL).apply {
-        add(JTextField("Modal text"));setSize(240,100);setLocationRelativeTo(window)
+        add(JTextField("Modal text"))
+        EditorDialogAppearance.register(rootPane)
+        pack()
+        EditorWindowChrome.apply(this)
+        setSize(240,100)
+        setLocationRelativeTo(window)
     }
     SwingUtilities.invokeLater { dialog.isVisible=true }
     await("Modal guard dialog not visible") { dialog.isShowing }
+    check(dialog.contentPane.background.rgb==editorColors(workspace.appearance.value.mode).surface.toArgb()) {
+        "Delete guard dialog uses a different theme from the editor"
+    }
     robot.keyPress(KeyEvent.VK_DELETE);robot.keyRelease(KeyEvent.VK_DELETE);delay(100)
     check(scene.entities.size==count+1 && scene.selectedKey==child) { "Modal Delete reached scene deletion" }
     dialog.dispose();delay(100)

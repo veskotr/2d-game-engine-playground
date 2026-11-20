@@ -9,7 +9,15 @@ inline Json snapshot(const ScriptComponent& c) { Json j=Json::object();
  j["scriptAsset"]=c.scriptAsset;
  j["enabled"]=c.enabled;
  j["behaviours"]=Json::array();
- for(const auto& b:c.behaviours) j["behaviours"].push_back({{"key",b.key},{"scriptAsset",b.scriptAsset},{"enabled",b.enabled},{"order",b.order}});
+ for (const auto& b : c.behaviours) {
+  Json entry = {{"key", b.key}, {"scriptAsset", b.scriptAsset}, {"enabled", b.enabled}, {"order", b.order}};
+  if (!b.parameters.empty()) {
+   auto& parameters = entry["parameters"] = Json::object();
+   for (const auto& [name, value] : b.parameters)
+    std::visit([&](const auto& scalar) { parameters[name] = scalar; }, value);
+  }
+  j["behaviours"].push_back(std::move(entry));
+ }
  return j; }
 inline void apply(ScriptComponent& c, const Json& p, entity::Registry& registry) {
  for(auto it=p.begin();it!=p.end();++it) { const auto& key=it.key(); const auto& v=it.value();
@@ -31,6 +39,16 @@ inline void apply(ScriptComponent& c, const Json& p, entity::Registry& registry)
     else if(field=="scriptAsset") { validate(value,"str"); b.scriptAsset=value.get<std::string>(); }
     else if(field=="enabled") { validate(value,"bool"); b.enabled=value.get<bool>(); }
     else if(field=="order") { validate(value,"int"); b.order=value.get<int>(); }
+    else if (field == "parameters") {
+     if (!value.is_object()) throw std::invalid_argument("Expected behavior parameter object");
+     for (const auto& [name, scalar] : value.items()) {
+      if (name.empty()) throw std::invalid_argument("Expected a nonempty behavior parameter name");
+      if (scalar.is_boolean()) b.parameters[name] = scalar.get<bool>();
+      else if (scalar.is_string()) b.parameters[name] = scalar.get<std::string>();
+      else if (scalar.is_number() && std::isfinite(scalar.get<double>())) b.parameters[name] = scalar.get<double>();
+      else throw std::invalid_argument("Expected a scalar behavior parameter");
+     }
+    }
     else throw std::invalid_argument("Unknown behaviour field: "+field);
    }
    if(b.key.empty() || b.scriptAsset.empty() || !keys.insert(b.key).second) throw std::invalid_argument("Behaviour keys/assets must be nonempty and keys unique");

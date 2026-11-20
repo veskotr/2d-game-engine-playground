@@ -36,7 +36,7 @@ internal class ProjectDocuments(val project: OpenedProject) {
     // Only component asset fields are interpreted. Names, script variables and entity keys are data.
     private fun references(document: JsonObject,resolve: (String)->String): JsonObject {
         fun fields(value: JsonElement,field: String=""): JsonElement = when(value) {
-            is JsonObject -> if(field=="variables" || field=="targetEntities") value else JsonObject(value.mapValues { (key,child) -> fields(child,if(field=="stateClipMap") "clipAsset" else key) })
+            is JsonObject -> if(field=="variables" || field == "targetEntities" || field == "parameters") value else JsonObject(value.mapValues { (key,child) -> fields(child,if(field=="stateClipMap") "clipAsset" else key) })
             is JsonArray -> JsonArray(value.map { fields(it,field) })
             is JsonPrimitive -> if(value.isString && value.content.isNotBlank() && PrefabPackages.isAssetField(field)) JsonPrimitive(resolve(value.content)) else value
         }
@@ -51,10 +51,34 @@ internal class ProjectDocuments(val project: OpenedProject) {
             } })
         }) else value })
     }
+    fun referencedAssetIds(document: JsonObject): Set<String> = buildSet {
+        references(document) { text ->
+            if (text.startsWith(prefix)) add(text.removePrefix(prefix))
+            text
+        }
+    }
+
     private fun resolve(snapshot: AssetSnapshot,id: String): Path {
         val relative=snapshot.pathsById[id] ?: error("Missing or ambiguous project asset UUID: $id")
         return assetPath(project.root,project.assets,relative).also { require(Files.isRegularFile(it,LinkOption.NOFOLLOW_LINKS)) { "Missing asset: $relative" } }
     }
+    private fun assetIdFor(snapshot: AssetSnapshot, root: Path, path: Path): String {
+        val real=path.toRealPath()
+        require(real.startsWith(root)) { "Asset is outside this project; import it first: $path" }
+        val relative=root.relativize(real).toString().replace('\\','/')
+        assetPath(project.root,project.assets,relative)
+        return snapshot.idsByPath[relative] ?: error("Missing or ambiguous asset identity: $relative")
+    }
+
+    /** Resolve a property value using the same registered identities as project save. */
+    fun resolvePropertyAsset(text: String): String = synchronized(AssetIdentity) {
+        require(!text.startsWith("asset://")) { "Unresolved package reference: $text" }
+        val snapshot = AssetScanner.scan(project.root, project.assets, registerMissing = false)
+        val id = if (text.startsWith(prefix)) text.removePrefix(prefix)
+            else assetIdFor(snapshot, assetPath(project.root,project.assets), Path.of(text))
+        resolve(snapshot,id).toString().replace('\\','/')
+    }
+
     /** Current location of a project asset; links follow moves/renames through the UUID. */
     fun pathOf(id: String): Path = synchronized(AssetIdentity) { resolve(scan(),id) }
     fun open(path: Path): OpenedProjectDocument = open(path,null)
@@ -185,13 +209,7 @@ internal class ProjectDocuments(val project: OpenedProject) {
             val relative=root.relativize(file).toString().replace('\\','/')
             require(snapshot.pathsById[id]==relative || (!Files.exists(file) && id !in snapshot.pathsById)) { "Destination asset identity is ambiguous" }
         }
-        fun idFor(path: Path): String {
-            val real=path.toRealPath()
-            require(real.startsWith(root)) { "Asset is outside this project; import it first: $path" }
-            val relative=root.relativize(real).toString().replace('\\','/')
-            assetPath(project.root,project.assets,relative)
-            return snapshot.idsByPath[relative] ?: error("Missing or ambiguous asset identity: $relative")
-        }
+        fun idFor(path: Path) = assetIdFor(snapshot,root,path)
         val portable=references(Json.parseToJsonElement(source).jsonObject) { text ->
             if(text.startsWith(prefix)) { resolve(snapshot,text.removePrefix(prefix));text }
             else { require(!text.startsWith("asset://")) { "Unresolved package reference" };prefix+idFor(Path.of(text)) }

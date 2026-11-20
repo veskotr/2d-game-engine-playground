@@ -36,6 +36,7 @@ internal data class ProjectCommands(
 @Composable
 internal fun projectControls(
     state: ProjectWorkspaceState,confirmSwitch: ()->Boolean,resetWorkspace: ()->Unit,
+    scriptTrust: Boolean? = null, scriptTrustBusy: Boolean = false, setScriptTrust: (Boolean) -> Unit = {},
     workspaceRevision: ()->Any,uiScale: ()->Float,setUiScale: (Float)->Unit,startupScenes: List<Pair<String,String>> = emptyList(),recentDirectory: Path?=null,onBounds: (String,Rect)->Unit={_,_->},
 ): ProjectCommands {
     val scope=rememberCoroutineScope()
@@ -89,7 +90,11 @@ internal fun projectControls(
                 val name=EditorDialogs.showInputDialog(null,"Project name","New Project",JOptionPane.PLAIN_MESSAGE)?.trim()
                 if(name!=null) try {
                     validateProjectFolderName(name)
-                    load { ProjectFiles.create(chooser.selectedFile.toPath().resolve(name),name) }
+                    val choices = ProjectArtStyle.entries.map { it.label }.toTypedArray()
+                    val selected = EditorDialogs.showInputDialog(null, "Art style", "New Project",
+                        JOptionPane.PLAIN_MESSAGE, null, choices, ProjectArtStyle.Smooth.label)
+                    val style = ProjectArtStyle.entries.firstOrNull { it.label == selected }
+                    if (style != null) load { ProjectFiles.create(chooser.selectedFile.toPath().resolve(name), name, style) }
                 } catch(failure: Exception) { state.error=failure.message }
             }
         },
@@ -123,7 +128,7 @@ internal fun projectControls(
         recent={recents},
     ) }
     if(settingsOpen) state.opened?.let { current ->
-        ProjectSettingsDialog(current,state.busy,state.error,startupScenes,onBounds,onDismiss={if(!state.busy) settingsOpen=false},onSave={ document ->
+        ProjectSettingsDialog(current,state.busy,state.error,startupScenes,onBounds,scriptTrust,scriptTrustBusy,setScriptTrust,onDismiss={if(!state.busy) settingsOpen=false},onSave={ document ->
             state.busy=true;state.error=null
             scope.launch {
                 try {
@@ -150,9 +155,15 @@ internal fun projectFileMenu(state: ProjectWorkspaceState,commands: ProjectComma
 @Composable
 private fun ProjectSettingsDialog(
     project: OpenedProject,busy: Boolean,error: String?,startupScenes: List<Pair<String,String>>,onBounds: (String,Rect)->Unit,
+    scriptTrust: Boolean?, scriptTrustBusy: Boolean, setScriptTrust: (Boolean) -> Unit,
     onDismiss: ()->Unit,onSave: (ProjectDocument)->Unit,
 ) {
     var startup by remember(project) { mutableStateOf(project.document.startupScene) }
+    var collisionLayers by remember(project) { mutableStateOf(project.document.settings.collisionLayers) }
+    var sortingLayers by remember(project) { mutableStateOf(project.document.settings.sortingLayers) }
+    var inputActions by remember(project) { mutableStateOf(project.document.settings.inputActions) }
+    var tags by remember(project) { mutableStateOf(project.document.settings.tags) }
+    var artStyle by remember(project) { mutableStateOf(project.document.settings.artStyle) }
     var name by remember(project) { mutableStateOf(project.document.name) }
     var title by remember(project) { mutableStateOf(project.document.game.title) }
     var width by remember(project) { mutableStateOf(project.document.game.width.toString()) }
@@ -163,19 +174,14 @@ private fun ProjectSettingsDialog(
     var formError by remember { mutableStateOf<String?>(null) }
     fun measured(id: String)=Modifier.onGloballyPositioned { onBounds(id,it.boundsInWindow()) }
     val appearance=LocalEditorAppearance.current
-    DialogWindow(onCloseRequest=onDismiss,title="Project Settings",resizable=true,state=rememberDialogState(width=500.dp,height=470.dp)) {
+    DialogWindow(onCloseRequest=onDismiss,title="Project Settings",resizable=true,state=rememberDialogState(width=500.dp,height=560.dp)) {
         EditorTheme(appearance) {
             val metrics=LocalEditorMetrics.current
             Surface(Modifier.fillMaxSize()) {
                 Column(Modifier.padding(metrics.panelPadding),verticalArrangement=Arrangement.spacedBy(metrics.gap)) {
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(metrics.gap)) {
+                        Text("Startup", style = MaterialTheme.typography.subtitle2)
                         SettingsField("Project name",name,{name=it},!busy,measured("ProjectName"))
-                        SettingsField("Game window title",title,{title=it},!busy,measured("GameTitle"))
-                        SettingsField("Width",width,{width=it},!busy,measured("GameWidth"),numeric=true)
-                        SettingsField("Height",height,{height=it},!busy,numeric=true)
-                        EditorSelect("Window mode",mode,listOf("Windowed","Fullscreen","BorderlessFullscreen"),{mode=it},enabled=!busy)
-                        EditorCheckBox("VSync",vsync,{vsync=it},enabled=!busy)
-                        SettingsField("Target FPS",fps,{fps=it},!busy,numeric=true,help="0 = unlimited")
                         Box(measured("StartupScene")) {
                             var expanded by remember { mutableStateOf(false) }
                             EditorButton("Startup: "+(startupScenes.firstOrNull { it.first==startup }?.second ?: startup ?: "None"),{expanded=true},enabled=!busy)
@@ -185,13 +191,44 @@ private fun ProjectSettingsDialog(
                             }
                         }
                         Text("Assets: ${project.document.assetRoot}",style=MaterialTheme.typography.caption)
+                        Divider()
+                        Text("Game", style = MaterialTheme.typography.subtitle2)
+                        SettingsField("Game window title",title,{title=it},!busy,measured("GameTitle"))
+                        SettingsField("Width",width,{width=it},!busy,measured("GameWidth"),numeric=true)
+                        SettingsField("Height",height,{height=it},!busy,numeric=true)
+                        EditorSelect("Window mode",mode,listOf("Windowed","Fullscreen","BorderlessFullscreen"),{mode=it},enabled=!busy)
+                        EditorCheckBox("VSync",vsync,{vsync=it},enabled=!busy)
+                        SettingsField("Target FPS",fps,{fps=it},!busy,numeric=true,help="0 = unlimited")
+                        Divider()
+                        Text("Art Style", style = MaterialTheme.typography.subtitle2)
+                        val legacy = "Legacy defaults"
+                        EditorSelect("Preset", artStyle?.label ?: legacy, listOf(legacy) + ProjectArtStyle.entries.map { it.label },
+                            { selected -> artStyle = ProjectArtStyle.entries.firstOrNull { it.label == selected } },
+                            enabled = !busy)
+                        Divider()
+                        Text("Sorting Layers", style = MaterialTheme.typography.subtitle2)
+                        SortingLayerSettings(sortingLayers, { sortingLayers = it }, enabled = !busy)
+                        Divider()
+                        Text("Tags", style = MaterialTheme.typography.subtitle2)
+                        TagSettings(tags, { tags = it }, enabled = !busy)
+                        Divider()
+                        Text("Collision", style = MaterialTheme.typography.subtitle2)
+                        CollisionLayerSettings(collisionLayers, { collisionLayers = it }, enabled = !busy)
+                        Divider()
+                        Text("Input Actions", style = MaterialTheme.typography.subtitle2)
+                        InputActionSettings(inputActions, { inputActions = it }, enabled = !busy)
+                        Divider()
+                        Text("Project Editor Scripts", style = MaterialTheme.typography.subtitle2)
+                        EditorButton(if (scriptTrust == true) "Revoke Trust" else "Trust Editor Scripts",
+                            { setScriptTrust(scriptTrust != true) }, enabled = !busy && !scriptTrustBusy)
                         (formError ?: error)?.let { Text(it,color=LocalEditorColors.current.error) }
                     }
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(metrics.gap,androidx.compose.ui.Alignment.End)) {
                         EditorButton("Cancel",onDismiss,enabled=!busy)
                         EditorButton(if(busy) "Saving…" else "Save",{
                             try {
-                                val candidate=project.document.copy(name=name.trim(),startupScene=startup,game=ProjectGameSettings(title,width.toInt(),height.toInt(),vsync,mode,fps.toInt()))
+                                val candidate=project.document.copy(name=name.trim(),startupScene=startup,game=ProjectGameSettings(title,width.toInt(),height.toInt(),vsync,mode,fps.toInt()),
+                                    settings=project.document.settings.copy(artStyle=artStyle,collisionLayers=collisionLayers, sortingLayers=sortingLayers, tags=tags, inputActions=inputActions))
                                 candidate.validate();formError=null;onSave(candidate)
                             } catch(failure: Exception) { formError=failure.message ?: "Enter valid settings" }
                         },enabled=!busy,modifier=measured("SaveProjectSettings"),primary=true)
@@ -203,7 +240,7 @@ private fun ProjectSettingsDialog(
 }
 
 @Composable
-private fun SettingsField(label: String,value: String,change: (String)->Unit,enabled: Boolean,
+internal fun SettingsField(label: String,value: String,change: (String)->Unit,enabled: Boolean,
     modifier: Modifier=Modifier,numeric: Boolean=false,help: String?=null) {
     var field by remember { mutableStateOf(TextFieldValue(value)) }
     if(field.text!=value) field=field.copy(text=value)

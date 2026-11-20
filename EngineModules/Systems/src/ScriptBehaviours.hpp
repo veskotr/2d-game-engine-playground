@@ -8,7 +8,7 @@ inline std::vector<scripting::ScriptBehaviourSpec> scriptSpecs(const components:
     std::vector<scripting::ScriptBehaviourSpec> result;
     if (!component.scriptAsset.empty()) result.push_back({"",component.scriptAsset,true,0});
     for (const auto& entry:component.behaviours)
-        result.push_back({entry.key,entry.scriptAsset,entry.enabled,entry.order});
+        result.push_back({entry.key,entry.scriptAsset,entry.enabled,entry.order,entry.parameters});
     return result;
 }
 inline bool behaviourEnabled(const components::ScriptComponent& component,const std::string& key)

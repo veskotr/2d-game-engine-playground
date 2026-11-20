@@ -2,7 +2,9 @@ package sle.editor.ui
 
 import sle.editor.project.assets.LocalProjectAssets
 import sle.editor.files.chooseTexture
+import sle.editor.scripts.LocalNewScriptBehavior
 import sle.editor.model.EntityWorkspaceState
+import sle.editor.ui.inspector.*
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -18,7 +20,7 @@ internal fun confirmDiscard(state: EntityWorkspaceState?): Boolean = state == nu
     EditorDialogs.showConfirmDialog(null, "Discard unsaved entity changes?", "Unsaved entity", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION
 
 @Composable
-internal fun EntityWorkspace(state: EntityWorkspaceState, embedded: Boolean = false) {
+internal fun EntityWorkspace(state: EntityWorkspaceState, embedded: Boolean = false, tags: Map<String, String> = emptyMap()) {
     val projectAssets=LocalProjectAssets.current
     var assetsExpanded by remember { mutableStateOf(false) }
     val m=sle.editor.ui.theme.LocalEditorMetrics.current
@@ -56,20 +58,22 @@ internal fun EntityWorkspace(state: EntityWorkspaceState, embedded: Boolean = fa
         }
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(m.borderWidth)) {
             if (state.document.components.isEmpty()) sle.editor.ui.controls.EditorEmptyState("No components","Add components to define this entity.",Modifier.heightIn(min=m.emptyStateMinHeight))
-            ComponentSections(state,shown={ state.selectedComponent==null || it==state.selectedComponent })
+            ComponentSections(state,tags=tags,shown={ state.selectedComponent==null || it==state.selectedComponent })
         }
     }
 }
 
 @Composable
-internal fun ComponentField(state: EntityWorkspaceState, component: String, path: List<String>, value: JsonElement, choices: JsonArray? = null, readOnly: Boolean = false) {
-    val projectAssets=LocalProjectAssets.current
-    sle.editor.ui.inspector.EditorPropertyRenderer(state,
-        sle.editor.ui.inspector.propertyDefinition(component,path,value,choices),readOnly,
-        browseEnabled=projectAssets?.busy!=true,onBrowse={ display ->
+private fun ComponentField(state: EntityWorkspaceState, property: EditorPropertyDefinition, readOnly: Boolean) {
+    val projectAssets = LocalProjectAssets.current
+    EditorPropertyRenderer(state, property, readOnly,
+        browseEnabled = projectAssets?.busy != true, onBrowse = { target, display ->
+            val component = target.component
+            val path = target.path
+            val textureOnly = target.drawer == sle.editor.ui.inspector.PropertyDrawer.Texture
             try {
-                if(projectAssets!=null) projectAssets.browse(display,component=="SpriteRenderer" && path.last()=="texture",projectAssetSelection(state,component,path))
-                else chooseTexture(display,component=="SpriteRenderer" && path.last()=="texture")?.let { selected ->
+                if(projectAssets!=null) projectAssets.browse(display,textureOnly,projectAssetSelection(state,component,path))
+                else chooseTexture(display,textureOnly)?.let { selected ->
                     state.setValue(component,path,JsonPrimitive(state.importAsset(selected).toString().replace('\\','/')))
                 }
             } catch(failure: Exception) { state.error=failure.message ?: "Could not select asset" }
@@ -78,20 +82,26 @@ internal fun ComponentField(state: EntityWorkspaceState, component: String, path
 
 @Composable
 internal fun InspectorComponent(state: EntityWorkspaceState, component: String, readOnly: Boolean = false,
-    actions: @Composable RowScope.() -> Unit = {}) {
+    tags: Map<String, String> = emptyMap(), actions: @Composable RowScope.() -> Unit = {}) {
     val fields=state.document.components[component] as? JsonObject ?: return
     val identity=state.document.key
+    SideEffect {
+        state.finishHiddenNumberEdit(component) { inspectorPathVisible(fields, state.catalog[component], it) }
+    }
     sle.editor.ui.controls.EditorInspectorSection(component,state.inspectorSections.expanded(identity,component),
-        { expanded -> state.endGesture();state.inspectorSections.setExpanded(identity,component,expanded) },actions=actions) {
-        for(field in sle.editor.ui.inspector.orderedFields(component,fields.keys)) {
-            val value=fields.getValue(field)
-            if(sle.editor.ui.inspector.isStructuredGroup(field,value)) {
-                // Nested fixed-shape values (e.g. region.uv) get real number fields instead of a JSON box.
-                (value as JsonObject).forEach { (child,childValue) -> ComponentField(state,component,listOf(field,child),childValue,null,readOnly) }
-            } else ComponentField(state,component,listOf(field),value,state.catalog[component]?.enums?.get(field) as? JsonArray,readOnly)
+        { expanded -> state.endGesture();state.inspectorSections.setExpanded(identity,component,expanded) },actions=actions,
+        headingModifier=sle.editor.ui.inspector.detailsComponentMenu(state,component,readOnly)) {
+        if (component == "Tags") {
+            TagMembership(state, tags, readOnly)
+        } else {
+            InspectorGroups(state, component, inspectorBlocks(component, fields, state.catalog[component])) { property ->
+                ComponentField(state, property, readOnly)
+            }
+            if (component == "Script") BehaviourParameterFields(state, fields, readOnly)
         }
     }
 }
+
 
 internal fun projectAssetSelection(state: EntityWorkspaceState,component: String,path: List<String>): (java.nio.file.Path)->Unit {
     val originalContext=state.editContextVersion
@@ -111,13 +121,13 @@ internal fun projectAssetSelection(state: EntityWorkspaceState,component: String
 @Composable
 internal fun ComponentSections(state: EntityWorkspaceState, readOnly: Boolean = false, shown: (String)->Boolean = { true },
     /** True in the Scene inspector: "Edit" drives Scene-view handles instead of the component editor tool. */
-    scene: Boolean = false,
+    scene: Boolean = false, tags: Map<String, String> = emptyMap(),
     extraActions: @Composable RowScope.(String) -> Unit = {}) {
     val m=sle.editor.ui.theme.LocalEditorMetrics.current
     // Transform first, then components in authored order (saved files are sorted alphabetically).
     state.document.components.keys.filter(shown).sortedBy { if(it=="Transform") 0 else 1 }.forEach { component ->
         key(component) {
-            InspectorComponent(state,component,readOnly,actions={
+            InspectorComponent(state,component,readOnly,tags=tags,actions={
                 extraActions(component)
                 if(component in sle.editor.viewport.GizmoShape.targets) {
                     val editing=if(scene) state.sceneTarget==component else state.selectedTarget==component
@@ -134,7 +144,16 @@ internal fun ComponentSections(state: EntityWorkspaceState, readOnly: Boolean = 
             })
         }
     }
-    if(!readOnly) Box(Modifier.fillMaxWidth().padding(horizontal=m.panelPadding,vertical=m.gap)) { AddComponentButton(state) }
+    if (!readOnly) {
+        val newScript = LocalNewScriptBehavior.current
+        Column(Modifier.fillMaxWidth().padding(horizontal = m.panelPadding, vertical = m.gap),
+            verticalArrangement = Arrangement.spacedBy(m.gap)) {
+            if (newScript != null && "Script" in state.catalog) {
+                sle.editor.ui.controls.EditorButton("New Lua Behavior…", { newScript(state) }, Modifier.fillMaxWidth())
+            }
+            AddComponentButton(state)
+        }
+    }
 }
 
 @Composable

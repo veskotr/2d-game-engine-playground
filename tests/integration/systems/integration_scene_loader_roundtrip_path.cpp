@@ -1,4 +1,6 @@
 #include <sle/engine/SceneLoader.hpp>
+#include <sle/engine/SceneAuthoring.hpp>
+#include <sle/scene/components/TagsComponent.hpp>
 #include <sle/scene/Scene.hpp>
 #include <sle/scene/components/AnimatorComponent.hpp>
 #include <sle/scene/components/AudioComponent.hpp>
@@ -25,6 +27,24 @@ bool nearlyEqual(float a, float b)
 
 int main()
 {
+    using Json = nlohmann::json;
+    const auto authored = Json::parse(R"({"name":"Tags","key":"tags","entities":[
+        {"key":"actor","components":{"Tags":{"ids":["known","unresolved"]}}}
+    ]})");
+    const auto reopened = Json::parse(sle::SceneAuthoring::canonicalScene(authored).dump());
+    sle::entity::Scene taggedScene;
+    auto tagged = sle::SceneLoader::loadData(reopened, taggedScene, "tags");
+    if (!tagged.ok()) {
+        std::cerr << tagged.error() << '\n';
+        return 1;
+    }
+    const auto* membership = taggedScene.getRegistry().getComponent<sle::components::TagsComponent>(
+        taggedScene.findEntityByKey("actor"));
+    if (!membership || membership->ids != std::vector<std::string>{"known", "unresolved"}) {
+        std::cerr << "Scene round-trip lost tag membership\n";
+        return 1;
+    }
+
     sle::entity::Scene scene;
     auto loadResult = sle::SceneLoader::load("tests/data/scenes/test_basic_scene.json", scene);
     if (!loadResult.ok())

@@ -26,7 +26,7 @@ class WorkspaceLayoutPersistenceTest {
     @Test fun rejectsDuplicatePanelsAndEmptyGroups() {
         val text=codec.encode(base)
         assertFails { codec.decode(text.replace("\"game\"","\"scene\"")) }
-        assertFails { codec.decode(text.replace("[\"assets\"]","[]")) }
+        assertFails { codec.decode(text.replace("[\"hierarchy\"]","[]")) }
     }
     @Test fun orderedWritesKeepKeysAndUiScaleSeparate() {
         val root=Files.createTempDirectory("sle-layout")

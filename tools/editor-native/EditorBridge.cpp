@@ -1,3 +1,4 @@
+#include "EditorLogQueue.hpp"
 #include <glad/gl.h>
 #include <jni.h>
 #include <sle/engine/Runtime.hpp>
@@ -7,6 +8,8 @@
 #include <map>
 #include <sle/engine/EntityAuthoring.hpp>
 #include <sle/engine/SceneAuthoring.hpp>
+#include <sle/scene/TransformMath.hpp>
+#include <sle/scripting/EditorLuaHost.hpp>
 
 #include <memory>
 #include <mutex>
@@ -19,6 +22,7 @@
 
 namespace {
 // Resources and Input are process-wide today; do not allow concurrent runtimes.
+sle::editor::EditorLogQueue editorLogs;
 std::mutex sessionMutex;
 std::unique_ptr<sle::Runtime> session;
 std::thread::id owner;
@@ -29,6 +33,34 @@ std::vector<InputEvent> pendingInput;
 bool previewMode = false;
 bool fitRequested = false;
 bool scenePlaying = false;
+
+// Lua runs synchronously on the owner thread. Capture the first diagnostic
+// independently of the bounded Console queue and ignore other producers.
+thread_local std::optional<sle::core::LogEntry>* frameLuaError = nullptr;
+
+struct LuaErrorPause
+{
+    std::optional<sle::core::LogEntry> firstError;
+    std::optional<sle::core::LogEntry>* previous;
+
+    explicit LuaErrorPause(bool enabled)
+        : previous(std::exchange(frameLuaError, enabled ? &firstError : nullptr)) {}
+    ~LuaErrorPause() { frameLuaError = previous; }
+
+    jbyteArray finish(JNIEnv* env)
+    {
+        if (!firstError) return nullptr;
+        session->setEmbeddedPaused(true);
+        pendingInput.clear();
+        const nlohmann::json error = {{"message", firstError->message}, {"entity", firstError->lua->entity}};
+        const auto text = error.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        const auto result = env->NewByteArray(static_cast<jsize>(text.size()));
+        if (result)
+            env->SetByteArrayRegion(result, 0, static_cast<jsize>(text.size()),
+                                    reinterpret_cast<const jbyte*>(text.data()));
+        return result;
+    }
+};
 
 void fail(JNIEnv* env, const char* message)
 {
@@ -88,6 +120,103 @@ extern "C" JNIEXPORT jstring JNICALL Java_sle_editor_bridge_NativeEngine_engineV
     return env->NewStringUTF(sle::core::EngineVersion::text);
 }
 
+namespace {
+std::string readDiscoveryInput(JNIEnv* env, jbyteArray bytes)
+{
+    if (!bytes) throw std::invalid_argument("Missing behavior discovery input");
+    const auto size = env->GetArrayLength(bytes);
+    if (size > 256 * 1024) throw std::invalid_argument("Behavior input exceeds the size limit");
+    std::string text(static_cast<std::size_t>(size), '\0');
+    if (size != 0)
+        env->GetByteArrayRegion(bytes, 0, size, reinterpret_cast<jbyte*>(text.data()));
+    return text;
+}
+
+jbyteArray discoveryOutput(JNIEnv* env, const std::string& text)
+{
+    const auto size = static_cast<jsize>(text.size());
+    const auto result = env->NewByteArray(size);
+    if (result) env->SetByteArrayRegion(result, 0, size, reinterpret_cast<const jbyte*>(text.data()));
+    return result;
+}
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_resolveStandaloneAsset(
+    JNIEnv* env, jobject, jbyteArray asset)
+{
+    try
+    {
+        const auto path = readDiscoveryInput(env, asset);
+        if (env->ExceptionCheck()) return nullptr;
+        return discoveryOutput(env, sle::EntityAuthoring::resolveStandaloneAsset(path));
+    }
+    catch (const std::exception& error) { fail(env, error.what()); }
+    catch (...) { fail(env, "Unknown asset resolution failure"); }
+    return nullptr;
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_behaviourSchema(
+    JNIEnv* env, jobject, jbyteArray source, jbyteArray filename)
+{
+    try
+    {
+        const auto bytes = readDiscoveryInput(env, source);
+        const auto path = readDiscoveryInput(env, filename);
+        if (env->ExceptionCheck()) return nullptr;
+        const auto schema = sle::scripting::inspectBehaviourSource(bytes, path);
+        const nlohmann::json response = {
+            {"fields", schema.fields}, {"defaults", schema.defaults}, {"error", schema.error},
+        };
+        return discoveryOutput(env, response.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
+    }
+    catch (const std::exception& error) { fail(env, error.what()); }
+    catch (...) { fail(env, "Unknown behavior discovery failure"); }
+    return nullptr;
+}
+
+namespace {
+jbyteArray runEditorLua(JNIEnv* env, jbyteArray source, jbyteArray snapshot, jbyteArray filename = nullptr,
+    jbyteArray mode = nullptr, jbyteArray commandId = nullptr)
+{
+    jbyteArray output = nullptr;
+    guarded(env, [&] {
+        const auto command = readDiscoveryInput(env, source);
+        if (env->ExceptionCheck()) return;
+        if (!snapshot || env->GetArrayLength(snapshot) > 4 * 1024 * 1024)
+            throw std::invalid_argument("Editor Lua snapshot exceeds the size limit");
+        std::string text(static_cast<std::size_t>(env->GetArrayLength(snapshot)), '\0');
+        env->GetByteArrayRegion(snapshot, 0, static_cast<jsize>(text.size()), reinterpret_cast<jbyte*>(text.data()));
+        if (env->ExceptionCheck()) return;
+        const auto context = nlohmann::json::parse(text);
+        sle::scripting::EditorLuaConsoleResult result;
+        if (mode)
+        {
+            const auto path = readDiscoveryInput(env, filename);
+            const auto operation = readDiscoveryInput(env, mode);
+            const auto id = readDiscoveryInput(env, commandId);
+            if (env->ExceptionCheck()) return;
+            result = sle::scripting::runEditorLuaCommands(command, path, context, operation, id);
+        }
+        else result = sle::scripting::runEditorLuaConsole(command, context);
+        const nlohmann::json response = {{"edits", result.edits}, {"output", result.output}, {"error", result.error}};
+        output = discoveryOutput(env, response.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
+    });
+    return output;
+}
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_runEditorLua(
+    JNIEnv* env, jobject, jbyteArray source, jbyteArray snapshot)
+{
+    return runEditorLua(env, source, snapshot);
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_runProjectEditorLua(
+    JNIEnv* env, jobject, jbyteArray source, jbyteArray snapshot, jbyteArray filename, jbyteArray mode, jbyteArray commandId)
+{
+    return runEditorLua(env, source, snapshot, filename, mode, commandId);
+}
+
 extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_validatePrefab(JNIEnv* env, jobject, jbyteArray source)
 {
     guarded(env, [&] {
@@ -140,6 +269,16 @@ extern "C" JNIEXPORT jlong JNICALL Java_sle_editor_bridge_NativeEngine_create(JN
         config.width = 480;
         config.height = 270;
         const auto started = std::chrono::steady_clock::now();
+        sle::core::Log::setSink([](const auto& entry) {
+            if (frameLuaError && !*frameLuaError && entry.lua && entry.level == sle::core::LogLevel::Error)
+                *frameLuaError = entry;
+            editorLogs.push(entry);
+        });
+        struct CaptureOnSuccess
+        {
+            jlong& token;
+            ~CaptureOnSuccess() { if (!token) sle::core::Log::setSink({}); }
+        } capture{token};
         auto candidate = std::make_unique<sle::Runtime>(config);
         const auto initialized = candidate->initEmbedded(false);
         if (!initialized.ok()) throw std::runtime_error(initialized.error());
@@ -186,6 +325,24 @@ extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_loadPrevie
         scenePlaying = false;
         fitRequested = !preserve;
         pendingInput.clear();
+    });
+}
+
+extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_setEditorProjectSettings(
+    JNIEnv* env, jclass, jlong token, jbyteArray source, jbyteArray settings)
+{
+    guarded(env,[&] {
+        validate(token);
+        if (!source || !settings) throw std::invalid_argument("Missing editor asset settings");
+        std::string root(static_cast<std::size_t>(env->GetArrayLength(source)), '\0');
+        if (!root.empty()) env->GetByteArrayRegion(source, 0, static_cast<jsize>(root.size()),
+            reinterpret_cast<jbyte*>(root.data()));
+        if (env->ExceptionCheck()) return;
+        std::string json(static_cast<std::size_t>(env->GetArrayLength(settings)), '\0');
+        if (!json.empty()) env->GetByteArrayRegion(settings, 0, static_cast<jsize>(json.size()),
+            reinterpret_cast<jbyte*>(json.data()));
+        if (env->ExceptionCheck()) return;
+        session->setEditorProjectSettings(std::filesystem::u8path(root), nlohmann::json::parse(json));
     });
 }
 
@@ -301,34 +458,114 @@ extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_destroy(JN
     guarded(env, [&] {
         validate(token);
         session.reset(); // Host still has the context current here.
+        sle::core::Log::setSink({});
         pendingInput.clear();
         currentToken = 0;
         owner = {};
     });
 }
 
-extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_startScenePlay(
-    JNIEnv* env,jobject,jlong token,jbyteArray source) {
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_startScenePlay(
+    JNIEnv* env,jobject,jlong token,jbyteArray source,jboolean pauseOnError) {
+    jbyteArray error = nullptr;
     guarded(env,[&] {
         validate(token);
         if (!source) throw std::runtime_error("Missing scene play document");
         std::string text(static_cast<std::size_t>(env->GetArrayLength(source)),'\0');
         env->GetByteArrayRegion(source,0,static_cast<jsize>(text.size()),reinterpret_cast<jbyte*>(text.data()));
         if (env->ExceptionCheck()) return;
+        LuaErrorPause capture(pauseOnError);
         const auto loaded=session->startScenePlay(nlohmann::json::parse(text));
         if (!loaded.ok()) throw std::runtime_error(loaded.error());
         previewMode=false; scenePlaying=true; pendingInput.clear();
+        error = capture.finish(env);
     });
+    return error;
 }
-extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_advanceFrame(
-    JNIEnv* env,jobject,jlong token,jfloat dt) {
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_advanceFrame(
+    JNIEnv* env,jobject,jlong token,jfloat dt,jboolean step,jboolean pauseOnError) {
+    jbyteArray error = nullptr;
     guarded(env,[&] {
         validate(token);
         if (!std::isfinite(dt) || dt<0) throw std::runtime_error("Invalid frame dt");
         drainInput();
+        if (step && scenePlaying) session->requestEmbeddedStep();
+        LuaErrorPause capture(scenePlaying && pauseOnError);
         const auto advanced=session->advanceEmbeddedFrame(dt, !scenePlaying);
         if (!advanced.ok()) throw std::runtime_error(advanced.error());
+        error = capture.finish(env);
     });
+    return error;
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_runPlayLua(
+    JNIEnv* env, jobject, jlong token, jbyteArray source, jboolean pauseOnError)
+{
+    jbyteArray error = nullptr;
+    guarded(env, [&] {
+        validate(token);
+        if (!scenePlaying) throw std::runtime_error("The Play runtime has stopped");
+        const auto command = readDiscoveryInput(env, source);
+        if (env->ExceptionCheck()) return;
+        LuaErrorPause capture(pauseOnError);
+        session->getScriptEngine().runConsoleSource(command);
+        error = capture.finish(env);
+    });
+    return error;
+}
+
+extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_setLuaProfiling(
+    JNIEnv* env, jobject, jlong token, jboolean enabled)
+{
+    guarded(env, [&] {
+        validate(token);
+        session->getScriptEngine().setProfiling(enabled != JNI_FALSE);
+    });
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_takeLuaProfile(
+    JNIEnv* env, jobject, jlong token, jboolean advanced)
+{
+    jbyteArray result = nullptr;
+    guarded(env, [&] {
+        validate(token);
+        auto& script = session->getScriptEngine();
+        if (!scenePlaying || !script.isProfiling() || (!advanced && !script.hasProfileActivity())) return;
+        const auto frame = script.finishProfileFrame();
+        auto rows = nlohmann::json::array();
+        for (const auto& row : frame.rows)
+        {
+            rows.push_back({{"entity", row.entity}, {"behaviour", row.behaviour}, {"source", row.source},
+                {"calls", row.calls}, {"elapsed", row.elapsedNs}, {"allocated", row.allocatedBytes},
+                {"freed", row.freedBytes}});
+        }
+        const nlohmann::json sample = {{"scene", session->getSceneManager().getSceneInstance()},
+            {"elapsed", frame.elapsedNs}, {"gc", frame.explicitGcNs}, {"memory", frame.memoryBytes},
+            {"rows", std::move(rows)}, {"omittedRows", frame.omittedRows}};
+        const auto text = sample.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        result = env->NewByteArray(static_cast<jsize>(text.size()));
+        if (result) env->SetByteArrayRegion(result, 0, static_cast<jsize>(text.size()),
+            reinterpret_cast<const jbyte*>(text.data()));
+    });
+    return result;
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL Java_sle_editor_bridge_NativeEngine_playEntityPosition(
+    JNIEnv* env,jobject,jlong token,jlong id) {
+    jfloatArray result = nullptr;
+    guarded(env,[&] {
+        validate(token);
+        if (!scenePlaying || id <= 0 || id > UINT32_MAX) return;
+        // Runtime IDs are reserved across scene replacement and are never reused within this session.
+        const auto& scene = session->getScene();
+        const sle::entity::Entity entity(static_cast<uint32_t>(id));
+        if (!scene.getRegistry().getComponent<sle::components::TransformComponent>(entity)) return;
+        const auto world = sle::entity::transformMath::currentWorld(scene, entity);
+        const jfloat values[] = {world.position.x, world.position.y};
+        result = env->NewFloatArray(2);
+        if (result) env->SetFloatArrayRegion(result, 0, 2, values);
+    });
+    return result;
 }
 extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_drawEmbeddedFrame(
     JNIEnv* env,jobject,jlong token,jint width,jint height) {
@@ -370,6 +607,29 @@ extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_setEditorG
         if (!session->setEditorGrid({spacing,majorEvery})) throw std::runtime_error("Invalid editor grid");
     });
 }
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_drainConsole(
+    JNIEnv* env, jobject, jlong token)
+{
+    jbyteArray result = nullptr;
+    guarded(env, [&] {
+        validate(token);
+        const auto batch = editorLogs.drain();
+        if (!batch) return;
+        const auto text = batch->dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        result = env->NewByteArray(static_cast<jsize>(text.size()));
+        if (result)
+            env->SetByteArrayRegion(result, 0, static_cast<jsize>(text.size()),
+                                    reinterpret_cast<const jbyte*>(text.data()));
+    });
+    return result;
+}
+
+extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_clearConsole(
+    JNIEnv* env, jobject, jlong token)
+{
+    guarded(env, [&] { validate(token); editorLogs.clear(); });
+}
+
 extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_sceneTransforms(JNIEnv* env,jobject,jlong token) {
     jbyteArray result=nullptr;
     guarded(env,[&] {
@@ -380,6 +640,52 @@ extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_scen
     });
     return result;
 }
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_reloadScript(
+    JNIEnv* env, jobject, jlong token, jlong sceneInstance, jlong entityId, jbyteArray keyBytes,
+    jbyteArray assetBytes, jboolean pauseOnError)
+{
+    jbyteArray error = nullptr;
+    guarded(env, [&] {
+        validate(token);
+        if (!scenePlaying || entityId <= 0 || entityId > UINT32_MAX || !keyBytes || !assetBytes) return;
+        const auto read = [&](jbyteArray bytes) {
+            std::string value(static_cast<std::size_t>(env->GetArrayLength(bytes)), '\0');
+            if (!value.empty())
+                env->GetByteArrayRegion(bytes, 0, static_cast<jsize>(value.size()),
+                    reinterpret_cast<jbyte*>(value.data()));
+            return value;
+        };
+        const auto key = read(keyBytes);
+        const auto asset = read(assetBytes);
+        if (env->ExceptionCheck()) return;
+        LuaErrorPause capture(pauseOnError);
+        session->reloadEmbeddedBehaviour(sceneInstance, static_cast<uint32_t>(entityId), key, asset);
+        error = capture.finish(env);
+    });
+    return error;
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_liveSnapshot(
+    JNIEnv* env, jobject, jlong token, jlong sceneInstance, jlong entityId)
+{
+    jbyteArray result = nullptr;
+    guarded(env, [&] {
+        validate(token);
+        nlohmann::json snapshot;
+        if (scenePlaying) {
+            snapshot = session->liveHierarchy();
+            snapshot["run"] = token;
+            if (entityId > 0 && entityId <= UINT32_MAX)
+                snapshot["details"] = session->liveComponents(sceneInstance, static_cast<uint32_t>(entityId));
+        }
+        const auto bytes = snapshot.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        result = env->NewByteArray(static_cast<jsize>(bytes.size()));
+        if (result) env->SetByteArrayRegion(result, 0, static_cast<jsize>(bytes.size()),
+            reinterpret_cast<const jbyte*>(bytes.data()));
+    });
+    return result;
+}
+
 extern "C" JNIEXPORT jfloatArray JNICALL Java_sle_editor_bridge_NativeEngine_sceneGameViewport(JNIEnv* env,jobject,jlong token) {
     jfloatArray result=nullptr;
     guarded(env,[&] {
@@ -437,15 +743,20 @@ extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_releasePro
     try { std::lock_guard lock(preparedMutex);preparedProjects.erase(handle); }
     catch(const std::exception& error) { fail(env,error.what()); }
 }
-extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_startProject(JNIEnv* env,jobject,jlong token,jlong handle) {
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_startProject(
+    JNIEnv* env,jobject,jlong token,jlong handle,jboolean pauseOnError) {
+    jbyteArray error = nullptr;
     guarded(env,[&] {
         validate(token);
         std::shared_ptr<sle::ProjectRuntime> project;
         { std::lock_guard lock(preparedMutex);const auto found=preparedProjects.find(handle);
           if(found==preparedProjects.end()) throw std::runtime_error("Project launch snapshot expired");
           project=std::move(found->second);preparedProjects.erase(found); }
+        LuaErrorPause capture(pauseOnError);
         const auto loaded=session->startProject(*project);
         if(!loaded.ok()) throw std::runtime_error(loaded.error());
         previewMode=false;scenePlaying=true;pendingInput.clear();
+        error = capture.finish(env);
     });
+    return error;
 }

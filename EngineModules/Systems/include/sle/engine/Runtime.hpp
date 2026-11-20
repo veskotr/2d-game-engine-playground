@@ -18,6 +18,7 @@
 #include <sle/engine/SceneManager.hpp>
 #include <sle/engine/ScriptApiImpl.hpp>
 #include <sle/engine/Context.hpp>
+#include <sle/engine/InputActions.hpp>
 #include <sle/engine/EntityPreviewSystem.hpp>
 #include <sle/scripting/ScriptEngine.hpp>
 #include <sle/ui/UISystem.hpp>
@@ -30,10 +31,14 @@
 #include <array>
 #include <vector>
 #include <string>
+#include <string_view>
+#include <optional>
+#include <filesystem>
 
 namespace sle {
 
 class ProjectRuntime;
+namespace renderer { enum class TextureFilter; }
 
 class Runtime
 {
@@ -46,6 +51,11 @@ public:
     // including destruction, must occur with that context current on its owner thread.
     sle::core::Result<bool> initEmbedded(bool initializeAudio = true);
     void enableEmbeddedAudio();
+    std::string projectTagId(const std::string& name) const;
+    input::KeyState inputAction(std::string_view name) const;
+    void setEditorProjectSettings(std::filesystem::path root, const nlohmann::json& settings);
+    void setEditorAssetRoot(std::filesystem::path root, std::string_view artStyle = {});
+    renderer::TextureFilter spriteTextureFilter(const std::string& path) const;
     sle::core::Result<bool> loadScenePreview(const nlohmann::json& document, bool preserveView = false);
     sle::core::Result<bool> loadEntityPreview(const nlohmann::json& document, bool preserveView = false);
     glm::vec2 getCameraViewportSize() const { return camera.getViewportSize(); }
@@ -61,6 +71,9 @@ public:
     sle::core::Result<bool> startScenePlay(const nlohmann::json& document);
     sle::core::Result<bool> renderSceneView(int width, int height, float dt, bool gameView, bool playing, bool fit = false);
     nlohmann::json sceneTransforms();
+    // Embedded owner-thread observations.
+    nlohmann::json liveHierarchy() const;
+    nlohmann::json liveComponents(uint64_t sceneInstance, uint32_t entityId) const;
     std::array<float,6> sceneGameViewport() const;
 
     // Advance once per owner frame; never draws or polls/presents host events.
@@ -72,6 +85,8 @@ public:
     // Host clears/transfers input before ticking. Advances the same systems as run().
     sle::core::Result<bool> tickEmbeddedFrame(int framebufferWidth, int framebufferHeight, float dt);
     void setEmbeddedPaused(bool paused);
+    bool requestEmbeddedStep();
+    void reloadEmbeddedBehaviour(uint64_t sceneInstance, uint32_t entity, const std::string& key, const std::string& asset);
     void run();
     std::size_t runForFrames(std::size_t maxFrames);
 
@@ -126,6 +141,7 @@ private:
     sle::core::Result<bool> initServices();
     bool embedded = false;
     bool embeddedPaused = false;
+    bool embeddedStepRequested = false;
     bool initializeAudioOnInit = true;
     bool audioAttempted = false;
     bool entityPreview = false;
@@ -146,6 +162,15 @@ private:
 
     sle::core::EngineConfig config;
     std::shared_ptr<const ProjectRuntime> projectContext;
+    std::filesystem::path editorAssetRoot;
+    physics::CollisionMatrix editorBlockedPairs{};
+    InputActionMap editorInputActions;
+    InputActionMap activeInputActions;
+    std::map<std::string, input::KeyState, std::less<>> inputActionStates;
+    void resetInputActions(const InputActionMap& actions);
+    void sampleInputActions();
+    bool isActionKeyBound(int key) const;
+    std::optional<renderer::TextureFilter> editorTextureDefault;
 
     sle::core::Window window;
     sle::renderer::Renderer renderer;

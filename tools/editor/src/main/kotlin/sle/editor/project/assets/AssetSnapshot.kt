@@ -3,13 +3,18 @@ package sle.editor.project.assets
 import java.io.IOException
 import java.nio.file.*
 import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.FileTime
 
 internal enum class AssetKind { Directory, File, Link }
-internal data class AssetEntry(val path: String,val kind: AssetKind,val size: Long=0,val modified: Long=0) {
+internal data class AssetEntry(val path: String,val kind: AssetKind,val size: Long=0,val modified: Long=0,
+    val sourceModified: FileTime? = null, val sourceKey: Any? = null) {
     val name get()=path.substringAfterLast('/')
     val parent get()=path.substringBeforeLast('/',"")
 }
-internal data class AssetSnapshot(val entries: List<AssetEntry>,val errors: List<String> = emptyList(),val idsByPath: Map<String,String> = emptyMap()) {
+internal data class AssetSnapshot(val entries: List<AssetEntry>,val errors: List<String> = emptyList(),val idsByPath: Map<String,String> = emptyMap(),
+    val textureFilters: Map<String, AssetTextureFilter> = emptyMap(),
+    val spriteRegions: Map<String, List<SpriteRegion>> = emptyMap(),
+    val thumbnailRevision: Long = 0) {
     // The scanner constructs these indexes on its worker; UI publication is cheap.
     val byPath=entries.associateBy { it.path }
     val pathsById=idsByPath.entries.associate { it.value to it.key }
@@ -20,8 +25,10 @@ internal data class AssetSnapshot(val entries: List<AssetEntry>,val errors: List
 }
 
 internal object AssetScanner {
-    fun scan(projectRoot: Path,assetRoot: Path,cancelled: ()->Boolean={false}): AssetSnapshot = synchronized(AssetIdentity) {
+    fun scan(projectRoot: Path,assetRoot: Path,registerMissing: Boolean = true, thumbnailRevision: Long = 0, cancelled: ()->Boolean={false}): AssetSnapshot = synchronized(AssetIdentity) {
         val entries=mutableListOf<AssetEntry>();val errors=mutableListOf<String>()
+        val regions = mutableMapOf<String, List<SpriteRegion>>()
+        val filters = mutableMapOf<String, AssetTextureFilter>()
         val identities=mutableMapOf<String,String>();val metadata=mutableListOf<Path>()
         try {
             val projectPath=projectRoot.toAbsolutePath().normalize()
@@ -50,9 +57,16 @@ internal object AssetScanner {
                     if(cancelled()) return FileVisitResult.TERMINATE
                     if(AssetIdentity.isMetadata(file)) { metadata.add(file);return FileVisitResult.CONTINUE }
                     if(attrs.isRegularFile && relative(file) in pending) errors.add("Pending asset recovery: ${relative(file)}. Use Recover Deleted before repairing identity.")
-                    else if(attrs.isRegularFile) try { identities[relative(file)]=AssetIdentity.ensure(file) }
+                    else if(attrs.isRegularFile) try {
+                        val metadata = if (registerMissing) AssetIdentity.ensureMetadata(file)
+                            else AssetIdentity.readMetadata(AssetIdentity.sidecar(file))
+                        val path = relative(file)
+                        identities[path] = metadata.id.lowercase()
+                        if (metadata.regions.isNotEmpty()) regions[path] = metadata.regions
+                        metadata.filter?.let { filters[path] = it }
+                    }
                     catch(failure: Exception) { errors.add("Metadata ${relative(file)}: ${failure.message}") }
-                    entries.add(AssetEntry(relative(file),if(attrs.isSymbolicLink || attrs.isOther) AssetKind.Link else AssetKind.File,attrs.size(),attrs.lastModifiedTime().toMillis()))
+                    entries.add(AssetEntry(relative(file),if(attrs.isSymbolicLink || attrs.isOther) AssetKind.Link else AssetKind.File,attrs.size(),attrs.lastModifiedTime().toMillis(),attrs.lastModifiedTime(),attrs.fileKey()))
                     return FileVisitResult.CONTINUE
                 }
                 override fun visitFileFailed(file: Path,failure: IOException): FileVisitResult {
@@ -70,6 +84,6 @@ internal object AssetScanner {
             errors.add("Duplicate asset UUID $id: ${duplicates.joinToString { it.key }}")
             duplicates.forEach { identities.remove(it.key) }
         }
-        return AssetSnapshot(entries.sortedWith(compareBy<AssetEntry> { it.kind!=AssetKind.Directory }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.path }),errors,identities.toMap())
+        return AssetSnapshot(entries.sortedWith(compareBy<AssetEntry> { it.kind!=AssetKind.Directory }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.path }),errors,identities.toMap(),filters.filterKeys(identities::containsKey), regions.filterKeys(identities::containsKey), thumbnailRevision)
     }
 }

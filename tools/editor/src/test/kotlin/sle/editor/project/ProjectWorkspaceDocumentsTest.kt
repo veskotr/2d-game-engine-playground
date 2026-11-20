@@ -4,6 +4,7 @@ import sle.editor.model.*
 import kotlinx.serialization.json.*
 import java.nio.file.Files
 import kotlin.test.*
+import sle.editor.viewport.SnapSettings
 
 class ProjectWorkspaceDocumentsTest {
     @Test fun normalExitStateSavePreservesLastSceneAndDoesNotRewriteProject() {
@@ -41,6 +42,39 @@ class ProjectWorkspaceDocumentsTest {
             workspace.project.activate(project);assertEquals(projectSnap,workspace.snap.settings)
             assertTrue(workspace.saveProjectEditorState());assertEquals(projectSnap,ProjectFiles.editorState(project).snap)
         } finally { workspace.close() }
+    }
+
+    @Test fun savedArtStyleRefreshesInheritedSnapFieldsAndProjectSwitchRestoresOverrides() {
+        val folder = Files.createTempDirectory("snap-style")
+        val pixel = ProjectFiles.create(folder.resolve("Pixel"), "Pixel", ProjectArtStyle.PixelArt)
+        val smooth = ProjectFiles.create(folder.resolve("Smooth"), "Smooth", ProjectArtStyle.Smooth)
+        val workspace = sle.editor.workspace.EditorWorkspace(Result.success(EntityWorkspaceState(emptyMap())),
+            Result.success(SceneWorkspaceState(emptyMap()) { it }),
+            snapStore = sle.editor.viewport.SnapSettingsStore(folder))
+        try {
+            workspace.project.activate(pixel)
+            assertEquals(SnapSettings(enabled = true), workspace.snap.settings)
+            workspace.snap.update(workspace.snap.settings.copy(rotateDegrees = 30.0))
+            assertTrue(workspace.saveProjectEditorState())
+            val staged = pixel.document.copy(settings = ProjectSettings(ProjectArtStyle.Smooth))
+            assertEquals(ProjectArtStyle.PixelArt, ProjectFiles.open(pixel.file).document.settings.artStyle)
+            assertEquals(1.0, workspace.snap.gridSpacing)
+            workspace.project.saveSettings(staged)
+            assertEquals(SnapSettings(move = 10.0, rotateDegrees = 30.0), workspace.snap.settings)
+            workspace.project.activate(smooth)
+            assertEquals(SnapSettings(move = 10.0), workspace.snap.settings)
+            workspace.project.open(pixel.file)
+            assertEquals(SnapSettings(move = 10.0, rotateDegrees = 30.0), workspace.snap.settings)
+        } finally { workspace.close() }
+    }
+
+    @Test fun snapEditsMergeOnlyTheFieldsTheUserChanged() {
+        val project = ProjectFiles.create(Files.createTempDirectory("snap-merge").resolve("Game"), "Game",
+            ProjectArtStyle.PixelArt)
+        val defaults = SnapSettings(enabled = true)
+        ProjectFiles.saveSnapChange(project, 1f, defaults, defaults.copy(move = 8.0))
+        ProjectFiles.saveSnapChange(project, 1f, defaults, defaults.copy(rotateDegrees = 45.0))
+        assertEquals(defaults.copy(move = 8.0, rotateDegrees = 45.0), ProjectFiles.editorState(project).snap)
     }
 
     @Test fun legacyProjectWithoutStartupOrLocalStateOpensWithoutRewritingContent() {

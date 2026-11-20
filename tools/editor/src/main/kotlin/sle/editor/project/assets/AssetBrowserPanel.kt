@@ -15,6 +15,10 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,6 +45,7 @@ internal fun AssetBrowserPanel(
     dragPath: (String)->java.nio.file.Path? = { null },
     /** Scene entity dropped on an asset-relative folder ("" is the root); null disables folder targets. */
     entityDrop: ((String,EntityDragPayload)->Unit)? = null,
+    onOpenScript: ((String, String?) -> Unit)? = null,
 ) {
     val folderTargets=entityDrop!=null && commands?.busy!=true
     @Composable fun Modifier.folderTarget(folder: String)=entityDropTarget(folderTargets) { entityDrop?.invoke(folder,it) }
@@ -66,14 +71,31 @@ internal fun AssetBrowserPanel(
         Column(modifier.drawBehind { drawRect(border,size=androidx.compose.ui.geometry.Size(metrics.borderWidth.toPx(),size.height)) }.padding(metrics.panelPadding).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(metrics.gap)) {
             val selected=state.selected?.let(entryMap::get)
             if(selected!=null) {
+                if (commands != null && snapshot?.idsByPath?.containsKey(selected.path) == true) {
+                    EditorButton("Find References…", onClick = { commands.findReferences(selected.path) },
+                        enabled = !commands.busy)
+                }
                 if(commands!=null && selected.kind!=AssetKind.Link) Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(metrics.gap)) {
                     EditorButton("Rename…",onClick=commands.rename,enabled=!commands.busy,modifier=measured("AssetRename"))
                     EditorButton("Move…",onClick=commands.move,enabled=!commands.busy,modifier=measured("AssetMove"))
                     EditorButton("Delete…",onClick=commands.delete,enabled=!commands.busy,modifier=measured("AssetDelete"))
                 }
+                if (onOpenScript != null && selected.kind == AssetKind.File && selected.name.endsWith(".lua", true)) {
+                    val id = snapshot?.idsByPath?.get(selected.path)
+                    EditorButton("Open in IDE", onClick = { onOpenScript(selected.path, id) },
+                        style = EditorButtonStyle.Ghost)
+                }
                 Text(selected.name,style=LocalEditorTypography.current.heading)
                 Text(selected.path,style=MaterialTheme.typography.caption)
                 state.snapshot?.idsByPath?.get(selected.path)?.let { Text("UUID: $it",style=MaterialTheme.typography.caption) }
+                if (commands != null && snapshot?.idsByPath?.containsKey(selected.path) == true && isTextureAsset(selected.path)) {
+                    EditorSelect("Texture filter", snapshot.textureFilters[selected.path]?.label ?: "Default",
+                        listOf("Default") + AssetTextureFilter.entries.map { it.label },
+                        onSelect = { label ->
+                            commands.setTextureFilter(selected.path, AssetTextureFilter.entries.find { it.label == label })
+                        }, modifier = measured("AssetTextureFilter"), enabled = !commands.busy)
+                    SpriteRegionControls(selected.path, snapshot.spriteRegions[selected.path].orEmpty(), commands, ::measured)
+                }
                 if(commands!=null && selected.kind!=AssetKind.Link) {
                     EditorButton("Reveal in Explorer",onClick=commands.reveal,enabled=!commands.busy,style=EditorButtonStyle.Ghost)
                     if(selected.kind==AssetKind.File) {
@@ -171,7 +193,10 @@ internal fun AssetBrowserPanel(
                                 } else Modifier)
                                 .combinedClickable(onClick={state.select(entry.path)},onDoubleClick={if(entry.kind==AssetKind.Directory) state.navigate(entry.path) else if(entry.kind==AssetKind.File) onOpen(entry.path)})
                                 .heightIn(min=metrics.treeRow).padding(horizontal=metrics.panelPadding,vertical=metrics.gap/2),verticalAlignment=Alignment.CenterVertically) {
-                                TreeIcon(if(entry.kind==AssetKind.Directory) "Folder" else if(entry.kind==AssetKind.Link) "Link" else "File")
+                                if (entry.kind == AssetKind.File && isTextureAsset(entry.path) && state.thumbnailCache != null) {
+                                    AssetThumbnail(state.thumbnailCache, entry, snapshot?.textureFilters?.get(entry.path),
+                                        snapshot?.thumbnailRevision ?: 0, measured("AssetThumbnail:${entry.path}"))
+                                } else TreeIcon(if(entry.kind==AssetKind.Directory) "Folder" else if(entry.kind==AssetKind.Link) "Link" else "File")
                                 Spacer(Modifier.width(metrics.gap))
                                 Text(entry.name,Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.body2)
                                 if(showType) Text(type(entry),Modifier.width(metrics.assetTypeWidth),color=tokens.textSecondary,style=MaterialTheme.typography.caption)
@@ -188,6 +213,22 @@ internal fun AssetBrowserPanel(
     }
 }
 
+
+private val thumbnailIo = Dispatchers.IO.limitedParallelism(2)
+
+@Composable
+private fun AssetThumbnail(cache: AssetThumbnailCache, entry: AssetEntry, filter: AssetTextureFilter?, refresh: Long,
+    paintedBounds: Modifier) {
+    var bitmap by remember(cache, entry, filter, refresh) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(cache, entry, filter, refresh) {
+        bitmap = withContext(thumbnailIo) { cache.load(entry.path, filter)?.toComposeImageBitmap() }
+    }
+    Box(Modifier.size(LocalEditorMetrics.current.treeRow), contentAlignment = Alignment.Center) {
+        val image = bitmap
+        if (image == null) TreeIcon("File")
+        else Image(image, contentDescription = null, Modifier.fillMaxSize().then(paintedBounds))
+    }
+}
 
 private fun type(entry: AssetEntry): String = when(entry.kind) {
     AssetKind.Directory -> "Folder"

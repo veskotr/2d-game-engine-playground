@@ -1,6 +1,10 @@
 package sle.editor.viewport
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import sle.editor.bridge.NativeEngine
+import sle.editor.console.ConsoleSeverity
 import sle.editor.model.EntityDocument
 import sle.editor.model.EntityWorkspaceState
 import sle.editor.model.SceneDocument
@@ -43,7 +47,122 @@ internal class NativeViewportOwner(
     profile = GLData.Profile.CORE
     swapInterval = canvasSwapInterval
 }) {
+    val console = sle.editor.console.ConsoleState(persistPreferences = !smokeTest && !previewSmoke)
+    val luaProfiler = sle.editor.profiler.LuaProfilerState()
+    private var profilingApplied = false
+
+    private fun syncLuaProfiler() {
+        if (profilingApplied == luaProfiler.capture) return
+        NativeEngine.setLuaProfiling(session, luaProfiler.capture)
+        profilingApplied = luaProfiler.capture
+    }
+
+    var consumeSceneStep: () -> Boolean = { false }
+    var onLuaErrorPause: () -> Unit = {}
+    var liveInspection by mutableStateOf<LiveInspection?>(null)
+        private set
+    private var liveSelection: LiveSelection? = null
+    private var lastLivePoll: Long? = null
+    private var desiredPlayRevision: Long? = null
+    private var startedPlayRevision: Long? = null
+    private var startedSceneInstance: Long? = null
+
+    private data class ScriptReload(val selection: LiveSelection, val key: String, val asset: String)
+    private var pendingScriptReload: ScriptReload? = null
+
+    fun reloadLiveScript(selection: LiveSelection, key: String, asset: String) {
+        check(EventQueue.isDispatchThread())
+        if (selection != liveSelection || desiredPlayback == Playback.Stopped) return
+        pendingScriptReload = ScriptReload(selection, key, asset)
+    }
+
+    fun selectLiveEntity(selection: LiveSelection) {
+        val current = liveInspection ?: return
+        if (selection.run != current.run || selection.scene != current.scene ||
+            current.entities.none { it.id == selection.entity }) return
+        liveSelection = selection
+        liveInspection = current.copy(selection = selection, details = null)
+        lastLivePoll = null
+    }
+
+    private fun refreshLiveInspection(force: Boolean) {
+        val now = System.nanoTime()
+        if (!force && lastLivePoll?.let { now - it < 100_000_000L } == true) return
+        liveInspection = readLiveInspection()
+        liveSelection = liveInspection?.selection
+        lastLivePoll = now
+    }
+
+    private fun readLiveInspection(): LiveInspection? {
+        val selection = liveSelection?.takeIf { it.run == session }
+        val snapshot = LiveInspection.parse(
+            NativeEngine.liveSnapshot(session, selection?.scene ?: 0, selection?.entity ?: 0), selection) ?: return null
+        return snapshot.copy(playRevision = startedPlayRevision.takeIf { snapshot.scene == startedSceneInstance })
+    }
+
+    fun readPausedPlaySelection(): LiveInspection? {
+        check(EventQueue.isDispatchThread())
+        if (actualMode != ViewportMode.Scene || desiredMode != ViewportMode.Scene ||
+            actualScenePlayback != Playback.Paused || desiredPlayback != Playback.Paused ||
+            startedPlayRevision == null || startedPlayRevision != desiredPlayRevision) return null
+        refreshLiveInspection(force = true)
+        return liveInspection
+    }
+
+    private fun clearLiveInspection() {
+        pendingScriptReload = null
+        luaProfiler.clear()
+        profilingApplied = false
+        liveInspection = null
+        liveSelection = null
+        lastLivePoll = null
+        startedPlayRevision = null
+        startedSceneInstance = null
+    }
+
+    var luaPauseMessage by mutableStateOf<String?>(null)
+        private set
+    private var luaPauseEntity = 0L
     private var session = 0L
+
+    private fun clearLuaPause() {
+        luaPauseMessage = null
+        luaPauseEntity = 0L
+    }
+
+    private fun applyLuaPause(error: ByteArray?) {
+        if (error == null) return
+        val fields = Json.parseToJsonElement(error.decodeToString()).jsonObject
+        luaPauseMessage = fields.getValue("message").jsonPrimitive.content
+        luaPauseEntity = fields.getValue("entity").jsonPrimitive.long
+        desiredPlayback = Playback.Paused
+        actualScenePlayback = Playback.Paused
+        releaseSink()
+        onLuaErrorPause()
+    }
+
+    fun luaPausePosition(): Vec2? {
+        if (session == 0L || actualScenePlayback != Playback.Paused || luaPauseEntity == 0L) return null
+        return NativeEngine.playEntityPosition(session,luaPauseEntity)?.let { Vec2(it[0].toDouble(),it[1].toDouble()) }
+    }
+
+    private var pendingConsoleCommand: Pair<Long, String>? = null
+
+    fun queuePlayLua(source: String) {
+        require(desiredMode == ViewportMode.Scene && actualScenePlayback != Playback.Stopped &&
+            desiredPlayback != Playback.Stopped && session != 0L) { "The Play runtime is unavailable" }
+        check(pendingConsoleCommand == null) { "A Play Lua command is already queued" }
+        pendingConsoleCommand = session to source
+    }
+
+    fun drainConsole() {
+        if (session != 0L) NativeEngine.drainConsole(session)?.let(console::accept)
+    }
+
+    fun clearConsole() {
+        if (session != 0L) NativeEngine.clearConsole(session)
+        console.clearHistory()
+    }
     var schedulerDelay = 16; private set
     var presentationVsync = false; private set
     private lateinit var capabilities: org.lwjgl.opengl.GLCapabilities
@@ -81,6 +200,25 @@ internal class NativeViewportOwner(
     private var lastGoodPreview: String? = null
     private val goodDocuments = mutableMapOf<ViewportMode,String>()
     private var scene: SceneWorkspaceState? = null
+    private var editorAssetRoot: java.nio.file.Path? = null
+    private var editorProjectSettings = sle.editor.project.ProjectSettings()
+    fun setEditorAssetRoot(root: java.nio.file.Path?, settings: sle.editor.project.ProjectSettings = sle.editor.project.ProjectSettings()) {
+        if (editorAssetRoot != root) refreshPreview()
+        editorAssetRoot = root
+        editorProjectSettings = settings
+    }
+
+    private fun applyEditorAssetSettings() {
+        NativeEngine.setEditorProjectSettings(session, editorAssetRoot?.toString().orEmpty().toByteArray(Charsets.UTF_8),
+            editorProjectSettings.json().toString().toByteArray(Charsets.UTF_8))
+    }
+
+    fun refreshPreview() {
+        attemptedDocument = null
+    }
+
+    var activeActionKeys: Set<Int> = emptySet()
+        private set
     private var desiredProject: sle.editor.project.PreparedProject? = null
     fun setProject(value: sle.editor.project.PreparedProject?) { desiredProject=value }
     private var desiredPlayback = Playback.Running
@@ -99,6 +237,7 @@ internal class NativeViewportOwner(
     private var gizmos: ViewportGizmos? = null
     private var camera: PreviewCamera? = null
     private val overlay = GizmoOverlay()
+    var luaErrorColor = sle.editor.ui.theme.editorColors(sle.editor.ui.theme.EditorThemeMode.Dark).error
     var editorSelectionColor = sle.editor.ui.theme.editorColors(sle.editor.ui.theme.EditorThemeMode.Dark).selectionOutline
     /** Move, Rotate and Scale handles use the viewport axis tokens of the current theme. */
     var editorAxisColors = sle.editor.ui.theme.editorColors(sle.editor.ui.theme.EditorThemeMode.Dark).let { it.viewportXAxis to it.viewportYAxis }
@@ -138,8 +277,13 @@ internal class NativeViewportOwner(
     }
     private fun editingAllowed() = desiredMode==ViewportMode.Entity ||
         (desiredMode==ViewportMode.Scene && desiredPlayback==Playback.Stopped && !inputGameView)
-    private fun gameInput() = desiredPlayback==Playback.Running && (desiredMode==ViewportMode.Sandbox ||
-        (desiredMode==ViewportMode.Scene && actualScenePlayback==Playback.Running && inputGameView))
+    private fun gameInput(key: Int? = null) = when (desiredMode) {
+        ViewportMode.Sandbox -> desiredPlayback == Playback.Running
+        ViewportMode.Scene -> inputGameView &&
+            (actualScenePlayback == Playback.Running && desiredPlayback == Playback.Running ||
+                actualScenePlayback == Playback.Paused && desiredPlayback == Playback.Paused && key != null && key in activeActionKeys)
+        else -> false
+    }
     fun authoringReady(): Boolean = actualMode == desiredMode && desiredMode != ViewportMode.Sandbox &&
         (desiredMode!=ViewportMode.Scene || actualScenePlayback==Playback.Stopped) &&
         desiredDocument == lastGoodPreview && (if (desiredMode == ViewportMode.Scene) scene?.serialize()
@@ -155,12 +299,14 @@ internal class NativeViewportOwner(
         }
     }
 
-    fun setContent(mode: ViewportMode, document: String?, playback: Playback) {
+    fun setContent(mode: ViewportMode, document: String?, playback: Playback, playRevision: Long? = null) {
         check(EventQueue.isDispatchThread())
         if (mode != desiredMode || playback!=desiredPlayback) { releaseSink(); finishGesture() }
+        if (mode != ViewportMode.Scene || playback != Playback.Paused) clearLuaPause()
         desiredMode = mode
         desiredDocument = document
         desiredPlayback = playback
+        desiredPlayRevision = playRevision
     }
     fun fitEntity() { if(desiredMode!=ViewportMode.Scene || !inputGameView) { finishGesture(); pendingFit = true } }
     fun zoomEntity(factor: Float) { if (gizmos?.dragging != true && !toolHost.pressed && (desiredMode!=ViewportMode.Scene || !inputGameView)) pendingZoom *= factor }
@@ -285,15 +431,15 @@ internal class NativeViewportOwner(
     override fun update(graphics: Graphics) = paint(graphics)
 
     private fun sendInput(type: Int, code: Int = 0, x: Double = 0.0, y: Double = 0.0) {
-        if (session != 0L && !stopped && gameInput() && (type == 3 || inputFocused))
+        if (session != 0L && !stopped && gameInput(key = code.takeIf { type == 0 }) && (type == 3 || inputFocused))
             if(type==3) releaseSink() else inputRequest?.let { inputSink(ViewInput(if(desiredMode==ViewportMode.Sandbox) ViewId.Game else inputView,it.generation,type,code,x,y)) }
     }
     private fun sendKey(event: KeyEvent, down: Boolean) {
-        if (!gameInput()) {
+        val key = engineKey(event)
+        if (!gameInput(key)) {
             if (down && editingAllowed()) { if(desiredMode==ViewportMode.Scene) { toolHost.camera=camera;toolHost.key(event) } else gizmos?.key(event) }
             return
         }
-        val key=engineKey(event)
         if (key >= 0) sendInput(0,key,if (down) 1.0 else 0.0)
     }
     private fun pointer(event: MouseEvent) = sle.editor.viewport.tools.ToolPointer(Vec2(event.x.toDouble(),event.y.toDouble()),
@@ -334,11 +480,13 @@ internal class NativeViewportOwner(
         actualMode=null
         actualPlayback=Playback.Running
         actualScenePlayback=Playback.Stopped
+        activeActionKeys = emptySet()
         actualGameView=false
         audioQueued=false
     }
     private fun loadPreview(document: String) {
         val mode=desiredMode
+        applyEditorAssetSettings()
         fun identity(source: String) = if (mode==ViewportMode.Scene) SceneDocument.parse(source).key else EntityDocument.parse(source).key
         fun load(source: String,preserve: Boolean) {
             if (mode==ViewportMode.Scene) NativeEngine.loadScenePreview(session,source.toByteArray(Charsets.UTF_8),preserve)
@@ -354,9 +502,18 @@ internal class NativeViewportOwner(
         } catch (failure: IllegalStateException) {
             status("Preview unchanged: ${failure.message}")
             if (actualMode!=mode) {
-                val fallback=goodDocuments[mode] ?: if (mode==ViewportMode.Scene) SceneDocument().serialize() else EntityDocument().serialize()
-                load(fallback,false)
-                lastGoodPreview=fallback
+                val previous = goodDocuments[mode]
+                lastGoodPreview = try {
+                    previous?.also { load(it, false) }
+                } catch (_: IllegalStateException) {
+                    // A saved fallback can reference a sidecar that has since changed.
+                    null
+                }
+                if (lastGoodPreview == null) {
+                    val empty = if (mode == ViewportMode.Scene) SceneDocument().serialize() else EntityDocument().serialize()
+                    load(empty, false)
+                    lastGoodPreview = empty
+                }
             }
         }
         attemptedDocument=document
@@ -367,6 +524,8 @@ internal class NativeViewportOwner(
             org.lwjgl.opengl.WGLEXTSwapControl.wglSwapIntervalEXT(if(vsync) 1 else 0)
     }
     private fun recreateSession() {
+        clearLiveInspection()
+        clearLuaPause()
         setSwapInterval(false)
         schedulerDelay=16
         finishGesture()
@@ -383,13 +542,27 @@ internal class NativeViewportOwner(
             actualScenePlayback=Playback.Stopped
         } else if(actualScenePlayback==Playback.Stopped) {
             try {
+                if (console.clearOnPlay) clearConsole()
+                syncLuaProfiler()
                 val project=desiredProject
-                if(project!=null) {
-                    NativeEngine.startProject(session,project.handle)
+                val pause = if(project!=null) {
+                    val error = NativeEngine.startProject(session,project.handle,console.pauseOnLuaError)
                     setSwapInterval(project.settings.vsync)
                     schedulerDelay=if(project.settings.targetFPS>0) kotlin.math.ceil(1000.0/project.settings.targetFPS).toInt().coerceAtLeast(1) else 1
-                } else NativeEngine.startScenePlay(session,(desiredDocument ?: error("Missing scene")).toByteArray(Charsets.UTF_8))
-                actualScenePlayback=Playback.Running
+                    error
+                } else {
+                    applyEditorAssetSettings()
+                    val error = NativeEngine.startScenePlay(session,(desiredDocument ?: error("Missing scene")).toByteArray(Charsets.UTF_8),console.pauseOnLuaError)
+                    if (desiredPlayRevision != null) {
+                        startedSceneInstance = readLiveInspection()?.scene
+                        startedPlayRevision = desiredPlayRevision
+                    }
+                    error
+                }
+                activeActionKeys = project?.boundKeys ?: editorProjectSettings.boundKeys()
+                actualScenePlayback=desiredPlayback
+                if (pause != null) applyLuaPause(pause)
+                else if (actualScenePlayback == Playback.Paused) NativeEngine.pause(session,true)
                 audioQueued=false
             } catch(failure: IllegalStateException) {
                 recreateSession();desiredDocument?.let(::loadPreview);actualMode=ViewportMode.Scene
@@ -407,7 +580,10 @@ internal class NativeViewportOwner(
         check(EventQueue.isDispatchThread())
         if (session == 0L) createSession()
         if (actualMode != desiredMode) {
-            if(actualScenePlayback!=Playback.Stopped) recreateSession()
+            if(actualScenePlayback!=Playback.Stopped) {
+                recreateSession()
+                actualScenePlayback=Playback.Stopped
+            }
             NativeEngine.pause(session,true)
             if (desiredMode != ViewportMode.Sandbox) desiredDocument?.let(::loadPreview)
             else {
@@ -449,8 +625,39 @@ internal class NativeViewportOwner(
         if(pendingPan!=Vec2(0.0,0.0)) {
             NativeEngine.panPreview(session,pendingPan.x.toFloat(),pendingPan.y.toFloat());pendingPan=Vec2(0.0,0.0)
         }
-        if(desiredMode==ViewportMode.Sandbox || (desiredMode==ViewportMode.Scene && actualScenePlayback!=Playback.Stopped))
-            NativeEngine.advanceFrame(session,dt)
+        pendingConsoleCommand?.let { (token, source) ->
+            pendingConsoleCommand = null
+            try {
+                check(token == session && desiredMode == ViewportMode.Scene &&
+                    actualScenePlayback != Playback.Stopped && desiredPlayback != Playback.Stopped) {
+                    "The Play runtime changed before Lua could run"
+                }
+                applyLuaPause(NativeEngine.runPlayLua(token, source.encodeToByteArray(), console.pauseOnLuaError))
+                drainConsole()
+                refreshLiveInspection(true)
+            } catch (failure: Exception) {
+                console.commandMessage(failure.message ?: "Play Lua command failed", ConsoleSeverity.ERROR)
+            }
+        }
+        if(desiredMode==ViewportMode.Sandbox || (desiredMode==ViewportMode.Scene && actualScenePlayback!=Playback.Stopped)) {
+            val profileScene = desiredMode == ViewportMode.Scene
+            if (profileScene) syncLuaProfiler()
+            val reload = pendingScriptReload
+            pendingScriptReload = null
+            val reloadError = if (reload != null && desiredMode == ViewportMode.Scene && reload.selection.run == session) {
+                NativeEngine.reloadScript(session, reload.selection.scene, reload.selection.entity,
+                    reload.key.encodeToByteArray(), reload.asset.encodeToByteArray(), console.pauseOnLuaError)
+            } else null
+            applyLuaPause(reloadError)
+            val stepRequested = desiredMode == ViewportMode.Scene && actualScenePlayback == Playback.Paused && consumeSceneStep()
+            val step = stepRequested && reloadError == null
+            if (step) clearLuaPause()
+            val advanced = step || actualScenePlayback == Playback.Running
+            applyLuaPause(NativeEngine.advanceFrame(session,dt,step,console.pauseOnLuaError))
+            if (profileScene && profilingApplied)
+                NativeEngine.takeLuaProfile(session, advanced)?.let(luaProfiler::accept)
+            if (desiredMode == ViewportMode.Scene) refreshLiveInspection(step || reload != null)
+        }
         if (!audioQueued && desiredPlayback == Playback.Running &&
             (desiredMode == ViewportMode.Sandbox || (desiredMode==ViewportMode.Scene && actualScenePlayback==Playback.Running))) {
             audioQueued=true
@@ -474,8 +681,12 @@ internal class NativeViewportOwner(
         } else if(desiredMode==ViewportMode.Sandbox) NativeEngine.drawEmbeddedFrame(session,pixelWidth,pixelHeight)
         else NativeEngine.render(session,pixelWidth,pixelHeight,0f)
         GL11.glViewport(0,0,pixelWidth,pixelHeight)
-        if (desiredMode != ViewportMode.Sandbox) {
-            val view=if(game) NativeEngine.gameCamera(session) else NativeEngine.previewView(session)
+        val view = when {
+            desiredMode == ViewportMode.Sandbox -> null
+            game -> NativeEngine.gameCamera(session)
+            else -> NativeEngine.previewView(session)
+        }
+        if (view != null) {
             frameCamera=PreviewCamera(Vec2(view[0].toDouble(),view[1].toDouble()),Vec2(view[2].toDouble(),view[3].toDouble()),request.logicalWidth,request.logicalHeight)
             if(!game) gizmos?.resize(request.logicalWidth,request.logicalHeight)
             if (!game && (desiredMode!=ViewportMode.Scene || desiredPlayback==Playback.Stopped) && desiredDocument == lastGoodPreview) {
@@ -505,6 +716,19 @@ internal class NativeViewportOwner(
             }
         }
         if(game) gameMetrics=NativeEngine.sceneGameViewport(session).toList()
+        if (desiredMode == ViewportMode.Scene && view != null) luaPausePosition()?.let { world ->
+            val projection = checkNotNull(frameCamera)
+            val point = if (game) {
+                val local = (world - projection.origin).rotate(-view[4].toDouble()) * (1.0 / view[5])
+                val x = local.x / projection.size.x
+                val y = local.y / projection.size.y
+                if (x in 0.0..1.0 && y in 0.0..1.0)
+                    Vec2((gameMetrics[0] + x * gameMetrics[2]) * request.logicalWidth / pixelWidth,
+                        (pixelHeight - gameMetrics[1] - y * gameMetrics[3]) * request.logicalHeight / pixelHeight)
+                else null
+            } else projection.screen(world)
+            if (point != null) overlay.rotateRing(point,14.0,projection,luaErrorColor,luaErrorColor,luaErrorColor,true,null)
+        }
         ++frames
         if (frames == 1) System.err.println("VIEWPORT_FIRST_FRAME_MS="+(System.nanoTime()-openedAt)/1_000_000)
         if (smokeTest && desiredMode == ViewportMode.Sandbox && actualPlayback == Playback.Paused) {
@@ -543,6 +767,7 @@ internal class NativeViewportOwner(
     fun stopRendering() {
         check(EventQueue.isDispatchThread())
         stopped=true
+        clearLiveInspection()
 
         gizmos?.cancel()
         if (session != 0L) { overlay.dispose(); NativeEngine.destroy(session); destroys++; session=0L }

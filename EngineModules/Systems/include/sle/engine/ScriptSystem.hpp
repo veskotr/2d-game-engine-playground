@@ -24,6 +24,7 @@ class ScriptSystem
 public:
     void setScriptRuntime(sle::scripting::ScriptRuntime* runtime) { scriptRuntime = runtime; }
     void update(Context& ctx);
+    void recordBehaviourReload(uint32_t entity, const std::string& key, const std::string& asset, bool loaded);
 
 private:
     void ensureStateMachineSubscription(sle::events::EventBus& eventBus, sle::entity::Registry& registry);

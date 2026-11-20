@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.math.BigDecimal
+import sle.editor.project.ProjectArtStyle
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -25,6 +26,12 @@ internal data class SnapSettings(
         require(scale.isFinite() && scale in SCALE_RANGE) { "Scale step must be between ${SCALE_RANGE.start} and ${SCALE_RANGE.endInclusive}" }
     }
     companion object {
+        fun projectDefaults(style: ProjectArtStyle?) = when (style) {
+            ProjectArtStyle.PixelArt -> SnapSettings(enabled = true, move = 1.0)
+            ProjectArtStyle.Smooth -> SnapSettings(move = 10.0)
+            null -> SnapSettings()
+        }
+
         val MOVE_RANGE = 0.001..10_000.0
         val ROTATE_RANGE = 0.01..360.0
         val SCALE_RANGE = 0.001..100.0
@@ -70,10 +77,15 @@ internal class SnapService(initial: SnapSettings = SnapSettings()) {
     var settings by mutableStateOf(initial)
         private set
     /** Persists a user change; the workspace sets it. Loading never calls it. */
-    var onChange: (SnapSettings) -> Unit = {}
+    var onChange: (SnapSettings, SnapSettings) -> Unit = { _, _ -> }
 
     /** A user change: stored and persisted. */
-    fun update(value: SnapSettings) { if(value != settings) { settings = value;onChange(value) } }
+    fun update(value: SnapSettings) {
+        val before = settings
+        if (value == before) return
+        settings = value
+        onChange(before, value)
+    }
     /** Settings read from the project or user prefs; not a change to persist. */
     fun load(value: SnapSettings) { settings = value }
     fun toggle() = update(settings.copy(enabled = !settings.enabled))

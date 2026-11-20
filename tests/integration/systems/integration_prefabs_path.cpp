@@ -1,4 +1,5 @@
 #include <sle/engine/PrefabLoader.hpp>
+#include <sle/scene/components/TagsComponent.hpp>
 #include <sle/engine/SceneLoader.hpp>
 #include <sle/engine/Runtime.hpp>
 #include <sle/scene/components/Transform.hpp>
@@ -98,6 +99,13 @@ int main()
     if (!first.ok()) { std::cerr << first.error(); return 1; }
     const auto second=sle::PrefabLoader::instantiate("tests/data/prefabs/actor.prefab.json",scene,"b");
     if (!second.ok()) { std::cerr << second.error(); return 1; }
+    for (auto entity : {first.value(), second.value()}) {
+        const auto* tags = scene.getRegistry().getComponent<sle::components::TagsComponent>(entity);
+        if (!tags || tags->ids != std::vector<std::string>{"portable-tag", "unresolved"}) {
+            std::cerr << "Prefab instance lost tag membership\n";
+            return 1;
+        }
+    }
     const auto child=scene.findEntityByKey("a/child");
     const auto other=scene.findEntityByKey("b/child");
     const auto* secondAnimator=scene.getRegistry().getComponent<sle::components::AnimatorComponent>(second.value());

@@ -14,6 +14,7 @@
 #include "lua/components/AudioBindings.hpp"
 #include "lua/components/UIBindings.hpp"
 #include "lua/components/ChunkActivationBindings.hpp"
+#include "lua/components/TagsBindings.hpp"
 #include "lua/components/WorldTransformBindings.hpp"
 #include "lua/components/ChunkMapBindings.hpp"
 
@@ -31,7 +32,7 @@ template<class T> void applyFields(T& component, const Json& patch, entity::Regi
 }
 template<class T, bool Writable=true> Descriptor descriptor() {
  Descriptor d;
- d.get=[](entity::Registry& r,entity::Entity e) { auto* c=r.getComponent<T>(e); return c?snapshot(*c):Json(); };
+ d.get=[](const entity::Registry& r,entity::Entity e) { auto* c=r.getComponent<T>(e); return c?snapshot(*c):Json(); };
  d.find=[](entity::Registry& r,std::vector<uint32_t>& out) { r.view<T>([&](entity::Entity e,auto&) {out.push_back(e.getID());}); };
  if constexpr(Writable) {
  d.validate=[](entity::Registry& r,entity::Entity e,const Json& patch) { auto* old=r.getComponent<T>(e); T copy=old?*old:T{}; applyFields(copy,patch,r); return snapshot(copy); };
@@ -58,6 +59,7 @@ const std::map<std::string,Descriptor>& descriptors() {
   {"Audio",descriptor<AudioComponent>()},
   {"UI",descriptor<UIComponent>()},
   {"ChunkActivation",descriptor<ChunkActivationComponent>()},
+  {"Tags",descriptor<TagsComponent>()},
   {"WorldTransform",descriptor<WorldTransformComponent,false>()},
   {"ChunkMap",descriptor<ChunkMapComponent,false>()},
  }; return table; }

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include "lua/components/ScriptBindings.hpp"
 #include "ScriptBehaviours.hpp"
+#include "LuaSceneBuilderError.hpp"
 #include <sle/scene/components/AudioComponent.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
@@ -18,8 +19,13 @@ bool ScriptApiImpl::registerScene(const std::string& name, const std::string& bu
 {
     if (name.empty() || builder.empty()) return false;
     return runtime.registerScene(name, [builder](Runtime& rt) {
-        if (!rt.getScriptEngine().callGlobalFunction(builder))
-            throw std::runtime_error("Lua scene builder failed: " + builder);
+        using Call = scripting::ScriptEngine::GlobalCallResult;
+        switch (rt.getScriptEngine().invokeGlobalFunction(builder))
+        {
+        case Call::Succeeded: return;
+        case Call::ErrorReported: throw detail::LuaSceneBuilderError("Lua scene builder failed: " + builder);
+        case Call::Missing: throw std::runtime_error("Lua scene builder is missing: " + builder);
+        }
     });
 }
 

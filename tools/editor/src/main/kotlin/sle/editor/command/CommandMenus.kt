@@ -7,9 +7,11 @@ import sle.editor.ui.EditorMenuEntry
  * from the registry. The chord is display-only; the dispatcher alone handles keys, so a key
  * never triggers both a menu accelerator and a shortcut.
  */
-internal fun EditorCommand.menuEntry(ctx: CommandContext, keymap: Keymap = standardKeymap, label: String = menuLabel ?: this.label) =
+internal fun EditorCommand.menuEntry(ctx: CommandContext, keymap: Keymap = standardKeymap, label: String = menuLabel ?: this.label,
+    liveContext: () -> CommandContext = { ctx },
+) =
     enabled(ctx).let { on ->
-        EditorMenuEntry(label, on, command = id, icon = icon, shortcut = keymap.primary(id), help = if(on) null else disabledReason(ctx)) { if(enabled(ctx)) run(ctx) }
+        EditorMenuEntry(label, on, command = id, icon = icon, shortcut = keymap.primary(id), help = if(on) null else disabledReason(ctx)) { val current=liveContext(); if(enabled(current)) run(current) }
     }
 
 internal data class ShortcutRow(val label: String, val chords: List<KeyChord>)
@@ -41,6 +43,8 @@ internal val mouseGestureHelp: List<Pair<String, String>> = listOf(
     "Pivot or selection center" to "The Pivot/Center toggle in the Scene toolbar picks what Rotate and Scale turn around",
     "Invert snapping for one drag or nudge" to "Hold Ctrl",
     "Context actions" to "Right-click",
+    "Reset, Copy or Paste a property" to "Right-click its label in Details (clipboard values use JSON)",
+    "Reset, Copy or Paste a component" to "Right-click its heading in Details",
     "Edit with handles" to "Drag a handle; Esc cancels the drag",
     "Save as a linked entity template" to "Drag an entity onto an Assets folder",
     "Edit an entity template" to "Double-click it in Assets",

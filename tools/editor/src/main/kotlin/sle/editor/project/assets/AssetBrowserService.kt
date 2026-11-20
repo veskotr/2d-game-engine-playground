@@ -22,12 +22,16 @@ internal class AssetBrowserService(
         var watch=if(watchEnabled) runCatching { assetRoot.fileSystem.newWatchService() }.getOrNull() else null
         val keys=mutableMapOf<Path,WatchKey>()
         var lastScan=0L;var dirty=true
+        var thumbnailRevision=0L
         try {
             while(!closed.get()) {
                 val now=System.nanoTime()
-                if(requested.getAndSet(false)) dirty=true
+                if(requested.getAndSet(false)) {
+                    dirty=true
+                    thumbnailRevision++
+                }
                 if((dirty && now-lastScan>=TimeUnit.MILLISECONDS.toNanos(150)) || now-lastScan>=TimeUnit.MILLISECONDS.toNanos(reconcileMillis)) {
-                    val snapshot=AssetScanner.scan(projectRoot,assetRoot) { closed.get() }
+                    val snapshot=AssetScanner.scan(projectRoot,assetRoot,thumbnailRevision=thumbnailRevision) { closed.get() }
                     if(closed.get()) break
                     // Windows needs one recursive root handle: handles on children can
                     // prevent Explorer from renaming their parent directories.
@@ -49,7 +53,12 @@ internal class AssetBrowserService(
                     try {
                         var key=watch.poll(200,TimeUnit.MILLISECONDS)
                         while(key!=null) {
-                            if(key.pollEvents().isNotEmpty()) dirty=true
+                            val events=key.pollEvents()
+                            if(events.isNotEmpty()) dirty=true
+                            // An external writer can restore the original timestamp and size.
+                            if(events.any { event ->
+                                event.kind()==OVERFLOW || (event.context() as? Path)?.toString()?.let(::isTextureAsset)==true
+                            }) thumbnailRevision++
                             if(!key.reset()) keys.entries.removeIf { it.value===key }
                             key=watch.poll()
                         }

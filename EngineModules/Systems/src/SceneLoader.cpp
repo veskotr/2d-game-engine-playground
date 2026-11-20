@@ -1,16 +1,17 @@
 #include <sle/engine/SceneLoader.hpp>
+#include <sle/engine/ProjectRuntime.hpp>
 #include <sle/engine/PrefabPackage.hpp>
 #include <algorithm>
 #include <cctype>
 #include <sle/engine/TiledMapLoader.hpp>
 #include <sle/core/Log.hpp>
-#include <sle/renderer/Texture.hpp>
-#include <sle/resources/Resources.hpp>
+#include "SpriteTexture.hpp"
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
 #include "ComponentRegistry.hpp"
 #include "SceneComponentAdapter.hpp"
 #include "SceneReferences.hpp"
+#include "SceneEntityName.hpp"
 #include "PrefabExpansion.hpp"
 
 #include <nlohmann/json.hpp>
@@ -19,7 +20,8 @@
 #include <string>
 
 namespace sle {
-sle::core::Result<bool> SceneLoader::load(const std::string& jsonPath, sle::entity::Scene& scene)
+sle::core::Result<bool> SceneLoader::load(const std::string& jsonPath, sle::entity::Scene& scene,
+    const TextureFilterLookup& textureFilter)
 {
     using Json = nlohmann::json;
     using Result = sle::core::Result<bool>;
@@ -28,7 +30,7 @@ sle::core::Result<bool> SceneLoader::load(const std::string& jsonPath, sle::enti
     if (extension == ".slescene") {
         const auto package = PrefabPackage::readScene(jsonPath);
         if (!package.ok()) return Result::error(package.error());
-        return loadData(package.value(), scene, jsonPath);
+        return loadData(package.value(), scene, jsonPath, textureFilter);
     }
     std::ifstream file(jsonPath);
     if (!file.is_open()) return Result::error("Failed to open scene JSON file: " + jsonPath);
@@ -38,10 +40,11 @@ sle::core::Result<bool> SceneLoader::load(const std::string& jsonPath, sle::enti
     catch (const std::exception& ex) {
         return Result::error("Malformed scene JSON in '" + jsonPath + "': " + ex.what());
     }
-    return loadData(root, scene, jsonPath);
+    return loadData(root, scene, jsonPath, textureFilter);
 }
 
-sle::core::Result<bool> SceneLoader::loadData(const nlohmann::json& data, sle::entity::Scene& scene, const std::string& jsonPath)
+sle::core::Result<bool> SceneLoader::loadData(const nlohmann::json& data, sle::entity::Scene& scene, const std::string& jsonPath,
+    const TextureFilterLookup& textureFilter)
 {
     using Json = nlohmann::json;
     using Result = sle::core::Result<bool>;
@@ -78,6 +81,7 @@ sle::core::Result<bool> SceneLoader::loadData(const nlohmann::json& data, sle::e
         if (!created.ok()) return created;
         auto& registry = scene.getRegistry();
         const auto& codecs = componentdata::descriptors();
+        std::map<std::string, std::map<std::string, ProjectRuntime::SpriteRegion>> spriteRegions;
         for (std::size_t index = 0; index < entities.size(); ++index)
         {
             const auto& definition = entities[index];
@@ -87,10 +91,12 @@ sle::core::Result<bool> SceneLoader::loadData(const nlohmann::json& data, sle::e
             }
             const std::string entityName = definition.value("name", "unnamed_" + std::to_string(index));
             const std::string context = "Scene '" + jsonPath + "', entity[" + std::to_string(index) + "] '" + entityName + "'";
+            const auto entity = references.entityAt(index);
+            if (definition.contains("name") && !entityName.empty())
+                registry.addComponent<detail::SceneEntityName>(entity, entityName);
             if (!definition.contains("components")) continue;
             if (!definition["components"].is_object())
                 return Result::error(context + ": components must be an object");
-            const auto entity = references.entityAt(index);
             for (const auto& [name, source] : definition["components"].items())
             {
                 const auto codec = codecs.find(name);
@@ -111,10 +117,29 @@ sle::core::Result<bool> SceneLoader::loadData(const nlohmann::json& data, sle::e
                     if (patch.legacyMass)
                         registry.getComponent<components::RigidBodyComponent>(entity)->mass = *patch.legacyMass;
                     if (patch.texture) {
-                        auto texture = core::Resources::create<renderer::Texture>(*patch.texture, *patch.texture);
-                        if (texture)
-                            registry.getComponent<components::SpriteRenderer>(entity)->region.texture = std::move(texture);
-                        else
+                        const auto filter = textureFilter ? textureFilter(*patch.texture) : renderer::TextureFilter::Default;
+                        auto texture = detail::loadSpriteTexture(*patch.texture, filter, !patch.regionId.empty());
+                        if (texture) {
+                            auto& region = registry.getComponent<components::SpriteRenderer>(entity)->region;
+                            region.texture = texture;
+                            if (!patch.regionId.empty()) {
+                                auto [metadata, inserted] = spriteRegions.try_emplace(*patch.texture);
+                                if (inserted) metadata->second = ProjectRuntime::readSpriteRegions(*patch.texture);
+                                const auto found = metadata->second.find(patch.regionId);
+                                const auto width = texture->getWidth();
+                                const auto height = texture->getHeight();
+                                if (found != metadata->second.end() && found->second.x <= width - found->second.width &&
+                                    found->second.y <= height - found->second.height) {
+                                    const auto& rect = found->second;
+                                    region = renderer::TextureRegion::fromPixels(texture, rect.x,
+                                        height - rect.y - rect.height, rect.width, rect.height);
+                                } else {
+                                    region.uv = {0.0f, 0.0f, 1.0f, 1.0f};
+                                    core::Log::warn("{}: sprite region '{}' missing or outside texture '{}'",
+                                        context, patch.regionId, *patch.texture);
+                                }
+                            }
+                        } else
                             core::Log::warn("{}: failed to load texture '{}'", context, *patch.texture);
                     }
                 }

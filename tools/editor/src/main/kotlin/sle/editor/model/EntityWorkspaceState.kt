@@ -40,8 +40,9 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         error=null;message="Saved ${path.fileName}"
     }
     private var subtree: PrefabDocument? = null
-    fun prefabDocument() = subtree?.let { tree -> tree.copy(entities=tree.entities.map { if(it.key==tree.root) document else it }) }
-        ?: PrefabDocument(document.key,listOf(document))
+    fun prefabDocument(root: EntityDocument = document) = subtree?.let { tree ->
+        tree.copy(entities=tree.entities.map { if(it.key==tree.root) root else it })
+    } ?: PrefabDocument(root.key,listOf(root))
     fun serializePrefab() = prefabDocument().serialize()
     private var target by mutableStateOf("Entity")
     var selectedTarget: String
@@ -88,7 +89,15 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
     var editContextVersion = 0L
         private set
     private var numberEditEpoch = 0L
-    private val numberEdits = mutableMapOf<Pair<String, NumberOptions>, NumberEdit>()
+    private data class NumberTarget(val component: String, val path: List<String>, val options: NumberOptions,
+        val default: JsonPrimitive? = null)
+    private val numberEdits = mutableMapOf<NumberTarget, NumberEdit>()
+
+    internal fun finishHiddenNumberEdit(component: String, isVisible: (List<String>) -> Boolean) {
+        if (numberEdits.any { (target, edit) ->
+                target.component == component && edit.active && !isVisible(target.path)
+            }) endGesture()
+    }
     override val gestureActive get() = gesture != null
     /** The active document's timeline (the scene's for scene entities). */
     val canUndo get() = history.canUndo
@@ -158,7 +167,10 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         (document.components.keys + value.components.keys).forEach {
             compare(document.components[it], value.components[it], it)
         }
-        fun affected(id: String) = changed.any { id == it || id.startsWith("$it/") || it.startsWith("$id/") }
+        fun affected(id: String) = changed.any { path ->
+            id == path || id.startsWith("$path/") || path.startsWith("$id/") ||
+                (id.startsWith("ScriptBehaviour/") && (path == "Script" || path == "Script/behaviours"))
+        }
         drafts = drafts.filterKeys { !affected(it) }
         fieldErrors = fieldErrors.filterNot(::affected).toSet()
         document = value
@@ -279,6 +291,18 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
         error = null
     }
 
+    fun publishPropertyCandidate(candidate: EntityDocument, label: String) {
+        endGesture()
+        change(label) { applyStructure(candidate) }
+    }
+
+    fun setSpriteRegion(id: String?) = change("Set sprite region") {
+        val sprite = document.components["SpriteRenderer"]?.jsonObject ?: return@change
+        val updated = if (id == null) sprite - "regionId" else sprite + ("regionId" to JsonPrimitive(id))
+        document = document.copy(components = JsonObject(document.components + ("SpriteRenderer" to JsonObject(updated))))
+        error = null
+    }
+
     fun setValue(component: String, path: List<String>, value: JsonElement) = change(fieldLabel(component, path)) {
         document = document.setValue(component, path, value)
         val id = component + "/" + path.joinToString("/")
@@ -296,15 +320,37 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
             for (part in fieldPath) result = (result as? JsonObject)?.get(part)
             return result
         }
-        return numberEdits.getOrPut(id to options) {
+        return documentNumberEdit(NumberTarget(component, fieldPath, options), id, fieldLabel(component, fieldPath),
+            ::value) { document.setValue(component, fieldPath, it) }
+    }
+
+    fun behaviourNumberEdit(attachment: String, asset: String, name: String,
+        default: JsonPrimitive, label: String): NumberEdit {
+        val target = NumberTarget("ScriptBehaviour", listOf(attachment, asset, name), NumberOptions(), default)
+        val id = target.component + "/" + target.path.joinToString("/") { it.replace("~", "~0").replace("/", "~1") }
+        fun value(): JsonElement? {
+            val script = document.components["Script"] as? JsonObject ?: return null
+            val entry = script.behaviourEntries().singleOrNull { it.behaviourText("key") == attachment } ?: return null
+            if (entry.behaviourText("scriptAsset") != asset) return null
+            val saved = (entry["parameters"] as? JsonObject)?.get(name)
+            return if (compatibleParameter(saved, default)) saved else default
+        }
+        return documentNumberEdit(target, id, "Set $label", ::value) {
+            patchBehaviourParameter(document, attachment, asset, name, it)
+        }
+    }
+
+    private fun documentNumberEdit(target: NumberTarget, id: String, label: String, value: () -> JsonElement?,
+        replace: (JsonPrimitive) -> EntityDocument?): NumberEdit {
+        return numberEdits.getOrPut(target) {
             val epoch = numberEditEpoch
             var expected: JsonElement? = null
             var entityKey = ""
-            NumberEdit(options,
+            NumberEdit(target.options,
                 read = { drafts[id] ?: value()?.toString().orEmpty() },
                 start = {
                     if (epoch != numberEditEpoch || value() == null) null else {
-                        endGesture(); beginGesture(fieldLabel(component, fieldPath)); expected = value(); entityKey = document.key
+                        endGesture(); beginGesture(label); expected = value(); entityKey = document.key
                         gestureToken
                     }
                 },
@@ -312,8 +358,8 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
                 preview = { text, parsed ->
                     drafts = drafts + (id to text)
                     if (parsed == null) fieldErrors = fieldErrors + id else {
-                        document = document.setValue(component, fieldPath, parsed)
-                        expected = parsed
+                        replace(parsed)?.let { document = it }
+                        expected = value()
                         fieldErrors = fieldErrors - id
                     }
                     error = null

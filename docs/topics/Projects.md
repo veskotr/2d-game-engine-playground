@@ -19,8 +19,9 @@ accessible to VS Code and other tools.
   History persists in user-local `recent-projects.json` beside the standalone layout
   (including `sle.workspaceData`). Missing projects report an error and retain the
   current workspace. Project settings refresh preserves the current scene and draft.
-- **File → Project Settings…** edits the project name, startup scene and game/window
-  settings. Save validates and atomically replaces the descriptor. Invalid values
+- **File → Project Settings…** groups the project name and startup scene under
+  **Startup**, window options under **Game**, and the preset under **Art Style**.
+  Save validates and atomically replaces the descriptor. Cancel discards staged edits. Invalid values
   remain in the dialog; externally changed descriptors require reopening before
   saving so stale settings do not overwrite them.
 - **File → Close Project** closes the project context and returns to an empty
@@ -59,10 +60,97 @@ Older scale-only local files remain supported. Opening existing projects does no
 rewrite their descriptor or scene files.
 
 The descriptor has format `sle-project`, version 1, a UUID `id`, a display `name`,
-a relative `assetRoot`, a nullable UUID `startupScene`, and `game` settings.
+a relative `assetRoot`, a nullable UUID `startupScene`, `game` settings, and an optional `settings` object.
 `game.window` contains title, width, height, vsync and mode; `game.targetFPS` is
 nonnegative, with zero meaning unlimited. Dimensions must be 1–16384. Unknown
 versions/fields, escaping asset roots and invalid identities are rejected.
+
+### Art style
+
+**New Project** offers **Pixel Art** and **Smooth**. Change the preset in **Project
+Settings → Art Style**. The descriptor stores `settings.artStyle` as `pixelArt`
+or `smooth`. **Legacy defaults** clears the preset.
+
+| Preset | Inherited sprite filter | Movement snap | Grid spacing |
+| --- | --- | --- | --- |
+| Pixel Art | Nearest | On | 1 world unit |
+| Smooth | Linear | Off | 10 world units |
+| Legacy defaults | Existing loader default | Off | 1 world unit |
+
+Per-texture filters and per-field local snap overrides take precedence. Snap
+defaults update after Save. Sprite filtering applies when the authoring preview
+loads a scene or Play starts again. Export includes the saved preset and requires
+an SLE 0.26 or newer runtime bundle for projects with a preset. Art-style
+changes preserve sprite dimensions and authored transforms.
+
+### Sorting layers
+
+Open **Project Settings → Sorting Layers** to add a label for an unused
+signed integer. Edit or remove labels and choose **Save** to apply the changes.
+The SpriteRenderer Inspector shows named choices alongside the editable
+integer. Choosing a layer is undoable. A sprite whose value has no label
+displays its integer, including after label removal or transfer to another project.
+
+The optional project field `settings.sortingLayers` is a list of entries such
+as `{"value":10,"label":"Foreground"}`. Values must be unique. Scenes and
+prefabs store the integer layer. Renaming or removing a label preserves those
+assignments and draw order. Rendering continues to treat negative values as
+layer zero. Both export formats carry the saved labels and require an SLE 0.28
+or newer runtime bundle when the project defines labels.
+
+### Entity tags
+
+Define tags under **Project Settings → Tags** and save. In the scene or prefab
+Inspector, choose **Add Component → Tags**, then check the tags to assign.
+Membership edits can be undone. Names are unique and case-sensitive.
+
+The optional `settings.tags` field contains entries such as
+`{"id":"stable-id","name":"Enemy"}`. Scenes and prefabs store these IDs in
+`components.Tags.ids`. A rename keeps assignments and changes the name
+scripts query. Deleting a definition or moving a scene or prefab to another
+project preserves the IDs. The Inspector labels an unmatched ID as unresolved.
+Restoring a definition with the same ID recovers its assignments.
+
+Both export formats carry the definitions. Use an SLE 0.29 or newer runtime
+bundle for tagged content. See [Lua tag queries](Scripting.md#entity-tag-queries).
+
+### Keyboard input actions
+
+Open **Project Settings → Input Actions**, enter a name and choose **Add action**.
+Choose **Add key** beside the action and press a key to capture it. An action
+can have several keys, and the same key can be used by several actions. Use
+**Remove key** or **Remove action** to delete entries. Save applies the map to
+the next Play Scene, Run Project or standalone launch.
+
+The optional `settings.inputActions` list stores entries such as
+`{"name":"Jump","bindings":[{"kind":"key","key":32},{"kind":"key","key":87}]}`.
+Key codes use GLFW values. Names are unique, nonempty and case-sensitive.
+Empty binding lists are valid. Both export formats carry the map and require
+an SLE 0.30 or newer runtime bundle when the project defines actions.
+
+Bound keys take priority over editor Play shortcuts while Game has keyboard
+focus. The Play toolbar remains available. Standalone Escape exits when it
+has no action binding. Keypad Enter is separate from main Enter. The editor
+uses AWT key names, so letter and punctuation positions can differ from
+standalone GLFW on some non-QWERTY layouts. See
+[Lua input actions](Scripting.md#keyboard-input-actions).
+
+### Collision layers
+
+Open **Project Settings → Collision** to name the 16 layer slots and choose
+which pairs can interact. An empty name displays the slot number. Each
+checkbox in **Allowed pairs** also updates the transposed cell. Save applies
+the labels to the collider and zone bit checkboxes in the Inspector. Start
+Play again to use the saved matrix. Category and mask integers stay portable
+across scenes and prefabs, and renaming a slot preserves its bit.
+
+In the version 1 descriptor, optional `settings.collisionLayers.labels`
+lists names in bit order. Missing or empty names use the numeric labels.
+`settings.collisionLayers.blockedPairs` lists pairs of zero-based slots from
+0 to 15. Either order blocks the same pair. Unlisted pairs are allowed,
+including same-layer pairs. Export includes the saved settings and requires
+an SLE 0.27 or newer runtime bundle when collision settings are present.
+See [physics filtering](Physics.md#collision-layer-filtering).
 
 Launch the editor with a project from the repository root:
 
@@ -82,6 +170,11 @@ including unknown file types. The descriptor never lists which files can appear.
 - Drag the dock's top divider to resize it.
 - Use **View → Hide/Show Asset Browser** and **Refresh Assets**, or the dock's
   Refresh button. Returning focus to the editor also requests a refresh.
+- Visible texture rows show a thumbnail when the editor can decode the image.
+  Previews use the full image and the texture's filter setting. Unsupported or
+  unreadable images show the file icon. Thumbnails live in
+  `.sle/cache/thumbnails`, outside game packages and exports. Delete that folder
+  to clear the cache, then refresh the browser to rebuild visible previews.
 - External additions, renames, moves and removals are discovered automatically.
   A full background reconciliation every three seconds covers missed events.
   Missing/unreadable folders show an error and recover when accessible again.
@@ -112,12 +205,50 @@ reload the runtime or apply external edits to a running gameplay snapshot.
   confirmation because references to the old identity will need repair. Links
   cannot be used for project operations.
 
+Select a registered file and choose **Find References…** in asset details. The
+search reads saved project scenes, entity templates, and the project's startup
+scene setting. It lists direct UUID references, including declared document assets.
+Select a result and choose **Open** to jump to the document or Project Settings.
+Save drafts before searching to include their changes. The search covers UUID
+fields and asset declarations in these formats.
+
 Every ordinary asset file receives adjacent `<filename>.slemeta` JSON containing
 `format: sle-asset`, `version: 1`, and a UUID `id`. Keep sidecars in version control
 and move them with payloads. The `.slemeta` suffix is reserved for metadata, which
 is omitted from asset rows. The index is rebuilt from disk; no inventory controls
 visibility. Editing a payload keeps its UUID. Moving the complete project, or
 moving a payload together with its sidecar, preserves identity.
+
+For a registered image, open **Assets → Details → Texture filter** and choose
+**Default**, **Nearest**, or **Linear**. The selection applies to both
+magnification and minification of project scene sprites. The editor refreshes
+the current preview from its draft, and Play and built games read the saved
+setting when they start. Nearest and Linear add an optional
+`"texture": {"filter": "nearest"}` or `"texture": {"filter": "linear"}`
+to the version 1 sidecar. Default removes the override and inherits the project
+art-style sampler or the legacy loader default. Older SLE versions with strict sidecar readers require Default.
+
+### Named sprite regions
+
+Select a registered image in **Assets → Details** and choose **Slice grid…**.
+Enter the cell width and height in pixels. Slicing adds complete cells in
+left-to-right, top-to-bottom order. Repeated slicing preserves the IDs and names
+of existing rectangles. Select a region to rename it, edit its rectangle, or
+delete it. The editor reads image dimensions through ImageIO, which supports
+common formats such as PNG and JPEG.
+
+Assign the texture to a scene sprite and choose a **Sprite region** in the
+texture drawer. The sprite stores a texture-scoped `regionId`. The sidecar
+stores the corresponding entry in `texture.regions`, with an `id`, `name`,
+`x`, `y`, `width`, and `height`. Pixel coordinates start at the image's
+top-left. Names and rectangle edits preserve the ID. The scene, project Play,
+and packaged game resolve the current rectangle when the scene loads.
+
+Choose **Use UV rectangle** to return to the sprite's normalized UV settings.
+If a selected region is missing or extends beyond the loaded image, the sprite
+shows the full texture and reports a diagnostic. The reference stays in the
+scene so it can be repaired. Older versions with strict sidecar readers require
+removing named regions before opening the project.
 
 Missing sidecars receive new UUIDs. Moving only a payload externally can therefore
 lose its old identity. Malformed, orphan and duplicate metadata appear under the

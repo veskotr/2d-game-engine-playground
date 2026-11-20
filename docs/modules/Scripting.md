@@ -7,6 +7,7 @@ Lua VM ownership, binding registration, script loading, and script callback exec
 ## Owns
 
 - `ScriptEngine`
+- `EditorLuaHost`
 - Lua binding files
 - script resource/runtime types
 - Lua API registration
@@ -27,7 +28,7 @@ Lua VM ownership, binding registration, script loading, and script callback exec
 
 ## Rules
 
-- One Lua VM per engine instance.
+- One gameplay Lua VM per engine instance.
 - Lua access should use registered bindings and runtime bridge APIs.
 - Scripts must not own raw engine internals.
 
@@ -51,3 +52,8 @@ Systems uses this for project Scripts/asset-root `require` patterns before gamep
 starts. Existing Lua search paths remain afterward; scene switches keep the same
 VM/module cache. The project context resolves dynamic engine asset arguments;
 raw Lua IO keeps ordinary Lua semantics. See [projects](../topics/Projects.md).
+
+`EditorLuaHost` evaluates behavior metadata, stopped Console chunks, and
+project command and UI declarations or command callbacks in fresh, bounded Lua states.
+The editor bridge supplies detached snapshots and receives diagnostics or edit
+lists. See [project editor commands](../topics/SceneEditor.md#project-editor-commands).

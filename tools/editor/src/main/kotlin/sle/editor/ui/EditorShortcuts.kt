@@ -8,13 +8,16 @@ import java.beans.PropertyChangeListener
 import javax.swing.MenuSelectionManager
 import javax.swing.SwingUtilities
 import sle.editor.command.CommandContext
+import sle.editor.command.GamePanel
 import sle.editor.command.Keymap
 import sle.editor.command.ShortcutDispatcher
 import sle.editor.workspace.TextInputFocus
 import sle.editor.workspace.WorkspaceWindowManager
 
 /** True while a modal dialog or a Swing menu is open; shortcuts then stay out of the way. */
-internal fun editorModalOpen() = Window.getWindows().any { it is Dialog && it.isModal && it.isVisible } ||
+internal fun editorDialogOpen() = Window.getWindows().any { it is Dialog && it.isModal && it.isVisible }
+
+internal fun editorModalOpen() = editorDialogOpen() ||
     MenuSelectionManager.defaultManager().selectedPath.isNotEmpty()
 
 /**
@@ -34,6 +37,7 @@ internal fun EditorShortcuts(manager: WorkspaceWindowManager, keymap: Keymap, co
             val canvasPanel = manager.focus.componentPanel(source)
             currentContext().copy(
                 focusedPanel = canvasPanel ?: manager.focus.composePanel(host),
+                gameInputFocused = canvasPanel == GamePanel,
                 modalOpen = editorModalOpen(),
                 textInputFocused = canvasPanel == null && TextInputFocus.focusedIn(window),
             )

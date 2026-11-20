@@ -13,11 +13,17 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <cmath>
 
 int main(int argc, char** argv)
 {
     using Json = nlohmann::json;
+    if (argc == 2 && std::string_view(argv[1]) == "--dump-catalog")
+    {
+        std::cout << sle::EntityAuthoring::componentCatalog().dump(2) << '\n';
+        return 0;
+    }
     if (argc == 2)
     {
         sle::entity::Scene scene;
@@ -43,6 +49,78 @@ int main(int argc, char** argv)
         const auto valid = sle::EntityAuthoring::validatePrefab(candidate);
         if (!valid.ok()) { std::cerr << name << ": " << valid.error(); return 1; }
     }
+    const Json expectedEnums = {
+        {"RigidBody", {{"bodyType", {"Static", "Dynamic", "Kinematic"}}}},
+        {"Animator", {{"loopMode", {"Once", "Loop"}}}},
+        {"UI", {{"spaceMode", {"Screen", "World"}}}},
+        {"ChunkActivation", {{"mode", {"Inherit", "AlwaysActive", "EventsOnly", "AutoToggle"}}}}
+    };
+    for (const auto& [name, entry] : catalog.items())
+    {
+        const auto expected = expectedEnums.value(name, Json::object());
+        if (entry.at("enums") != expected) { std::cerr << "Enum catalog: " << name; return 1; }
+        for (const auto& [field, choices] : expected.items())
+        {
+            auto candidate = document;
+            auto& value = candidate["entities"][0]["components"][name][field];
+            for (const auto& choice : choices)
+            {
+                value = choice;
+                if (!sle::EntityAuthoring::validatePrefab(candidate).ok()) return 1;
+            }
+            value = "unknown";
+            if (sle::EntityAuthoring::validatePrefab(candidate).ok()) return 1;
+        }
+    }
+    for (const auto* name : {"Transform", "Camera2D", "RigidBody", "SpriteRenderer", "BoxCollider", "CircleCollider"})
+    {
+        const auto& entry = catalog.at(name);
+        if (!entry.contains("fields")) { std::cerr << "Missing descriptors: " << name; return 1; }
+        std::set<Json> paths;
+        for (const auto& field : entry.at("fields"))
+            if (!paths.insert(field.at("path")).second) return 1;
+        const auto covered = [&](const auto& self, const Json& object, const Json& prefix) -> bool {
+            for (const auto& [key, value] : object.items())
+            {
+                auto path = prefix;
+                path.push_back(key);
+                if (!paths.erase(path))
+                {
+                    std::cerr << "Uncovered field: " << name << " " << path << '\n';
+                    return false;
+                }
+                if (value.is_object() && !self(self, value, path)) return false;
+            }
+            return true;
+        };
+        if (!covered(covered, entry.at("defaults"), Json::array()) || !paths.empty()) return 1;
+    }
+    const auto accepts = [&](const char* component, Json patch) {
+        auto candidate = document;
+        candidate["entities"][0]["components"][component] = std::move(patch);
+        return sle::EntityAuthoring::validatePrefab(candidate).ok();
+    };
+    if (!accepts("Transform", {{"scale", {{"x", 0}, {"y", -1}}}, {"rotation", -7}}) ||
+        !accepts("RigidBody", {{"linearDamping", 0}, {"gravityScale", -2}}) ||
+        accepts("RigidBody", {{"angularDamping", -1}}) ||
+        !accepts("BoxCollider", {{"friction", 2}, {"density", 0}, {"maskBits", 65535}}) ||
+        accepts("BoxCollider", {{"maskBits", 65536}}) ||
+        accepts("BoxCollider", {{"maskBits", 1.5}}) ||
+        !accepts("CircleCollider", {{"radius", 1}, {"restitution", 1}, {"categoryBits", 0}}) ||
+        accepts("CircleCollider", {{"radius", 0}}) ||
+        accepts("CircleCollider", {{"restitution", 1.01}}) ||
+        accepts("CircleCollider", {{"categoryBits", -1}}) ||
+        !accepts("SpriteRenderer", {{"color", Json::array({-1, 2, 3, 4})},
+            {"region", {{"uv", Json::array({-1, 2, 3, 4})}}}, {"layer", std::numeric_limits<int>::min()}}) ||
+        accepts("SpriteRenderer", {{"layer", 1.5}})) return 1;
+    auto cameraCandidate = document;
+    auto& zoom = cameraCandidate["entities"][0]["components"]["Camera2D"]["zoom"];
+    zoom = 0;
+    if (sle::EntityAuthoring::validatePrefab(cameraCandidate).ok()) return 1;
+    zoom = 1e-100;
+    if (sle::EntityAuthoring::validatePrefab(cameraCandidate).ok()) return 1;
+    zoom = 6;
+    if (!sle::EntityAuthoring::validatePrefab(cameraCandidate).ok()) return 1;
     auto partial = document;
     partial["entities"][0]["components"]["Transform"] = Json::object();
     partial["entities"][0]["components"]["Script"] = {{"asset", "assets/scripts/player_move.lua"}};
@@ -52,6 +130,19 @@ int main(int argc, char** argv)
         canonical["entities"][0]["components"]["Script"]["scriptAsset"] != "assets/scripts/player_move.lua" ||
         canonical["entities"][0]["components"]["BoxCollider"]["size"]["y"] != 30 ||
         !sle::EntityAuthoring::validatePrefab(canonical).ok()) return 1;
+    auto legacy = document;
+    auto& legacyComponents = legacy["entities"][0]["components"];
+    legacyComponents["Camera2D"] = {{"viewSize", Json::array({480, 270})}, {"zoom", 6}};
+    legacyComponents["RigidBody"] = {{"mass", 2}, {"bodyType", "Dynamic"}};
+    legacyComponents["SpriteRenderer"] = {{"texture", ""}, {"region", {{"uv", Json::array({0, 0, 1, 1})}}}};
+    const auto legacyCanonical = sle::EntityAuthoring::canonicalPrefab(legacy);
+    const auto& legacyValues = legacyCanonical.at("entities").at(0).at("components");
+    if (!sle::EntityAuthoring::validatePrefab(legacyCanonical).ok() ||
+        legacyValues.at("Camera2D").at("viewSize").at("x") != 480 ||
+        legacyValues.at("RigidBody").at("bodyType") != "Dynamic" ||
+        legacyValues.at("SpriteRenderer").at("region").at("uv").at("w") != 1) return 1;
+    for (const auto& values : legacyValues)
+        if (values.contains("fields") || values.contains("groups") || values.contains("enums")) return 1;
     const auto path = std::filesystem::temp_directory_path() / "sle_entity_authoring_test.prefab.json";
     { std::ofstream file(path); file << document.dump(2); }
     sle::entity::Scene scene;

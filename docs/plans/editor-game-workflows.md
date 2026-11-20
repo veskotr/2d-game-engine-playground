@@ -279,14 +279,15 @@ slices. The phases in §4 are a catalogue; this section is the order.
 | **L4 Runtime bridge** | Engine log sink + Lua errors with `file:line`; runtime entity snapshots; step frame; pause on error; script reload hook; runtime→authored value copy; per-behaviour timing, allocation and GC counters | Yes | 0.3 Console, 3.4 hot reload, 3.10 API pass, 4.2–4.4 play iteration, 4.6 profiler |
 | **L5 Project settings registry** | Named sections in `.sleproject`: art style, collision layers, sorting layers, tags, input actions; one Project Settings window built from L2 | Yes (runtime reads names/actions) | 3.5, 5.4, 5.5, 6.0, 6.4 |
 | **L6 Editor Lua host** | One sandboxed Lua 5.4 environment in the engine, separate from the game runtime, reached through the existing native bridge. Jobs: (1) read behaviour `properties` tables without running game code; (2) run console code while stopped; (3) load `Editor/*.editor.lua`. Scripts read a snapshot (selection, documents, assets) and return edit lists, which the editor applies through L1 commands and transactions. Never mutates editor state directly. No `os`/`io` unless allowed; trust prompt per project | Yes | 3.3, 3.7, 3.8, 3.9, later automation (batch import, level generators) |
+| **L7 Lua script authoring** | Shared external IDE launcher and user preference, script source actions, behavior templates and create-and-attach in Details | No | 3.1, 3.2, Console and Lua Profiler source navigation |
 
 ### Feature tracks (each delivered in working slices)
 
 - **A — Authoring speed** (L1, L2): tools/gizmos/snapping → frame/marquee/
   Alt-duplicate → Hierarchy search/rename/hide/lock → property menu and
   copy/paste → multi-object editing → Quick Open/palette.
-- **B — Scripting and play** (L2, L4, L6): Console → script templates and open
-  at line → play tint and step → exposed script parameters → Lua console →
+- **B — Scripting and play** (L2, L4, L6, L7): Console → [L7 script templates
+  and Open in IDE](editor-script-workflow-l7.md) → play tint and step → exposed script parameters → Lua console →
   editor-script commands → hot reload → live Inspector → keep play changes →
   Lua profiler → Lua API performance pass → tags/groups → editor-script
   drawers/panels.
@@ -312,7 +313,10 @@ slices. The phases in §4 are a catalogue; this section is the order.
 7. **L6** (needs L1 commands and transactions, and L2 descriptors). First
    consumers: exposed script parameters (3.3), then the Lua console (3.7), then
    editor-script commands (3.8).
-8. **Track B** remainder, then **Track D**, then **Track E**.
+8. **L7** (uses L1, L3 and L4). Deliver the shared IDE launcher, source actions,
+   built-in create-and-attach, and project template overrides in that order.
+   See the [L7 plan](editor-script-workflow-l7.md).
+9. **Track B** remainder, then **Track D**, then **Track E**.
 
 Each base layer and each engine-touching item (3.3, 3.4, 3.7, 3.8, 3.10, 4.3,
 4.4, 4.6, 5.6, 6.4) gets a short design note before its implementation plan. The L6 note

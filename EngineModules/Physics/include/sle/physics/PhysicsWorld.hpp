@@ -5,6 +5,7 @@
 #include <sle/scene/components/CircleColliderComponent.hpp>
 #include <sle/scene/components/BoxZoneComponent.hpp>
 #include <sle/scene/components/CircleZoneComponent.hpp>
+#include <array>
 #include <memory>
 #include <unordered_map>
 #include <functional>
@@ -13,6 +14,7 @@
 // Forward declarations
 class b2World;
 class b2Body;
+class b2ContactFilter;
 
 namespace sle::events {
 class EventBus;
@@ -21,6 +23,9 @@ class EventBus;
 namespace sle::physics {
 
 class ContactListener;
+
+// Row i contains the bits blocked from colliding with category bit i.
+using CollisionMatrix = std::array<uint16_t, 16>;
 
 // Central physics world manager wrapping Box2D.
 // Owns the b2World instance and manages all physics bodies and fixtures.
@@ -31,6 +36,7 @@ public:
     // Initialize with gravity (default: (0, -9.81))
     explicit PhysicsWorld(const glm::vec2& gravity = {0.0f, -9.81f});
     ~PhysicsWorld();
+    void setBlockedCollisionPairs(const CollisionMatrix& pairs);
 
     // Non-copyable
     PhysicsWorld(const PhysicsWorld&) = delete;
@@ -144,6 +150,8 @@ private:
     // Helper to get b2Body from ID
     b2Body* getBodyPtr(uint32_t bodyId) const;
 
+    CollisionMatrix blockedCollisionPairs_{};
+    std::unique_ptr<b2ContactFilter> contactFilter_;
     std::unique_ptr<b2World> world_;
     std::unique_ptr<ContactListener> contactListener_;
     std::unordered_map<uint32_t, b2Body*> bodyMap_;

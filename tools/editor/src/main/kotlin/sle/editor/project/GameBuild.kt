@@ -102,13 +102,13 @@ internal object GameBuild {
         val sourceRoot=source.root.toRealPath()
         require(!target.startsWith(sourceRoot) && !sourceRoot.startsWith(target) && !target.startsWith(runtime) && !runtime.startsWith(target)) { "Build outside the source project and runtime bundle" }
         require(!Files.exists(target,LinkOption.NOFOLLOW_LINKS)) { "Build destination already exists; choose a new folder" }
-        val runtimeFiles=ProjectDistribution.runtimeInventory(runtime)
+        val assetFiles=ProjectDistribution.inventory(assets);ProjectDistribution.identities(assets,assetFiles)
+        val runtimeFiles=ProjectDistribution.runtimeInventory(runtime, source.document.settings, assets, assetFiles)
         // Bundles built before versioning have no engineVersion.
         val engineVersion=Json.parseToJsonElement(Files.readString(runtime.resolve("sle-runtime.json"))).jsonObject["engineVersion"]?.jsonPrimitive?.content
         val executable=executableName(source.document.name)
         val gameRuntime=ProjectDistribution.Inventory(runtimeFiles.folders,runtimeFiles.files-bundleOnly)
         require(gameRuntime.files.keys.none { !it.equals(ENGINE,true) && it.equals(executable,true) }) { "Rename the project: $executable conflicts with a runtime file" }
-        val assetFiles=ProjectDistribution.inventory(assets);ProjectDistribution.identities(assets,assetFiles)
         val stage=Files.createTempDirectory(target.parent,".sle-build-")
         try {
             ProjectDistribution.copy(runtime,stage,gameRuntime)
@@ -116,6 +116,7 @@ internal object GameBuild {
             val manifest=buildJsonObject {
                 put("format","sle-package");put("version",1);put("id",source.document.id)
                 put("name",source.document.name);put("mainScene",startup)
+                source.document.settings.json().takeIf { it.isNotEmpty() }?.let { put("settings", it) }
             }
             GamePackageWriter.write(stage.resolve(PACKAGE),manifest,assets,assetFiles.files)
             val config=stage.resolve(CONFIG)

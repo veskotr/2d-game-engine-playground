@@ -1,9 +1,13 @@
 #pragma once
 
+#include <map>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace sle::components {
+
+using BehaviourParameters = std::map<std::string, std::variant<bool, double, std::string>>;
 
 struct ScriptBehaviour
 {
@@ -11,6 +15,7 @@ struct ScriptBehaviour
     std::string scriptAsset;
     bool enabled = true;
     int order = 0;
+    BehaviourParameters parameters;
 };
 
 struct ScriptComponent

@@ -41,7 +41,7 @@ internal fun SceneWorkspace(state: SceneWorkspaceState, onEditEntity: (String)->
 }
 
 @Composable
-internal fun SceneEntityInspector(state: SceneWorkspaceState,editable: Boolean=true,onNameBounds: (Rect)->Unit={}) {
+internal fun SceneEntityInspector(state: SceneWorkspaceState,editable: Boolean=true,tags: Map<String, String> = emptyMap(),onNameBounds: (Rect)->Unit={}) {
     val selected=state.selected
     fun attempt(action: ()->Unit) { try { action() } catch(failure: Exception) { state.error=failure.message ?: "Scene operation failed" } }
     val m=LocalEditorMetrics.current
@@ -92,7 +92,7 @@ internal fun SceneEntityInspector(state: SceneWorkspaceState,editable: Boolean=t
                 if(selected.fieldErrors.isNotEmpty()) Text("Finish the highlighted fields before saving.",color=MaterialTheme.colors.error)
             }
             Column(verticalArrangement=Arrangement.spacedBy(m.borderWidth)) {
-                ComponentSections(selected,readOnly=!editable,scene=true) { component ->
+                ComponentSections(selected,readOnly=!editable,scene=true,tags=tags) { component ->
                     if(component=="Camera2D") EditorButton("Make Active",{attempt { state.setActiveCamera(selected.document.key) }},enabled=editable,style=EditorButtonStyle.Ghost)
                 }
             }

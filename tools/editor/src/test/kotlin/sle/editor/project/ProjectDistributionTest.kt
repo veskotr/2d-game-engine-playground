@@ -2,10 +2,59 @@ package sle.editor.project
 
 import kotlinx.serialization.json.*
 import sle.editor.project.assets.AssetIdentity
+import sle.editor.project.assets.AssetThumbnailCache
+import sle.editor.project.assets.AssetTextureFilter
+import sle.editor.project.assets.sliceGrid
+import java.util.zip.ZipFile
 import java.nio.file.*
 import kotlin.test.*
 
 class ProjectDistributionTest {
+    @Test fun builtGameKeepsTextureFilterRegionsAndIdentity() {
+        val project = project()
+        val image = Files.createFile(project.assets.resolve("Textures/sprite.png"))
+        javax.imageio.ImageIO.write(java.awt.image.BufferedImage(8, 8, 2), "png", image.toFile())
+        val id = AssetIdentity.ensure(image)
+        val region = sliceGrid(8, 8, 8, 8).single()
+        AssetIdentity.editRegions(project.root, project.assets, "Textures/sprite.png") { listOf(region) }
+        AssetIdentity.writeFilter(project.root, project.assets, "Textures/sprite.png", AssetTextureFilter.Nearest)
+        val documents = ProjectDocuments(project)
+        val path = project.assets.resolve("Scenes/region.scene.json")
+        val source = buildJsonObject {
+            put("key", "region-scene")
+            putJsonArray("entities") {
+                addJsonObject {
+                    put("key", "sprite")
+                    putJsonObject("components") {
+                        putJsonObject("SpriteRenderer") {
+                            put("texture", image.toString())
+                            put("regionId", region.id)
+                        }
+                    }
+                }
+            }
+        }
+        documents.save(path, ProjectDocumentKind.Scene, source.toString(), emptyMap(), null) {}
+        val reopened = Json.parseToJsonElement(documents.open(path).source).jsonObject
+        val sprite = reopened.getValue("entities").jsonArray.single().jsonObject.getValue("components")
+            .jsonObject.getValue("SpriteRenderer").jsonObject
+        assertEquals(JsonPrimitive(region.id), sprite["regionId"])
+        assertNotNull(AssetThumbnailCache(project.root, project.assets).load("Textures/sprite.png", AssetTextureFilter.Nearest))
+        val thumbnailName = Files.list(project.root.resolve(".sle/cache/thumbnails")).use {
+            it.toList().single().fileName.toString()
+        }
+        val game = GameBuild.build(project, bundle(), project.root.resolveSibling("Built")) {}
+        ZipFile(game.folder.resolve(GameBuild.PACKAGE).toFile()).use { archive ->
+            assertTrue(archive.entries().asSequence().none { ".sle" in it.name.split('/') || it.name.substringAfterLast('/') == thumbnailName })
+            val entry = archive.getEntry("assets/Textures/sprite.png.slemeta")
+            val metadata = Json.parseToJsonElement(archive.getInputStream(entry).bufferedReader().use { it.readText() }).jsonObject
+            assertEquals(JsonPrimitive(id), metadata["id"])
+            val texture = metadata.getValue("texture").jsonObject
+            assertEquals(JsonPrimitive("nearest"), texture["filter"])
+            assertEquals(region.encode(), texture.getValue("regions").jsonArray.single())
+        }
+    }
+
     @Test fun automaticExportsStayInsideProjectAndPreservePreviousGames() {
         val p=project();val runtime=bundle()
         val first=ProjectDistribution.exportAutomatically(p,runtime) {}

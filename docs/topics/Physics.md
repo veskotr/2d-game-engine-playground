@@ -49,6 +49,17 @@ fixtures. Resume synchronizes the latest composed hierarchy pose; see [Chunks](C
   using the current hierarchy pose. Native pose teleports are preserved when
   authored hierarchy poses have not changed.
 
+## Collision layer filtering
+
+A project matrix adds a filter for both solid contacts and zone overlaps.
+A pair of fixtures qualifies when a category bit from each fixture forms an
+allowed layer pair and each fixture's mask includes the other bit. One
+qualifying combination is sufficient for fixtures with multiple category bits.
+Existing fixture and body activity gates still apply. The runtime loads the
+matrix before the first physics update in Play Scene, Play Project, standalone
+project launch and package playback. Projects without a matrix use the
+existing component masks.
+
 ## Update This File When
 
 - Physics component semantics, stepping, contact handling, raycasts, zones, or debug rendering change.

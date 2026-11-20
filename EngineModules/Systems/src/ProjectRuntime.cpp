@@ -3,6 +3,7 @@
 #include <sle/engine/SceneAuthoring.hpp>
 #include <sle/engine/EntityAuthoring.hpp>
 #include "GamePackage.hpp"
+#include "ProjectSettings.hpp"
 #include "PrefabExpansion.hpp"
 #include <fstream>
 #include <algorithm>
@@ -27,13 +28,61 @@ std::string identity(std::string value) {
     require(uuid(value),"Invalid project asset UUID: "+value);
     std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c) { return static_cast<char>(std::tolower(c)); });return value;
 }
-Json read(const fs::path& path) {
+Json read(const fs::path& path, bool strict = false) {
     require(fs::is_regular_file(fs::symlink_status(path)) && fs::file_size(path)<=16*1024*1024,"Missing or oversized project file: "+path.generic_string());
-    std::ifstream file(path);require(file.is_open(),"Cannot open project file: "+path.generic_string());Json result;file>>result;return result;
+    std::ifstream file(path);require(file.is_open(),"Cannot open project file: "+path.generic_string());
+    if (strict) return Json::parse(file);
+    Json result;file>>result;return result;
 }
 void keys(const Json& value,const std::set<std::string>& allowed) {
     require(value.is_object(),"Expected project JSON object");
     for(const auto& [key,child]:value.items()) require(allowed.contains(key),"Unknown project field: "+key);
+}
+struct AssetMetadata {
+    std::string id;
+    renderer::TextureFilter filter;
+    std::map<std::string, ProjectRuntime::SpriteRegion> regions;
+};
+int number(const Json& value);
+AssetMetadata readAssetMetadata(const fs::path& sidecar) {
+    try {
+        const auto metadata = read(sidecar, true);
+        keys(metadata, {"format", "version", "id", "texture"});
+        require(metadata.at("format") == "sle-asset" && metadata.at("version").is_number_integer() &&
+            metadata.at("version") == 1, "Unsupported asset metadata");
+        const auto id = identity(metadata.at("id").get<std::string>());
+        auto filter = renderer::TextureFilter::Default;
+        std::map<std::string, ProjectRuntime::SpriteRegion> regions;
+        if (metadata.contains("texture")) {
+            const auto& texture = metadata.at("texture");
+            keys(texture, {"filter", "regions"});
+            require(!texture.empty(), "Expected texture.filter or texture.regions");
+            if (texture.contains("filter")) {
+                const auto& value = texture.at("filter");
+                require(value == "nearest" || value == "linear", "Expected nearest or linear for texture.filter");
+                filter = value == "nearest" ? renderer::TextureFilter::Nearest : renderer::TextureFilter::Linear;
+            }
+            if (texture.contains("regions")) {
+                const auto& entries = texture.at("regions");
+                require(entries.is_array() && entries.size() <= 4096, "Expected texture.regions array");
+                for (const auto& entry : entries) {
+                    keys(entry, {"id", "name", "x", "y", "width", "height"});
+                    const auto regionId = entry.at("id").get<std::string>();
+                    require(identity(regionId) == regionId, "Expected lowercase region UUID");
+                    const auto name = entry.at("name").get<std::string>();
+                    require(name.size() <= 256 && name.find_first_not_of(" \t\r\n") != std::string::npos,
+                        "Expected a region name of at most 256 UTF-8 bytes");
+                    const ProjectRuntime::SpriteRegion region{number(entry.at("x")), number(entry.at("y")),
+                        number(entry.at("width")), number(entry.at("height"))};
+                    require(region.width > 0 && region.height > 0, "Invalid region rectangle");
+                    require(regions.emplace(regionId, region).second, "Duplicate region ID");
+                }
+            }
+        }
+        return {id, filter, std::move(regions)};
+    } catch (const std::exception& failure) {
+        throw std::invalid_argument("Invalid asset metadata: " + sidecar.generic_string() + ". " + failure.what());
+    }
 }
 int number(const Json& value) {
     require(value.is_number_integer() && value.get<double>()>=0 && value.get<double>()<=2147483647,"Expected nonnegative project integer");return value.get<int>();
@@ -78,7 +127,7 @@ core::Result<ProjectRuntime> ProjectRuntime::open(const fs::path& descriptor) {
         ProjectRuntime project;
         const auto file=fs::canonical(descriptor);project.root=file.parent_path();
         const auto source=read(file);
-        keys(source,{"format","version","id","name","assetRoot","startupScene","game"});
+        keys(source,{"format","version","id","name","assetRoot","startupScene","game","settings"});
         require(source.at("format")=="sle-project" && source.at("version").is_number_integer() && source.at("version")==1,"Unsupported project format/version");
         identity(source.at("id").get<std::string>());text(source.at("name"),256);
         const auto relative=source.at("assetRoot").get<std::string>();
@@ -88,6 +137,13 @@ core::Result<ProjectRuntime> ProjectRuntime::open(const fs::path& descriptor) {
         require(first!=".sle" && relative.find("//")==std::string::npos && relative.back()!='/',"Invalid project asset root");
         const auto assets=contained(project.root,project.root/relative);require(fs::is_directory(assets),"Missing project asset root");
         project.roots={assets};
+        if (source.contains("settings")) {
+            const auto& settings = source.at("settings");
+            project.textureDefaults.emplace(assets, detail::artStyleFilter(settings));
+            project.blockedPairs = detail::blockedCollisionPairs(settings);
+            project.tags = detail::projectTags(settings);
+            project.actions = detail::projectInputActions(settings);
+        }
         require(!source.at("startupScene").is_null(),"Choose a startup scene in Project Settings");
         project.startup=identity(source.at("startupScene").get<std::string>());
         const auto& game=source.at("game");keys(game,{"window","targetFPS"});const auto& window=game.at("window");
@@ -110,8 +166,14 @@ core::Result<ProjectRuntime> ProjectRuntime::openPackages(const std::vector<fs::
         ProjectRuntime project;project.config=engine;
         for(const auto& package:packages) {
             auto mounted=gamepackage::mount(package);
-            if(project.startup.empty() && mounted.mainScene) project.startup=identity(*mounted.mainScene);
+            if (project.startup.empty() && mounted.mainScene) {
+                project.startup = identity(*mounted.mainScene);
+                project.blockedPairs = mounted.blockedPairs;
+                project.tags = std::move(mounted.tags);
+                project.actions = std::move(mounted.actions);
+            }
             project.roots.push_back(fs::canonical(mounted.root));
+            project.textureDefaults.emplace(project.roots.back(), mounted.textureDefault);
             if(mounted.owner) project.mounts.push_back(std::move(mounted.owner));
         }
         require(!project.startup.empty(),"No game package declares a main scene");
@@ -126,13 +188,14 @@ void ProjectRuntime::index() {
     std::vector<fs::path> documents;
     for(const auto& assets:project.roots) for(const auto& entry:fs::recursive_directory_iterator(assets)) {
         if(entry.is_symlink() || !entry.is_regular_file() || suffix(entry.path(),".slemeta")) continue;
-        const auto sidecar=fs::path(entry.path().string()+".slemeta");
+        auto sidecar = entry.path();
+        sidecar += ".slemeta";
         // Runtime does not assign identities: unknown files may remain unindexed.
-        if(!fs::exists(sidecar)) { require(!suffix(entry.path(),".scene.json") && !suffix(entry.path(),".prefab.json"),"Missing document asset metadata: "+entry.path().generic_string());continue; }
-        const auto metadata=read(sidecar);keys(metadata,{"format","version","id"});
-        require(metadata.at("format")=="sle-asset" && metadata.at("version").is_number_integer() && metadata.at("version")==1,"Invalid asset metadata");
-        const auto id=identity(metadata.at("id").get<std::string>());
-        require(project.paths.emplace(id,contained(assets,entry.path())).second,"Duplicate project asset UUID: "+id);
+        if(!fs::exists(fs::symlink_status(sidecar))) { require(!suffix(entry.path(),".scene.json") && !suffix(entry.path(),".prefab.json"),"Missing document asset metadata: "+entry.path().generic_string());continue; }
+        const auto metadata = readAssetMetadata(sidecar);
+        const auto path = contained(assets, entry.path());
+        require(project.paths.emplace(metadata.id, path).second, "Duplicate project asset UUID: " + metadata.id);
+        if (metadata.filter != renderer::TextureFilter::Default) project.textureFilters.emplace(path, metadata.filter);
         if(suffix(entry.path(),".scene.json") || suffix(entry.path(),".prefab.json")) documents.push_back(entry.path());
     }
     std::map<fs::path,Json> prefabs;
@@ -220,6 +283,52 @@ const nlohmann::json* ProjectRuntime::findSceneDocument(const std::string& nameO
     for(const auto& [id,scene]:scenes) if(scene.key==nameOrPath || scene.path==nameOrPath) return &scene.document;
     return nullptr;
 }
+renderer::TextureFilter ProjectRuntime::textureFilter(const fs::path& path) const {
+    if (path.empty() || (textureFilters.empty() && textureDefaults.empty())) return renderer::TextureFilter::Default;
+    const auto normalized = fs::absolute(path).lexically_normal();
+    if (const auto found = textureFilters.find(normalized); found != textureFilters.end()) return found->second;
+    // Project paths are indexed under the canonical root (including on Windows
+    // when callers use a short path for the same directory).
+    std::error_code error;
+    const auto canonical = fs::canonical(normalized, error);
+    if (error) return renderer::TextureFilter::Default;
+    if (const auto found = textureFilters.find(canonical); found != textureFilters.end()) return found->second;
+    for (const auto& [root, filter] : textureDefaults) {
+        const auto relative = canonical.lexically_relative(root);
+        if (!relative.empty() && !relative.is_absolute() && *relative.begin() != "..") return filter;
+    }
+    return renderer::TextureFilter::Default;
+}
+renderer::TextureFilter ProjectRuntime::previewTextureFilter(const fs::path& root, const fs::path& path, renderer::TextureFilter fallback) {
+    if (root.empty() || path.empty()) return renderer::TextureFilter::Default;
+    auto asset = fs::absolute(path).lexically_normal();
+    const auto insideRoot = [&] {
+        const auto relative = asset.lexically_relative(root);
+        return !relative.empty() && !relative.is_absolute() && *relative.begin() != "..";
+    };
+    if (!insideRoot()) {
+        std::error_code error;
+        asset = fs::canonical(asset, error);
+        if (error || !insideRoot()) return renderer::TextureFilter::Default;
+    }
+    auto sidecar = contained(root, asset);
+    sidecar += ".slemeta";
+    if (!fs::exists(fs::symlink_status(sidecar))) return fallback;
+    const auto filter = readAssetMetadata(sidecar).filter;
+    return filter == renderer::TextureFilter::Default ? fallback : filter;
+}
+std::map<std::string, ProjectRuntime::SpriteRegion> ProjectRuntime::readSpriteRegions(const fs::path& texture) {
+    auto sidecar = texture;
+    sidecar += ".slemeta";
+    if (!fs::exists(fs::symlink_status(sidecar))) return {};
+    return readAssetMetadata(sidecar).regions;
+}
+fs::path ProjectRuntime::resolveEditorSource(const fs::path& root, const fs::path& path) {
+    require(!root.empty() && path.is_absolute(), "Reload requires a saved source in the open project");
+    const auto source = contained(root, path);
+    require(fs::is_regular_file(source), "Missing project source: " + source.generic_string());
+    return source;
+}
 void ProjectRuntime::registerScenes(Runtime& runtime) const {
     for(const auto& [id,scene]:scenes) { runtime.registerSceneFromData(id,scene.document,scene.path);if(scene.key!=id) runtime.registerSceneFromData(scene.key,scene.document,scene.path); }
 }
@@ -248,7 +357,7 @@ std::string ProjectRuntime::resolveAsset(const std::string& value) const {
 nlohmann::json ProjectRuntime::resolveComponentAssets(const Json& components,bool portable) const {
     static const std::set<std::string> fields={"texture","scriptAsset","assetPath","layoutAsset","fontAsset","behaviorAsset","definitionAsset","clipAsset"};
     std::function<Json(const Json&,const std::string&)> visit=[&](const Json& value,const std::string& field)->Json {
-        if(field=="variables" || field=="targetEntities") return value;
+        if(field=="variables" || field == "targetEntities" || field == "parameters") return value;
         if(value.is_object()) { auto result=value;for(auto& [key,child]:result.items()) child=visit(child,field=="stateClipMap"?"clipAsset":key);return result; }
         if(value.is_array()) { auto result=value;for(auto& child:result) child=visit(child,field);return result; }
         if(value.is_string() && fields.contains(field) && !value.get_ref<const std::string&>().empty()) {

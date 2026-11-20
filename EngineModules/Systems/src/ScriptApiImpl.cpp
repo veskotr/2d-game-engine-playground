@@ -1,3 +1,4 @@
+#include "SpriteTexture.hpp"
 #include <sle/engine/ScriptApiImpl.hpp>
 
 #include <sle/core/Log.hpp>
@@ -220,6 +221,21 @@ bool ScriptApiImpl::isKeyReleased(int key) const
     return sle::input::Input::isKeyReleased(key);
 }
 
+bool ScriptApiImpl::isActionDown(std::string_view name) const
+{
+    return runtime.inputAction(name).down;
+}
+
+bool ScriptApiImpl::isActionPressed(std::string_view name) const
+{
+    return runtime.inputAction(name).pressed;
+}
+
+bool ScriptApiImpl::isActionReleased(std::string_view name) const
+{
+    return runtime.inputAction(name).released;
+}
+
 glm::dvec2 ScriptApiImpl::getMousePosition() const
 {
     return sle::input::Input::getMouse().position;
@@ -267,8 +283,8 @@ bool ScriptApiImpl::setSpriteTexture(sle::scripting::ScriptEntityRef entity, con
         return false;
 
     const auto resolved=runtime.resolveProjectAsset(assetPath);
-    if (resolved.empty()) return 0;
-    auto texture = sle::core::Resources::create<sle::renderer::Texture>(resolved, resolved);
+    if (resolved.empty()) return false;
+    auto texture = detail::loadSpriteTexture(resolved, runtime.spriteTextureFilter(resolved));
     if (!texture)
         return false;
 

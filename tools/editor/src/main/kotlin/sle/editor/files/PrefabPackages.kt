@@ -75,7 +75,7 @@ internal object PrefabPackages {
     // File discovery is schema-based: state names and other ordinary strings
     // must never change merely because a similarly named file exists.
     private fun assetReferences(value: JsonElement, string: (String) -> String, field: String = ""): JsonElement = when (value) {
-        is JsonObject -> JsonObject(value.mapValues { (key, child) ->
+        is JsonObject -> if (field == "parameters") value else JsonObject(value.mapValues { (key, child) ->
             assetReferences(child, string, if (field == "stateClipMap") "clipAsset" else key)
         })
         is JsonArray -> JsonArray(value.map { assetReferences(it, string, field) })

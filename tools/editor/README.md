@@ -165,14 +165,24 @@ unconditionally cancel owner state. Scene and entity template Details panels sha
 playback entry finish owner gestures; panel disposal does not discard drafts.
 
 Details fields use `ui/inspector/EditorPropertyDefinition.kt` and the shared
-renderer: booleans, catalog enums, strings, finite numbers, numeric axis objects,
-resource references and structured JSON. Vectors share one row; other objects
-(including texture regions) retain all keys in a multiline JSON editor. Catalog
-metadata supplies choices; no new native schema or numeric limits are inferred.
-`EntityWorkspaceState.inspectorSections` owns session-only collapse state by
-entity identity/component across Scene/Prefab panels and dock remounts. This
+renderer for booleans, catalog enums, strings, numbers, vectors, resource
+references and JSON. Fixed objects such as texture regions expand into nested
+rows. Free-form objects use a multiline JSON editor. The native catalog supplies
+field descriptors for Transform, SpriteRenderer, Camera2D, RigidBody and both
+colliders. Transform rotation is shown in radians. Sprite layer and collider
+filter bits use one-unit steps that generate integer tokens. See the
+[editor property schema](../../docs/topics/EditorPropertySchema.md) for the
+field inventory and authoring rules. Camera2D's Enabled
+checkbox controls Zoom visibility and preserves its value when hidden. Zoom's
+slider runs from 0.25× to 4×. Direct entry still accepts values above 4×, and
+Alt+Up or Alt+Down steps an editable field with a declared increment. Releasing
+the slider or step key commits one edit. Escape cancels an active edit.
+Authored values drive control selection when descriptors are missing or
+incompatible. `EntityWorkspaceState.inspectorSections` owns session-only
+collapse state by entity, component and group across Scene and Entity Template
+panels and dock remounts. This
 state never enters scene files or undo history. Future component authors should
-reuse `InspectorComponent`/`ComponentField` and native catalog metadata.
+reuse `InspectorComponent` and native catalog metadata.
 
 Run `.\gradlew.bat run --args=--inspector-gallery` for both real Details paths
 without JNI. Add `--capture <directory>` to capture dark/light, 100%/150% font
@@ -549,9 +559,10 @@ Entity-authoring checks:
 .\gradlew.bat run --args="--preview-smoke"
 ```
 
-The first uses the real engine catalog and JNI validators to create/edit/save/open
-an entity, checks UTF-8 names and failed-save preservation, and writes
-`build/reports/authored-entity.prefab.json`. The UI check opens the entity workspace
+The first uses the real engine catalog and JNI validators to exercise property
+and component actions against the Scene and Entity Template document models.
+It checks rejected pastes, Undo/Redo, UTF-8 names and failed-save preservation,
+and writes `build/reports/authored-entity.prefab.json`. The UI check opens the entity workspace
 and captures `build/reports/entity-editor.png`; it checks actual desktop collider
 pixels in addition to GPU framebuffer pixels. The preview smoke edits a collider,
 switches between preview and sandbox repeatedly, verifies visible sandbox pixels,
@@ -630,6 +641,8 @@ recreation, hidden-view advancement and cleanup checks. Captures/reports are
 each other and can be combined with `--camera-smoke`.
 `--owner-failure-smoke` checks real owner-error notification and cleanup;
 `--smoke-test` also checks Sandbox collider pixels before/after F3.
+`gradlew.bat run --args=--input-actions-smoke` verifies that a bound F6 in the
+focused Game viewport reaches Lua without triggering the editor Pause shortcut.
 
 Implementation progress and verification are recorded in
 [the viewport plan](../../docs/plans/embedded-editor-viewport.md) and

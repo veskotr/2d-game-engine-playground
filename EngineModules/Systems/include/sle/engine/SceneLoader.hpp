@@ -5,14 +5,19 @@
 
 #include <nlohmann/json_fwd.hpp>
 #include <string>
+#include <functional>
+#include <sle/renderer/Texture.hpp>
 
 namespace sle {
 
 class SceneLoader
 {
 public:
-    static sle::core::Result<bool> loadData(const nlohmann::json& data, sle::entity::Scene& scene, const std::string& sourcePath);
-    static sle::core::Result<bool> load(const std::string& jsonPath, sle::entity::Scene& scene);
+    using TextureFilterLookup = std::function<renderer::TextureFilter(const std::string&)>;
+    static sle::core::Result<bool> loadData(const nlohmann::json& data, sle::entity::Scene& scene, const std::string& sourcePath,
+        const TextureFilterLookup& textureFilter = {});
+    static sle::core::Result<bool> load(const std::string& jsonPath, sle::entity::Scene& scene,
+        const TextureFilterLookup& textureFilter = {});
 };
 
 } // namespace sle

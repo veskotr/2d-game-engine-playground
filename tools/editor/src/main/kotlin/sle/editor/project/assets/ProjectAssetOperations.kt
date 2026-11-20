@@ -5,7 +5,7 @@ import sle.editor.project.*
 import java.nio.file.*
 import java.util.UUID
 
-internal data class AssetReference(val source: String,val id: String)
+internal data class AssetReference(val source: String, val id: String, val documentPath: String? = source)
 internal data class AssetDeletion(val token: String,val original: String)
 
 /** Managed source operations. Never infers arbitrary dependencies from Lua/XML text. */
@@ -17,14 +17,14 @@ internal class ProjectAssetOperations(private val project: OpenedProject) {
         }
         return assetPath(project.root,project.assets,relative)
     }
-    private fun snapshot(): AssetSnapshot = AssetScanner.scan(project.root,project.assets).also {
+    private fun snapshot(registerMissing: Boolean = true): AssetSnapshot = AssetScanner.scan(project.root,project.assets,registerMissing).also {
         require(it.errors.isEmpty()) { it.errors.joinToString("\n") }
     }
     private fun affected(snapshot: AssetSnapshot,relative: String)=snapshot.idsByPath.filterKeys { it==relative || it.startsWith("$relative/") }.values.toSet()
-    private fun referenceIndex(snapshot: AssetSnapshot): List<AssetReference> {
+    private fun referenceIndex(snapshot: AssetSnapshot, documents: ProjectDocuments? = null): List<AssetReference> {
         val result=mutableListOf<AssetReference>()
         // Use the current descriptor, not the UI's potentially stale settings snapshot.
-        ProjectFiles.open(project.file).document.startupScene?.let { result.add(AssetReference("Project startup scene",it)) }
+        ProjectFiles.open(project.file).document.startupScene?.let { result.add(AssetReference("Project startup scene",it,documentPath=null)) }
         for(entry in snapshot.entries.filter { it.kind==AssetKind.File && (it.path.endsWith(".scene.json",true) || it.path.endsWith(".prefab.json",true)) }) {
             val file=path(entry.path)
             require(Files.size(file)<=16*1024*1024) { "Oversized source: ${entry.path}" }
@@ -37,7 +37,9 @@ internal class ProjectAssetOperations(private val project: OpenedProject) {
                     is JsonPrimitive -> if(value.isString && value.content.startsWith("project-asset://")) result.add(AssetReference(entry.path,value.content.removePrefix("project-asset://")))
                 }
             }
-            walk(envelope.getValue("document"))
+            val document = envelope.getValue("document")
+            if (documents == null) walk(document)
+            else documents.referencedAssetIds(document.jsonObject).forEach { result.add(AssetReference(entry.path, it)) }
             envelope.getValue("assets").jsonArray.forEach { result.add(AssetReference(entry.path,it.jsonPrimitive.content)) }
         }
         return result.distinct()
@@ -46,6 +48,30 @@ internal class ProjectAssetOperations(private val project: OpenedProject) {
         path(relative);val snapshot=snapshot();val ids=affected(snapshot,relative)
         referenceIndex(snapshot).filter { it.id in ids && it.source!=relative && !it.source.startsWith("$relative/") }
     }
+    /** Read saved consumers without assigning asset identities or expanding linked templates. */
+    fun findReferences(relative: String): List<AssetReference> = synchronized(AssetIdentity) {
+        path(relative)
+        val snapshot = snapshot(registerMissing = false)
+        val id = requireNotNull(snapshot.idsByPath[relative]) { "Asset UUID is unavailable: $relative" }
+        referenceIndex(snapshot, ProjectDocuments(project)).filter { it.id == id }
+    }
+
+    fun createFile(relative: String, contents: ByteArray): Path = synchronized(AssetIdentity) {
+        val target = path(relative)
+        require(!Files.exists(target, LinkOption.NOFOLLOW_LINKS) &&
+            !Files.exists(AssetIdentity.sidecar(target), LinkOption.NOFOLLOW_LINKS)) {
+            "Destination already exists: $relative"
+        }
+        Files.createDirectories(target.parent)
+        atomicAssetWrite(target, contents, replace = false)
+        try {
+            AssetIdentity.ensure(target)
+        } catch (failure: Exception) {
+            throw IllegalStateException("Created $target without an attachment. Could not register its asset identity.", failure)
+        }
+        target
+    }
+
     fun createFolder(relative: String): Path = synchronized(AssetIdentity) {
         val target=path(relative)
         require(Files.isDirectory(target.parent)) { "Parent folder no longer exists" }

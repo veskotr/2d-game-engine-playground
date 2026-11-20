@@ -1,66 +1,148 @@
 package sle.editor.ui.inspector
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.background
-import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.foundation.border
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.serialization.json.*
 import sle.editor.model.EntityWorkspaceState
 import sle.editor.model.documentJson
+import sle.editor.scripts.LocalProjectDrawers
+import sle.editor.scripts.projectDrawer
 import sle.editor.ui.controls.*
 import sle.editor.ui.theme.LocalEditorColors
+
+internal val LocalSortingLayers = staticCompositionLocalOf<Map<Int, String>> { emptyMap() }
 
 /** Editing callbacks stay on the document owner; file operations are supplied by the host. */
 @Composable
 internal fun EditorPropertyRenderer(state: EntityWorkspaceState, property: EditorPropertyDefinition,
-    readOnly: Boolean = false, browseEnabled: Boolean = true, onBrowse: ((String) -> Unit)? = null) {
-    val p=property
-    val display=state.drafts[p.id] ?: if(p.value is JsonPrimitive && p.value.isString) p.value.content else
+    hostReadOnly: Boolean = false, browseEnabled: Boolean = true,
+    onBrowse: ((EditorPropertyDefinition, String) -> Unit)? = null,
+    actions: (@Composable (EditorPropertyDefinition, Boolean) -> Unit)? = null,
+    overrideIndicator: (@Composable () -> Unit)? = null,
+    label: String = property.displayLabel,
+    onScalarEdit: ((JsonPrimitive) -> Unit)? = null,
+    scalarNumberEdit: NumberEdit? = null,
+) {
+    val extension = if (onScalarEdit == null) projectDrawer(property, LocalProjectDrawers.current) else null
+    val p = extension?.let { property.copy(projectDrawer = it) } ?: property
+    val drawer = p.drawer
+    val readOnly = hostReadOnly || p.readOnly
+    val canReplace = !readOnly && !p.hasReadOnlyDescendants
+    val inputReadOnly = readOnly || (p.kind != PropertyKind.Vector && !canReplace)
+    if (drawer == PropertyDrawer.Structured) {
+        key(state, state.document.key, p.id) {
+            StructuredPropertyDrawer(state, p, readOnly) { child ->
+                EditorPropertyRenderer(state, child, browseEnabled = browseEnabled, onBrowse = onBrowse,
+                    actions = actions)
+            }
+        }
+        return
+    }
+    val display=state.drafts[p.id]?.takeIf { onScalarEdit == null } ?: if(p.value is JsonPrimitive && p.value.isString) p.value.content else
         documentJson.encodeToString(JsonElement.serializer(),p.value)
     key(state,state.document.key,p.id) {
-        if(p.kind==PropertyKind.Vector) {
-            EditorVectorField(p.displayLabel,p.axes.mapIndexed { index,axis -> p.axisLabels[index] to state.numberEdit(p.component,axis.path) },readOnly=readOnly)
-            if(p.isColor) ColorPickerRow(state,p,readOnly)
-        } else EditorPropertyRow(p.displayLabel,help="${p.component}.${p.label}") {
-            Column(Modifier.weight(1f)) {
-                when(p.kind) {
-                    PropertyKind.Number -> EditorNumberField(state.numberEdit(p.component,p.path),p.label,readOnly=readOnly)
-                    PropertyKind.Boolean -> EditorCheckBox(p.label,p.value.jsonPrimitive.boolean,
-                        { state.setValue(p.component,p.path,JsonPrimitive(it)) },enabled=!readOnly,showLabel=false)
-                    PropertyKind.Enum -> EditorSelect(p.label,p.value.jsonPrimitive.content,p.choices.map { it.jsonPrimitive.content },
-                        { selected -> p.choices.firstOrNull { it.jsonPrimitive.content==selected }?.let { state.setValue(p.component,p.path,it) } },
-                        Modifier.fillMaxWidth(),enabled=!readOnly,showLabel=false)
-                    PropertyKind.Resource -> {
-                        val importedName=state.assets.entries.firstOrNull { it.key.toString().replace('\\','/')==display }?.value
-                        InspectorTextInput(importedName ?: display,p.label,{ state.editField(p.component,p.path,p.value,it) },
-                            readOnly=readOnly || importedName!=null,invalid=p.id in state.fieldErrors)
-                        FlowResourceActions(!readOnly,browseEnabled,onBrowse?.let { { it(display) } },
-                            if(display.isNotBlank()) ({state.setValue(p.component,p.path,JsonPrimitive(""))}) else null)
-                        if(p.component=="SpriteRenderer" && p.path==listOf("texture") && display.isNotBlank()) TexturePreview(state,display,readOnly)
+        InspectorPropertyRow(p, inputReadOnly, p.id in state.fieldErrors, label = label,
+            labelModifier = if (onScalarEdit == null) detailsPropertyMenu(state, p, !canReplace) else Modifier,
+            actions = actions, actionsReadOnly = !canReplace, overrideIndicator = overrideIndicator) { disabled ->
+            when {
+                p.kind == PropertyKind.Vector -> {
+                    VectorPropertyFields(state, p) { axis, caption ->
+                        EditorPropertyRenderer(state, axis, disabled, actions = actions, label = caption)
                     }
-                    else -> InspectorTextInput(display,p.label,{state.editField(p.component,p.path,p.value,it)},
-                        readOnly=readOnly,invalid=p.id in state.fieldErrors,multiline=p.kind==PropertyKind.Json)
+                    if (p.isColor) ColorPickerRow(state, p, !canReplace)
                 }
-                if(p.id in state.fieldErrors) Text("Enter a valid ${if(p.kind==PropertyKind.Json) "JSON value" else "number"}.",
-                    color=LocalEditorColors.current.error,style=sle.editor.ui.theme.LocalEditorTypography.current.secondary)
+                drawer == PropertyDrawer.Resource || drawer == PropertyDrawer.Texture ->
+                    ResourceDrawer(state, p, display, disabled, browseEnabled,
+                        onBrowse?.let { browse -> { browse(p, display) } }, drawer == PropertyDrawer.Texture)
+                p.kind == PropertyKind.Integer && p.component == "SpriteRenderer" && p.path == listOf("layer") -> {
+                    PropertyNumberField(state, p, disabled)
+                    val layers = LocalSortingLayers.current
+                    if (layers.isNotEmpty()) {
+                        val current = p.value.jsonPrimitive.int
+                        val choices = layers.toSortedMap().entries.associate { (value, name) -> "$value · $name" to value }
+                        val caption = layers[current]?.let { "$current · $it" } ?: current.toString()
+                        EditorSelect("Sorting layer", caption, choices.keys.toList(),
+                            { choice -> state.setValue(p.component, p.path, JsonPrimitive(choices.getValue(choice))) },
+                            Modifier.fillMaxWidth(), enabled = !disabled, showLabel = false)
+                    }
+                }
+                p.kind == PropertyKind.Integer && p.path.size == 1 &&
+                    p.path.single() in setOf("categoryBits", "maskBits") &&
+                    p.component in setOf("BoxCollider", "CircleCollider", "BoxZone", "CircleZone") -> {
+                    PropertyNumberField(state, p, disabled)
+                    CollisionMaskDrawer(p.label, p.value.jsonPrimitive.int, !disabled) {
+                        state.setValue(p.component, p.path, JsonPrimitive(it))
+                    }
+                }
+                else -> when (p.kind) {
+                    PropertyKind.Number, PropertyKind.Integer -> if (scalarNumberEdit == null) PropertyNumberField(state,p,disabled)
+                    else EditorNumberField(scalarNumberEdit, p.label, readOnly = disabled, authoredValue = p.value.jsonPrimitive.double)
+                    PropertyKind.Boolean -> EditorCheckBox(p.label,p.value.jsonPrimitive.boolean,
+                        { if (onScalarEdit == null) state.setValue(p.component,p.path,JsonPrimitive(it)) else onScalarEdit(JsonPrimitive(it)) },
+                        enabled=!disabled,showLabel=false)
+                    PropertyKind.Enum -> {
+                        val quoteStrings = p.choices.any { !it.jsonPrimitive.isString }
+                        fun caption(value: JsonElement) = if (quoteStrings) value.toString() else value.jsonPrimitive.content
+                        val labels = p.choices.associateBy(::caption)
+                        EditorSelect(p.label, caption(p.value), labels.keys.toList(),
+                            { selected -> labels[selected]?.let { state.setValue(p.component,p.path,it) } },
+                            Modifier.fillMaxWidth(),enabled=!disabled,showLabel=false)
+                    }
+                    else -> InspectorTextInput(display,p.label,{
+                        if (onScalarEdit == null) state.editField(p.component,p.path,p.value,it) else onScalarEdit(JsonPrimitive(it))
+                    },
+                        readOnly=disabled,invalid=p.id in state.fieldErrors,multiline=p.kind in setOf(PropertyKind.Json, PropertyKind.Array, PropertyKind.Object))
+                }
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** Action slots receive the same path (including individual axes) and write permission as the editor. */
 @Composable
-private fun FlowResourceActions(editable: Boolean, browseEnabled: Boolean, browse: (() -> Unit)?, clear: (() -> Unit)?) {
-    FlowRow(Modifier.padding(top=sle.editor.ui.theme.LocalEditorMetrics.current.gap/2),horizontalArrangement=Arrangement.spacedBy(sle.editor.ui.theme.LocalEditorMetrics.current.gap)) {
-        if(browse!=null) EditorButton("Browse…",browse,enabled=editable && browseEnabled)
-        if(clear!=null) EditorButton("Clear",clear,enabled=editable,style=EditorButtonStyle.Ghost)
+private fun InspectorPropertyRow(
+    property: EditorPropertyDefinition,
+    readOnly: Boolean,
+    invalid: Boolean,
+    label: String = property.displayLabel,
+    actions: (@Composable (EditorPropertyDefinition, Boolean) -> Unit)? = null,
+    actionsReadOnly: Boolean = readOnly,
+    labelModifier: Modifier = Modifier,
+    overrideIndicator: (@Composable () -> Unit)? = null,
+    content: @Composable (Boolean) -> Unit,
+) {
+    val help = listOfNotNull(property.descriptor?.help ?: "${property.component}.${property.label}",
+        property.descriptor?.hard?.let { bounds ->
+            listOfNotNull(
+                bounds.min?.let { "Minimum $it${if (bounds.minExclusive) " (exclusive)" else ""}" },
+                bounds.max?.let { "Maximum $it${if (bounds.maxExclusive) " (exclusive)" else ""}" },
+            ).joinToString(". ").ifEmpty { null }
+        }).joinToString(". ")
+    EditorPropertyRow(label, help = help, labelModifier = labelModifier) {
+        Column(Modifier.weight(1f)) {
+            content(readOnly)
+            if (invalid) Text(
+                if (property.kind in setOf(PropertyKind.Number, PropertyKind.Integer)) "Enter a valid number." else "Enter a valid JSON value.",
+                color = LocalEditorColors.current.error, style = sle.editor.ui.theme.LocalEditorTypography.current.secondary,
+            )
+        }
+        overrideIndicator?.invoke()
+        actions?.invoke(property, actionsReadOnly)
     }
+}
+
+@Composable
+private fun PropertyNumberField(state: EntityWorkspaceState, property: EditorPropertyDefinition, readOnly: Boolean) {
+    val descriptor = property.descriptor
+    val presentation = remember(descriptor, property.kind) {
+        descriptor?.ui?.let { NumberPresentation(it, descriptor.hard, property.kind == PropertyKind.Integer) }
+    }
+    EditorNumberField(state.numberEdit(property.component, property.path), property.label,
+        readOnly = readOnly, presentation = presentation, authoredValue = property.value.jsonPrimitive.double)
 }
 
 /** Preserve caret locally; drafts and validity remain in the workspace across remounts. */
@@ -71,52 +153,4 @@ internal fun InspectorTextInput(text: String, label: String, onEdit: (String) ->
     if(field.text!=text) field=field.copy(text=text,selection=TextRange(text.length))
     EditorTextField(field,{ field=it;if(!readOnly && it.text!=text) onEdit(it.text) },label,modifier.fillMaxWidth(),
         readOnly=readOnly,invalid=invalid,help=label,singleLine=!multiline)
-}
-
-private fun JsonElement?.number(axis: String)=((this as? JsonObject)?.get(axis) as? JsonPrimitive)?.doubleOrNull
-
-/** Swatch of the current RGBA value; clicking opens a color chooser. Alpha is kept. */
-@Composable
-private fun ColorPickerRow(state: EntityWorkspaceState, p: EditorPropertyDefinition, readOnly: Boolean) {
-    val m=sle.editor.ui.theme.LocalEditorMetrics.current
-    fun channel(axis: String)=(p.value.number(axis) ?: 1.0).coerceIn(0.0,1.0)
-    val swatch=androidx.compose.ui.graphics.Color(channel("x").toFloat(),channel("y").toFloat(),channel("z").toFloat(),1f)
-    EditorPropertyRow("",help="${p.component}.${p.label}") {
-        androidx.compose.foundation.layout.Box(Modifier.size(m.button).background(swatch,androidx.compose.foundation.shape.RoundedCornerShape(m.controlRadius))
-            .border(m.borderWidth,LocalEditorColors.current.border,androidx.compose.foundation.shape.RoundedCornerShape(m.controlRadius)))
-        EditorButton("Pick color…",{
-            val initial=java.awt.Color(channel("x").toFloat(),channel("y").toFloat(),channel("z").toFloat())
-            val chosen=javax.swing.JColorChooser.showDialog(sle.editor.ui.EditorDialogOwner.resolve(null),"Choose ${p.displayLabel.lowercase()}",initial)
-            if(chosen!=null) state.setValue(p.component,p.path,buildJsonObject {
-                put("x",chosen.red/255.0);put("y",chosen.green/255.0);put("z",chosen.blue/255.0);put("w",p.value.number("w") ?: 1.0)
-            })
-        },enabled=!readOnly)
-        EditorButton("White",{ state.setValue(p.component,p.path,buildJsonObject { put("x",1);put("y",1);put("z",1);put("w",1) }) },
-            enabled=!readOnly,help="Reset tint (no color change)",style=EditorButtonStyle.Ghost)
-    }
-}
-
-/** Thumbnail and pixel size of the sprite texture, with a one-click "use image size". */
-@Composable
-private fun TexturePreview(state: EntityWorkspaceState, path: String, readOnly: Boolean) {
-    val m=sle.editor.ui.theme.LocalEditorMetrics.current
-    val image=remember(path) { runCatching { javax.imageio.ImageIO.read(java.io.File(path)) }.getOrNull() }
-    if(image==null) { Text("Image not found or unsupported",color=LocalEditorColors.current.textSecondary,style=sle.editor.ui.theme.LocalEditorTypography.current.secondary);return }
-    val bitmap=remember(image) { androidx.compose.ui.graphics.painter.BitmapPainter(image.toComposeImageBitmapCompat(),filterQuality=androidx.compose.ui.graphics.FilterQuality.None) }
-    Row(Modifier.padding(top=m.gap/2),horizontalArrangement=Arrangement.spacedBy(m.gap),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
-        androidx.compose.foundation.Image(bitmap,"Texture preview",Modifier.size(m.button*2).background(LocalEditorColors.current.inputBackground),
-            contentScale=androidx.compose.ui.layout.ContentScale.Fit)
-        Column(verticalArrangement=Arrangement.spacedBy(m.gap/2)) {
-            Text("${image.width} × ${image.height} px",color=LocalEditorColors.current.textSecondary,style=sle.editor.ui.theme.LocalEditorTypography.current.secondary)
-            EditorButton("Use image size",{
-                state.setValue("SpriteRenderer",listOf("size"),buildJsonObject { put("x",image.width);put("y",image.height) })
-            },enabled=!readOnly && "size" in (state.document.components["SpriteRenderer"] as? JsonObject).orEmpty(),help="Set the sprite size to the texture's pixel size")
-        }
-    }
-}
-
-private fun java.awt.image.BufferedImage.toComposeImageBitmapCompat(): androidx.compose.ui.graphics.ImageBitmap {
-    val argb=java.awt.image.BufferedImage(width,height,java.awt.image.BufferedImage.TYPE_INT_ARGB)
-    argb.createGraphics().apply { drawImage(this@toComposeImageBitmapCompat,0,0,null);dispose() }
-    return argb.toComposeImageBitmap()
 }

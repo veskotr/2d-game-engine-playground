@@ -26,6 +26,31 @@ class ScenePlaybackTest {
         assertNull(playback.source)
         assertEquals("Independent authored change",scene.selected!!.document.name)
     }
+    @Test fun stepIsOneShotAndDoesNotSurviveResumeOrStop() {
+        val scene = SceneWorkspaceState(emptyMap()) { it }
+        val playback = ScenePlaybackState { it }
+        playback.requestStep()
+        assertFalse(playback.consumeStep())
+        playback.play(scene)
+        playback.requestStep()
+        playback.pause()
+        assertFalse(playback.consumeStep())
+        playback.requestStep()
+        playback.requestStep()
+        assertTrue(playback.consumeStep())
+        assertFalse(playback.consumeStep())
+        assertEquals(Playback.Paused, playback.playback)
+        playback.requestStep()
+        playback.play(scene)
+        playback.pause()
+        assertFalse(playback.consumeStep())
+        playback.requestStep()
+        playback.stop()
+        playback.play(scene)
+        playback.pause()
+        assertFalse(playback.consumeStep())
+    }
+
     @Test fun invalidDraftAnywhereOrValidationFailureCannotStartPlay() {
         val scene=SceneWorkspaceState(mapOf("Transform" to ComponentDefinition(buildJsonObject { put("rotation",0.0) },JsonObject(emptyMap())))) { it }
         scene.addEntity();val first=scene.selected!!

@@ -274,6 +274,42 @@
         "Vec2"
       ]
     },
+    "Engine.Input.isActionDown": {
+      "method": "isActionDown",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Input.isActionPressed": {
+      "method": "isActionPressed",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
+    "Engine.Input.isActionReleased": {
+      "method": "isActionReleased",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "boolean"
+      ]
+    },
     "Engine.Input.isKeyDown": {
       "method": "isKeyDown",
       "params": [
@@ -1246,6 +1282,18 @@
         }
       ],
       "returns": []
+    },
+    "Engine.findEntitiesByTag": {
+      "method": "findEntitiesByTag",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "returns": [
+        "integer[]"
+      ]
     },
     "Engine.findEntityByKey": {
       "method": "findEntityByKey",

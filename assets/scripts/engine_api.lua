@@ -96,6 +96,18 @@ function Engine.Input.getMouseDelta() end
 ---@return Vec2
 function Engine.Input.getMousePosition() end
 
+---@param name string
+---@return boolean
+function Engine.Input.isActionDown(name) end
+
+---@param name string
+---@return boolean
+function Engine.Input.isActionPressed(name) end
+
+---@param name string
+---@return boolean
+function Engine.Input.isActionReleased(name) end
+
 ---@param key integer
 ---@return boolean
 function Engine.Input.isKeyDown(key) end
@@ -196,6 +208,10 @@ function Engine.destroyEntity(entity) end
 
 ---@param message string
 function Engine.error(message) end
+
+---@param name string
+---@return integer[]
+function Engine.findEntitiesByTag(name) end
 
 ---@param key string
 ---@return integer|nil

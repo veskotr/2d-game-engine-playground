@@ -36,6 +36,7 @@ public:
 
     sle::scripting::ScriptEntityRef createEntity() override;
     bool isEntityAlive(sle::scripting::ScriptEntityRef entity) const override;
+    std::vector<sle::scripting::ScriptEntityRef> findEntitiesByTag(const std::string& name) const override;
     sle::scripting::ScriptEntityRef findEntityByKey(const std::string& key) const override;
     void destroyEntity(sle::scripting::ScriptEntityRef entity) override;
     uint32_t getChildCount(sle::scripting::ScriptEntityRef parent) const override;
@@ -50,6 +51,9 @@ public:
     bool isKeyDown(int key) const override;
     bool isKeyPressed(int key) const override;
     bool isKeyReleased(int key) const override;
+    bool isActionDown(std::string_view name) const override;
+    bool isActionPressed(std::string_view name) const override;
+    bool isActionReleased(std::string_view name) const override;
     glm::dvec2 getMousePosition() const override;
 
     glm::vec2 getCameraPosition() const override;

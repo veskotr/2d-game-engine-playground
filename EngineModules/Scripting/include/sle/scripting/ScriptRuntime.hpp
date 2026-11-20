@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <sle/scene/components/ScriptComponent.hpp>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -13,6 +14,7 @@ struct ScriptBehaviourSpec
     std::string scriptAsset;
     bool enabled = true;
     int order = 0;
+    components::BehaviourParameters parameters;
 };
 
 class ScriptRuntime

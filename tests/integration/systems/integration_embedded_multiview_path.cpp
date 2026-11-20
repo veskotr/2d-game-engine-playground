@@ -5,6 +5,7 @@
 #include <sle/events/SceneLifecycleEvents.hpp>
 #include <sle/scene/components/ChunkActivationComponent.hpp>
 #include <sle/scene/components/Transform.hpp>
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -22,7 +23,7 @@ void exercise() {
     sle::Runtime runtime(config);
     require(runtime.initEmbedded(false).ok(), "initialize embedded runtime");
     const Json document = {{"entities", Json::array({
-        {{"key", "actor"}, {"components", {{"Transform", Json::object()},
+        {{"key", "actor"}, {"name", "Moving actor"}, {"components", {{"Transform", Json::object()},
             {"Script", {{"scriptAsset", "tests/data/scripts/embedded_multiview.lua"}}}}}},
         {{"key", "body"}, {"components", {{"Transform", Json::object()},
             {"RigidBody", {{"bodyType", "Dynamic"}, {"gravityScale", 0}, {"velocity", {60, 0}}}}}}},
@@ -48,6 +49,31 @@ void exercise() {
     require(runtime.getScriptEngine().callGlobalBoolFunction("MultiviewUpdatedOnce"), "script advances once");
     require(runtime.getScriptEngine().callGlobalBoolFunction("EmbeddedUiLoadedOnce") &&
         runtime.getScriptEngine().callGlobalBoolFunction("EmbeddedUiClickedOnce"), "UI updates at advance using game camera");
+    auto& liveScene = runtime.getScene();
+    const auto liveActor = liveScene.findEntityByKey("actor");
+    const auto spawned = liveScene.createEntity();
+    require(liveScene.setParent(spawned, liveActor), "parent spawned entity");
+    require(liveScene.setEntityKey(spawned, "runtime-key"), "assign a runtime key as prefab spawning does");
+    auto& transforms = liveScene.getRegistry();
+    transforms.getComponent<sle::components::TransformComponent>(liveActor)->setPosition({50, 20});
+    transforms.addComponent<sle::components::TransformComponent>(spawned).setPosition({2, 3});
+    const auto hierarchy = runtime.liveHierarchy();
+    const auto sceneInstance = hierarchy.at("sceneInstance").get<uint64_t>();
+    const auto& rows = hierarchy.at("entities");
+    require(std::any_of(rows.begin(), rows.end(), [&](const auto& row) {
+        return row.at("id") == liveActor.getID() && row.at("authoredKey") == "actor" &&
+            row.value("name", "") == "Moving actor";
+    }), "live hierarchy shows the authored name and key");
+    require(std::any_of(rows.begin(), rows.end(), [&](const auto& row) {
+        return row.at("id") == spawned.getID() && row.at("parent") == liveActor.getID() &&
+            row.at("authoredKey").is_null();
+    }), "hierarchy includes the spawned child");
+    require(runtime.liveComponents(sceneInstance, spawned.getID()).at("Transform").at("position").at("x") == 2,
+        "live transform uses local position");
+    require(runtime.liveComponents(sceneInstance, liveActor.getID()).at("Script").front().at("status") == "Loaded",
+        "live behaviour reports loaded attachment");
+    liveScene.destroyEntity(spawned);
+    require(runtime.liveComponents(sceneInstance, spawned.getID()).is_null(), "deleted entity has no live details");
     const auto snapshot = runtime.sceneTransforms();
     require(snapshot["body"]["position"]["x"].get<float>() > 0, "physics advances");
     const auto camera = runtime.getCameraPosition();
@@ -105,18 +131,63 @@ void exercise() {
     require(runtime.renderSceneView(480, 270, 1.0f / 60, false, true).ok(), "legacy Scene wrapper");
     require(runtime.getScriptEngine().callGlobalBoolFunction("MultiviewUpdatedTwice"), "wrapper advances exactly once");
     const auto paused = runtime.sceneTransforms();
+    const auto pausedDetails = runtime.liveComponents(sceneInstance, liveActor.getID());
+    runtime.setEmbeddedPaused(true);
+    require(runtime.advanceEmbeddedFrame(0.5f).ok() && runtime.sceneTransforms() == paused,
+        "paused owner frame leaves the script counter unchanged");
+    require(runtime.liveComponents(sceneInstance, liveActor.getID()) == pausedDetails,
+        "paused component snapshot remains readable");
+    sle::input::Input::update();
+    sle::input::Input::setMouseButtonState(GLFW_MOUSE_BUTTON_LEFT, true);
+    require(runtime.requestEmbeddedStep() && runtime.requestEmbeddedStep(), "queue one paused step");
+    require(runtime.advanceEmbeddedFrame(0.5f).ok(), "advance one step");
+    const auto stepped = runtime.sceneTransforms();
+    require(stepped["actor"]["position"]["x"] == 30 &&
+        std::abs(stepped["actor"]["position"]["y"].get<float>() - 1.0f / 60) < 0.00001f,
+        "step advances the script counter once using fixed dt");
+    require(runtime.liveComponents(sceneInstance, liveActor.getID()).at("Transform") == stepped.at("actor"),
+        "live components reflect the stepped transform");
+    require(runtime.getScriptEngine().callGlobalBoolFunction("EmbeddedUiClickedTwice"), "step updates UI");
+    sle::input::Input::releaseAll();
+    require(runtime.drawSceneView(480, 270, true, false).ok() &&
+        runtime.drawSceneView(200, 700, false, false).ok() &&
+        runtime.advanceEmbeddedFrame(0.5f).ok() && runtime.sceneTransforms() == stepped,
+        "draws and later paused frames do not advance");
+    require(runtime.getScriptEngine().callGlobalBoolFunction("EmbeddedUiClickedTwice"), "draws do not update UI");
+    require(runtime.requestEmbeddedStep(), "queue step before resume");
+    runtime.setEmbeddedPaused(false);
+    require(!runtime.requestEmbeddedStep(), "step is unavailable while running");
+    runtime.setEmbeddedPaused(true);
+    require(runtime.advanceEmbeddedFrame(0.5f).ok() && runtime.sceneTransforms() == stepped,
+        "resuming clears a queued step");
+    require(runtime.requestEmbeddedStep(), "queue step before replacing the play run");
+    require(runtime.startScenePlay(document).ok(), "replace play run");
+    runtime.setEmbeddedPaused(true);
+    const auto replacementActor = runtime.getScene().findEntityByKey("actor");
+    const auto replacementInstance = runtime.liveHierarchy().at("sceneInstance").get<uint64_t>();
+    require(replacementInstance != sceneInstance &&
+        runtime.liveComponents(replacementInstance, replacementActor.getID()).is_object() &&
+        runtime.liveComponents(sceneInstance, replacementActor.getID()).is_null(),
+        "same-name replacement invalidates old selection even with a live ID");
+    const auto replacement = runtime.sceneTransforms();
+    require(runtime.advanceEmbeddedFrame(0.5f).ok() && runtime.sceneTransforms() == replacement,
+        "replacement clears a queued step");
+    runtime.setEmbeddedPaused(false);
+    sle::input::Input::update();
+    require(runtime.advanceEmbeddedFrame(0).ok(), "flush replacement scene load");
+    const auto pausedReplacement = runtime.sceneTransforms();
     runtime.setEmbeddedPaused(true);
     runtime.registerSceneFromData("next", {{"entities", Json::array()}}, "next.json");
     require(runtime.requestSceneSwitch("next").ok(), "queue switch");
     sle::input::Input::setMouseButtonState(GLFW_MOUSE_BUTTON_LEFT, true);
     require(runtime.advanceEmbeddedFrame(0.5f).ok() && runtime.drawSceneView(480, 270, true, false).ok() &&
         runtime.drawSceneView(200, 700, false, false).ok(), "paused redraw");
-    require(runtime.sceneTransforms() == paused && runtime.getCurrentSceneName() == "editor_play", "pause defers switch and simulation");
-    require(runtime.getScriptEngine().callGlobalBoolFunction("EmbeddedUiClickedOnce"), "paused UI does not click");
+    require(runtime.sceneTransforms() == pausedReplacement && runtime.getCurrentSceneName() == "editor_play", "pause defers switch and simulation");
+    require(runtime.getScriptEngine().callGlobalBoolFunction("EmbeddedUiClickedTwice"), "paused UI does not click");
     runtime.setEmbeddedPaused(false);
     require(runtime.drawSceneView(480, 270, true, false).ok() && runtime.getCurrentSceneName() == "editor_play", "draw defers switch");
-    require(runtime.advanceEmbeddedFrame(0).ok() && runtime.getCurrentSceneName() == "next" && loaded == 2, "advance commits switch once");
-    require(runtime.drawSceneView(480, 270, true, false).ok() && runtime.drawSceneView(200, 700, false, false).ok() && loaded == 2, "draws preserve committed scene");
+    require(runtime.advanceEmbeddedFrame(0).ok() && runtime.getCurrentSceneName() == "next" && loaded == 3, "advance commits switch once");
+    require(runtime.drawSceneView(480, 270, true, false).ok() && runtime.drawSceneView(200, 700, false, false).ok() && loaded == 3, "draws preserve committed scene");
     require(runtime.tickEmbeddedFrame(480, 270, 0).ok(), "legacy tick wrapper");
     sle::entity::Entity resident;
     runtime.registerScene("chunks", [&](sle::Runtime& rt) {

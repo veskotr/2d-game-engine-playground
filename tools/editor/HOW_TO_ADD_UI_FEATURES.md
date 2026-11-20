@@ -50,6 +50,10 @@ EditorVectorField("Offset", listOf(
 Group rows in `EditorInspectorSection(title, expanded, onExpandedChange, actions = { … })`
 and keep expansion in `state.inspectorSections`, not in a local `remember`.
 
+For engine component fields, add descriptors to the native catalog and reuse
+`InspectorComponent`. The [editor property schema](../../docs/topics/EditorPropertySchema.md)
+covers field attributes, nested paths, numeric constraints and drawer registration.
+
 ## Example 2: register a command, then show it in a menu, toolbar and confirmation
 
 Every editor action is an `EditorCommand` registered once in `command/` (`DocumentCommands`,

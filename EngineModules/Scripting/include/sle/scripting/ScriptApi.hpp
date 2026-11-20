@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <glm/vec2.hpp>
 
@@ -65,6 +66,7 @@ public:
     // ====== ENTITY LIFETIME ======
     virtual ScriptEntityRef createEntity() = 0;
     virtual bool isEntityAlive(ScriptEntityRef entity) const = 0;
+    virtual std::vector<ScriptEntityRef> findEntitiesByTag(const std::string&) const { return {}; }
     virtual ScriptEntityRef findEntityByKey(const std::string&) const { return {}; }
     virtual void destroyEntity(ScriptEntityRef entity) = 0;
     virtual uint32_t getChildCount(ScriptEntityRef parent) const = 0;
@@ -81,6 +83,9 @@ public:
     virtual bool isKeyDown(int key) const = 0;
     virtual bool isKeyPressed(int key) const = 0;
     virtual bool isKeyReleased(int key) const = 0;
+    virtual bool isActionDown(std::string_view) const { return false; }
+    virtual bool isActionPressed(std::string_view) const { return false; }
+    virtual bool isActionReleased(std::string_view) const { return false; }
     virtual glm::dvec2 getMousePosition() const = 0;
 
     // ====== CAMERA ======

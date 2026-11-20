@@ -77,6 +77,22 @@ class KeymapTest {
         assertTrue(standardKeymap.commandsFor(KeyChord.ctrl(KeyEvent.VK_P, shift = true)).isEmpty())
     }
 
+    @Test fun boundGameKeyTakesPriorityOverThePlayShortcut() {
+        val key = KeyEvent(java.awt.Canvas(), KeyEvent.KEY_PRESSED, 0, 0, KeyEvent.VK_F6, KeyEvent.CHAR_UNDEFINED)
+        var pauses = 0
+        val pause = EditorCommand(CommandId("pause-test"), "Pause",
+            defaultChords = listOf(KeyChord.plain(KeyEvent.VK_F6)), playControl = true) { pauses++ }
+        var context = CommandContext(gameRunning = true, focusedPanel = GamePanel, gameInputFocused = true)
+        val dispatcher = ShortcutDispatcher({ Keymap(CommandRegistry(listOf(pause))) }) { context }
+        context = context.copy(gameActionKeys = setOf(295))
+        assertFalse(dispatcher.dispatchKeyEvent(key))
+        assertFalse(key.isConsumed)
+        assertEquals(0, pauses)
+        context = context.copy(gameInputFocused = false)
+        assertTrue(dispatcher.dispatchKeyEvent(key))
+        assertEquals(1, pauses)
+    }
+
     @Test fun helpIsGeneratedFromTheRegistryGroupedByScope() {
         val sections = keyboardShortcutSections()
         assertEquals(listOf("Global", "Document", "Hierarchy and Scene view"), sections.map { it.title })
@@ -87,6 +103,7 @@ class KeymapTest {
         assertNull(rows["Apply Changes to Entity Template"])
         val html = keyboardShortcutsHtml()
         assertTrue("Ctrl+Shift+S" in html && "Mouse" in html && "Middle-drag" in html)
+        assertTrue("Right-click its heading in Details" in html)
         // A user override changes Help with no other edits.
         val moved = standardKeymap.withOverrides(mapOf(DocumentCommands.save.id to listOf(KeyChord.ctrl(KeyEvent.VK_W))))
         assertEquals(listOf("Ctrl+W"), keyboardShortcutSections(moved).flatMap { it.rows }.single { it.label == "Save" }.chords.map(KeyChord::display))

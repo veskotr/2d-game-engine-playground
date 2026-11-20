@@ -54,11 +54,11 @@ fun defaultDockLayout(panels: List<PanelDescriptor>): DockLayout {
         if (a == null) b else if (b == null) a else DockNode.Split(axis, ratio, a, b)
     val visible = panels.filter { it.available && !it.temporary }.map { it.id }
     fun named(id: String) = visible.filter { it.value == id }
-    val center = visible.filter { it.value !in setOf("hierarchy", "inspector", "assets") }
+    val center = visible.filter { it.value !in setOf("hierarchy", "inspector", "assets", "console", "luaProfiler") }
     val top = split(DockAxis.Horizontal, .2f, tabs("hierarchy", named("hierarchy")),
         split(DockAxis.Horizontal, .75f, tabs("center", center), tabs("inspector", named("inspector"))))
     // Default only: a compact asset strip (toolbar + a few rows). Saved layouts keep their ratios.
-    val root = split(DockAxis.Vertical, .74f, top, tabs("assets", named("assets")))
+    val root = split(DockAxis.Vertical, .74f, top, tabs("assets", named("assets") + named("console") + named("luaProfiler")))
     // Unavailable and temporary panels start hidden; showing one restores it as a center tab.
     return DockLayout(main, listOf(DockHost(main, root, bounds)), hidden = panels.filter { !it.available || it.temporary }
         .associate { it.id to PanelPlacement(main, GroupId("center"), center.size, bounds) })

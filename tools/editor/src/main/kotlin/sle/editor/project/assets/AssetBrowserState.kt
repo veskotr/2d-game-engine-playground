@@ -3,7 +3,7 @@ package sle.editor.project.assets
 import androidx.compose.runtime.*
 import sle.editor.project.relativeProjectPath
 
-internal class AssetBrowserState {
+internal class AssetBrowserState(val thumbnailCache: AssetThumbnailCache? = null) {
     var snapshot by mutableStateOf<AssetSnapshot?>(null)
         private set
     var folder by mutableStateOf("")

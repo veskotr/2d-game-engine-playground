@@ -24,12 +24,13 @@ internal fun EditorMenuStrip(
     val appearance=MenuAppearance.of(editorAppearance.mode,editorAppearance.density,editorAppearance.scale)
     val currentGroups by rememberUpdatedState(groups)
     val currentBounds by rememberUpdatedState(onMenuBounds)
-    val titleLabel=remember(appearance) { JLabel().apply {
+    val labels=groups.map { it.first }
+    val titleLabel=remember(window,appearance,labels) { JLabel().apply {
         isOpaque=true;background=appearance.surface
         foreground=appearance.secondary;font=appearance.secondaryFont
         border=BorderFactory.createEmptyBorder(0,12,0,8)
     } }
-    val bar=remember(window,appearance) {
+    val bar=remember(window,appearance,labels) {
         object: JMenuBar() {
             override fun paintComponent(graphics: java.awt.Graphics) {
                 graphics.color=appearance.surface
@@ -39,7 +40,7 @@ internal fun EditorMenuStrip(
             setUI(BasicMenuBarUI())
             isOpaque=true;background=appearance.surface;foreground=appearance.foreground
             border=BorderFactory.createMatteBorder(0,0,1,0,appearance.separator)
-            groups.forEach { (label,_) ->
+            labels.forEach { label ->
                 add(JMenu(label).apply {
                     setUI(EditorSubmenuUI(appearance))
                     font=appearance.font;foreground=appearance.foreground;background=appearance.surface
@@ -124,13 +125,13 @@ internal fun editorApplicationMenus(
             EditorMenuEntry.Separator,
             entry(EditCommands.selectAll),entry(EditCommands.editEntity),entry(EditCommands.duplicate),entry(EditCommands.delete),entry(EditCommands.applyToPrefab),
             EditorMenuEntry.Separator,
-            entry(PlayCommands.play),entry(PlayCommands.pause),entry(PlayCommands.stop),entry(PlayCommands.runProject),
+            entry(PlayCommands.play),entry(PlayCommands.pause),entry(PlayCommands.step),entry(PlayCommands.stop),entry(PlayCommands.runProject),
         ),
         "Create" to creation.flatMap { when(it.label) { "Create" -> it.children.map { child -> child.copy(enabled=it.enabled && child.enabled) };"Add Component","Import" -> listOf(it);else -> emptyList() } },
         "View" to listOf(
             EditorMenuEntry("Scene") { ctx.actions.showScene(false) },EditorMenuEntry("Game") { ctx.actions.showScene(true) },
             EditorMenuEntry("Entity Template Workspace",ctx.editable) { ctx.actions.openPrefabWorkspace() },
-            entry(ViewCommands.fit),entry(sle.editor.command.ToolCommands.frameSelected),
+            entry(ViewCommands.fit),entry(sle.editor.command.ToolCommands.frameSelected),entry(ViewCommands.runLua),
             EditorMenuEntry.Separator,
             EditorMenuEntry("Appearance",children=sle.editor.ui.theme.EditorThemeMode.entries.map { mode -> EditorMenuEntry(mode.name) { onTheme(mode) } }),
             EditorMenuEntry("Density",children=sle.editor.ui.theme.EditorDensity.entries.map { density -> EditorMenuEntry(density.name) { onDensity(density) } }),

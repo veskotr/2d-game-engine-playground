@@ -4,6 +4,7 @@
 #include <sle/scene/Scene.hpp>
 
 #include <nlohmann/json.hpp>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
@@ -27,12 +28,14 @@ public:
     sle::core::Result<bool> loadScene(
         const std::string& sceneName,
         Runtime& runtime,
-        sle::entity::Scene& scene, bool emitLifecycleEvents = true);
+        sle::entity::Scene& scene, bool emitLifecycleEvents = true, bool* errorReported = nullptr);
 
     sle::core::Result<bool> requestSceneSwitch(const std::string& sceneName);
 
-    sle::core::Result<bool> processPendingSwitch(Runtime& runtime, sle::entity::Scene& scene);
+    sle::core::Result<bool> processPendingSwitch(Runtime& runtime, sle::entity::Scene& scene, bool& errorReported);
 
+    const std::unordered_map<uint32_t, std::string>& getAuthoredEntityKeys() const { return authoredEntityKeys; }
+    uint64_t getSceneInstance() const { return sceneInstance; }
     const std::string& getCurrentSceneName() const { return currentSceneName; }
 
 private:
@@ -46,6 +49,9 @@ private:
     // Coalesced pending switch: if multiple requests arrive before processing,
     // the latest request replaces earlier ones.
     std::optional<std::string> pendingSceneName;
+    // Identity from the committed scene data, independent of keys added during Play.
+    std::unordered_map<uint32_t, std::string> authoredEntityKeys;
+    uint64_t sceneInstance = 0;
     std::string currentSceneName;
     bool currentSceneEmitsLifecycle = true;
 };

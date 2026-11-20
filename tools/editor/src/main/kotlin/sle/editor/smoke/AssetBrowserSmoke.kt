@@ -2,14 +2,18 @@ package sle.editor.smoke
 
 import androidx.compose.ui.geometry.Rect
 import kotlinx.coroutines.*
+import kotlinx.serialization.json.*
+import sle.editor.model.canonicalSceneDocument
 import sle.editor.model.SceneWorkspaceState
 import sle.editor.model.ScenePlaybackState
 import sle.editor.project.*
 import sle.editor.project.assets.*
 import sle.editor.viewport.EngineCanvas
 import sle.editor.viewport.Playback
+import sle.editor.viewport.Vec2
 import java.awt.*
 import java.awt.event.InputEvent
+import java.awt.event.KeyEvent
 import java.nio.file.*
 import javax.imageio.ImageIO
 import javax.swing.*
@@ -59,6 +63,14 @@ internal suspend fun runAssetBrowserSmoke(
         val point=item.locationOnScreen;robot.mouseMove(point.x+item.width/2,point.y+item.height/2)
         robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);delay(150)
     }
+    fun writeThumbnailSource(file: Path, color: Color) {
+        val image = java.awt.image.BufferedImage(12, 8, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        image.setRGB(0, 0, color.rgb)
+        val bytes = java.io.ByteArrayOutputStream()
+        check(ImageIO.write(image, "png", bytes))
+        Files.write(file, bytes.toByteArray().copyOf(1024))
+    }
+    fun descendants(component: Component): List<Component> = listOf(component)+(if(component is Container) component.components.flatMap { descendants(it) } else emptyList())
     val reports=Path.of(System.getProperty("sle.smokeReport")).parent
     val parent=withContext(Dispatchers.IO) { Files.createTempDirectory(reports,"asset-browser-") }
     val first=withContext(Dispatchers.IO) {
@@ -66,11 +78,50 @@ internal suspend fun runAssetBrowserSmoke(
             Files.createDirectories(it.assets.resolve("Scripts/Nested"))
             Files.writeString(it.assets.resolve("Scripts/main.lua"),"return {}")
             Files.writeString(it.assets.resolve("unknown.custom"),"custom data")
+            val texture = it.assets.resolve("Textures/thumbnail-smoke.png")
+            writeThumbnailSource(texture, Color.BLACK)
+            ProjectDocuments(it).save(it.assets.resolve("Scenes/Thumbnail.scene.json"), ProjectDocumentKind.Scene,
+                sle.editor.model.SceneDocument(name = "Thumbnail").serialize(), mapOf(texture to "thumbnail"), null) {}
         }
     }
     commands.openPath(first.file)
     await("Project browser did not load: ${project.error}") { !project.busy && has("Scripts/main.lua") && has("unknown.custom") }
     val initial=browser()!!;val context=canvas().contextIdentity()
+    initial.navigate("Textures")
+    await("Texture thumbnail did not appear in the asset browser") { "AssetThumbnail:Textures/thumbnail-smoke.png" in bounds }
+    val cache = first.root.resolve(".sle/cache/thumbnails")
+    withContext(Dispatchers.IO) { Files.list(cache).use { Files.delete(it.toList().single()) } }
+    initial.refresh()
+    await("Refreshing did not regenerate the deleted thumbnail") {
+        Files.list(cache).use { it.anyMatch { file -> file.fileName.toString().endsWith(".png") } }
+    }
+    withContext(Dispatchers.IO) {
+        val texture = first.assets.resolve("Textures/thumbnail-smoke.png")
+        val timestamp = Files.getLastModifiedTime(texture)
+        writeThumbnailSource(texture, Color.MAGENTA)
+        Files.setLastModifiedTime(texture, timestamp)
+    }
+    await("Replacing the texture did not refresh its thumbnail") {
+        Files.list(cache).use { it.filter { file -> file.fileName.toString().endsWith(".png") }.count() == 2L }
+    }
+    println("Asset browser smoke: thumbnail displayed, regenerated, and refreshed after source replacement")
+    val thumbnailPath = "Textures/thumbnail-smoke.png"
+    initial.select(thumbnailPath)
+    checkNotNull(assetCommands()).findReferences(thumbnailPath)
+    var referenceDialog: JOptionPane? = null
+    await("Find References dialog did not open") {
+        referenceDialog = Window.getWindows().filter { it.isShowing }
+            .flatMap { descendants(it) }.filterIsInstance<JOptionPane>().firstOrNull()
+        referenceDialog != null
+    }
+    val pane = checkNotNull(referenceDialog)
+    val sources = descendants(pane).filterIsInstance<JList<*>>().single()
+    check(sources.model.size == 1 && sources.model.getElementAt(0) == "Scenes/Thumbnail.scene.json")
+    pane.value = "Open"
+    await("Find References did not open the referring scene") {
+        scene.file == first.assets.resolve("Scenes/Thumbnail.scene.json")
+    }
+    println("PROJECT_FIND_REFERENCES_UI_SMOKE_PASS saved-consumer/open")
     // Exercise the actual selected-folder Import button and native chooser.
     val source=withContext(Dispatchers.IO) {
         Files.createDirectories(parent.resolve("ExternalBundle/modules")).parent.also {
@@ -79,7 +130,6 @@ internal suspend fun runAssetBrowserSmoke(
         }
     }
     click("AssetFolder:Scripts")
-    fun descendants(component: Component): List<Component> = listOf(component)+(if(component is Container) component.components.flatMap { descendants(it) } else emptyList())
     fun chooseImport(collision: Boolean=false,path: Path=source): Thread = Thread {
         try {
             var chooser: JFileChooser?=null
@@ -132,6 +182,24 @@ internal suspend fun runAssetBrowserSmoke(
     assetCommands()!!.browse("",true) { selectedAsset=it }
     await("Texture Browse did not copy to project storage") { selectedAsset!=null && has("Textures/tile2.png") }
     check(selectedAsset!!.toRealPath()==first.assets.resolve("Textures/tile2.png").toRealPath())
+    initial.navigate("Textures")
+    click("AssetFile:Textures/tile2.png")
+    scene.addSprite(selectedAsset!!.toString(), "Filtered sprite", Vec2(160.0, 160.0), null)
+    val documentBeforeFilter = scene.serialize()
+    suspend fun chooseFilter(filter: AssetTextureFilter?, steps: Int) {
+        click("AssetTextureFilter")
+        repeat(steps) { robot.keyPress(KeyEvent.VK_DOWN); robot.keyRelease(KeyEvent.VK_DOWN); delay(60) }
+        robot.keyPress(KeyEvent.VK_ENTER); robot.keyRelease(KeyEvent.VK_ENTER)
+        await("Texture filter change did not reach Details") {
+            assetCommands()?.busy == false && initial.snapshot?.textureFilters?.get("Textures/tile2.png") == filter
+        }
+        check(scene.dirty && scene.serialize() == documentBeforeFilter) { "Texture filter change altered the scene draft" }
+    }
+    chooseFilter(AssetTextureFilter.Nearest, 2)
+    chooseFilter(AssetTextureFilter.Linear, 3)
+    chooseFilter(null, 1)
+    chooseFilter(AssetTextureFilter.Nearest, 2)
+    println("PROJECT_TEXTURE_FILTER_UI_SMOKE_PASS nearest/linear/default/dirty-draft")
     // Actual managed-operation buttons and native prompts, with UUID/recovery checks.
     fun answerPrompts(vararg answers: Any?): Thread = Thread {
         for(answer in answers) {
@@ -153,6 +221,32 @@ internal suspend fun runAssetBrowserSmoke(
             Thread.sleep(200)
         }
     }.apply { isDaemon=true;start() }
+    val texturePath = "Textures/tile2.png"
+    answerPrompts("368, 368"); click("AssetSliceGrid")
+    await("Grid slicing did not publish four regions") {
+        assetCommands()?.busy == false && initial.snapshot?.spriteRegions?.get(texturePath)?.size == 4
+    }
+    val regionId = initial.snapshot!!.spriteRegions.getValue(texturePath).first().id
+    scene.entities.single().setSpriteRegion(regionId)
+    val documentWithRegion = scene.serialize()
+    answerPrompts("Top left", "0, 0, 367, 368"); click("AssetEditRegion")
+    await("Region edit did not preserve the selected ID") {
+        val region = initial.snapshot?.spriteRegions?.get(texturePath)?.firstOrNull()
+        assetCommands()?.busy == false && region?.id == regionId && region.name == "Top left" && region.width == 367
+    }
+    check(scene.dirty && scene.serialize() == documentWithRegion) { "Region edit altered the scene draft" }
+    withContext(Dispatchers.IO) {
+        val documents = ProjectDocuments(first)
+        val path = first.assets.resolve("Scenes/Region.scene.json")
+        documents.save(path, ProjectDocumentKind.Scene, documentWithRegion, emptyMap(), null) {
+            canonicalSceneDocument(it)
+        }
+        val reopened = Json.parseToJsonElement(documents.open(path).source).jsonObject
+        val sprite = reopened.getValue("entities").jsonArray.single().jsonObject.getValue("components")
+            .jsonObject.getValue("SpriteRenderer").jsonObject
+        check(sprite.getValue("regionId").jsonPrimitive.content == regionId)
+    }
+    println("PROJECT_SPRITE_REGIONS_UI_SMOKE_PASS grid/edit/stable-id/dirty-draft/save/reopen")
     // Opening a project opens its saved Main scene. Managed operations require New in both
     // workspaces (docs/topics/Projects.md, Managed assets), so start a scene draft as a user would.
     check(scene.file!=null) { "Project open did not restore its saved scene" }
@@ -241,6 +335,12 @@ internal suspend fun runAssetBrowserSmoke(
     commands.close()
     await("Browser did not close with project") { !project.busy && project.opened==null && browser()==null }
     commands.openPath(first.file)
-    await("Browser did not reopen") { !project.busy && has("unknown.custom") }
+    await("Browser did not reopen with the saved texture filter") {
+        !project.busy && has("unknown.custom") &&
+            browser()?.snapshot?.textureFilters?.get(texturePath) == AssetTextureFilter.Nearest &&
+            browser()?.snapshot?.spriteRegions?.get(texturePath)?.firstOrNull()?.let {
+                it.id == regionId && it.name == "Top left" && it.width == 367
+            } == true
+    }
     println("ASSET_BROWSER_SMOKE_PASS disk-discovery/unknown-files/tree/breadcrumb/double-click/external-move/delete/refresh/show-hide/background-gameplay/project-switch/close/reopen file=${first.file}")
 }

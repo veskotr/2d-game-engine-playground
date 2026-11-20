@@ -93,7 +93,7 @@ internal object EntityFiles {
 /** Rewrites component asset fields whose file moved; names, script variables and entity keys stay data. */
 internal fun relocateAssetFields(components: JsonObject, moved: Map<Path, Path>): JsonObject {
     fun fields(value: JsonElement, field: String = ""): JsonElement = when (value) {
-        is JsonObject -> if (field == "variables" || field == "targetEntities") value
+        is JsonObject -> if (field == "variables" || field == "targetEntities" || field == "parameters") value
             else JsonObject(value.mapValues { (key, child) -> fields(child, if (field == "stateClipMap") "clipAsset" else key) })
         is JsonArray -> JsonArray(value.map { fields(it, field) })
         is JsonPrimitive -> if (value.isString && value.content.isNotBlank() && sle.editor.files.PrefabPackages.isAssetField(field))
@@ -104,11 +104,14 @@ internal fun relocateAssetFields(components: JsonObject, moved: Map<Path, Path>)
     return fields(components) as JsonObject
 }
 
-internal data class ComponentDefinition(val defaults: JsonObject, val enums: JsonObject)
+internal data class ComponentDefinition(
+    val defaults: JsonObject,
+    val enums: JsonObject,
+    val fields: Map<List<String>, PropertyDescriptor> = emptyMap(),
+    val groups: Map<String, PropertyGroup> = emptyMap(),
+)
 
 internal fun readComponentCatalog(): Map<String, ComponentDefinition> =
-    Json.parseToJsonElement(NativeEngine.componentCatalog()).jsonObject.mapValues { (_, entry) ->
-        ComponentDefinition(entry.jsonObject.getValue("defaults").jsonObject, entry.jsonObject.getValue("enums").jsonObject)
-    }
+    decodeComponentCatalog(NativeEngine.componentCatalog())
 
 internal fun validateEntityDocument(text: String) = NativeEngine.validatePrefab(text.toByteArray(UTF_8))

@@ -12,17 +12,22 @@ internal fun SnapSettings.toJson(): JsonObject = buildJsonObject {
 }
 
 /** Missing fields take their defaults; wrong types and out-of-range steps throw. */
-internal fun snapSettingsFrom(json: JsonElement): SnapSettings {
+internal fun snapSettingsFrom(json: JsonElement, defaults: SnapSettings = SnapSettings()): SnapSettings {
     val source = json as? JsonObject ?: throw IllegalArgumentException("Snap settings must be an object")
     fun number(key: String, fallback: Double) = source[key]?.let {
         val value = (it as? JsonPrimitive)?.takeUnless { primitive -> primitive.isString }?.doubleOrNull
         value ?: throw IllegalArgumentException("Snap '$key' must be a number")
     } ?: fallback
-    val defaults = SnapSettings()
     val enabled = source["enabled"]?.let {
         (it as? JsonPrimitive)?.takeUnless { primitive -> primitive.isString }?.booleanOrNull ?: throw IllegalArgumentException("Snap 'enabled' must be true or false")
     } ?: defaults.enabled
     return SnapSettings(enabled, number("move", defaults.move), number("rotate", defaults.rotateDegrees), number("scale", defaults.scale))
+}
+
+/** Only the fields a user changes become project-local overrides. */
+internal fun snapOverrides(previous: JsonObject?, before: SnapSettings, after: SnapSettings): JsonObject {
+    val original = before.toJson()
+    return JsonObject(previous.orEmpty() + after.toJson().filter { (key, value) -> original[key] != value })
 }
 
 /** Standalone (no project) snap settings, user-local beside the standalone layout; written atomically. */

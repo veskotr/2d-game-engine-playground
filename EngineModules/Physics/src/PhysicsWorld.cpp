@@ -3,6 +3,8 @@
 #include <sle/physics/PhysicsTypes.hpp>
 #include <box2d/b2_world.h>
 #include <box2d/b2_body.h>
+#include <box2d/b2_world_callbacks.h>
+#include <bit>
 #include <box2d/b2_fixture.h>
 #include <box2d/b2_polygon_shape.h>
 #include <box2d/b2_circle_shape.h>
@@ -13,6 +15,31 @@
 namespace sle::physics {
 
 namespace {
+class MatrixContactFilter final : public b2ContactFilter
+{
+public:
+    explicit MatrixContactFilter(const CollisionMatrix& blocked) : blocked_(blocked) {}
+
+    bool ShouldCollide(b2Fixture* first, b2Fixture* second) override
+    {
+        if (!b2ContactFilter::ShouldCollide(first, second)) return false;
+        const auto a = first->GetFilterData();
+        const auto b = second->GetFilterData();
+        auto aBits = static_cast<unsigned>(a.categoryBits & b.maskBits);
+        const auto bBits = static_cast<unsigned>(b.categoryBits & a.maskBits);
+        while (aBits != 0)
+        {
+            const auto bit = std::countr_zero(aBits);
+            if ((bBits & ~static_cast<unsigned>(blocked_[bit])) != 0) return true;
+            aBits &= aBits - 1;
+        }
+        return false;
+    }
+
+private:
+    const CollisionMatrix& blocked_;
+};
+
 bool finiteVector(const glm::vec2& value)
 {
     return std::isfinite(value.x) && std::isfinite(value.y);
@@ -85,12 +112,25 @@ PhysicsWorld::PhysicsWorld(const glm::vec2& gravity)
     b2Vec2 b2Gravity(gravity.x, gravity.y);
     world_ = std::make_unique<b2World>(b2Gravity);
 
+    contactFilter_ = std::make_unique<MatrixContactFilter>(blockedCollisionPairs_);
+
     // Create and set contact listener
     contactListener_ = std::make_unique<ContactListener>(nullptr, &fixtureZoneIds_);
     world_->SetContactListener(contactListener_.get());
 
     // Store initial gravity
     world_->SetAutoClearForces(true);
+}
+
+void PhysicsWorld::setBlockedCollisionPairs(const CollisionMatrix& pairs)
+{
+    if (blockedCollisionPairs_ == pairs) return;
+    blockedCollisionPairs_ = pairs;
+    static b2ContactFilter legacyFilter;
+    world_->SetContactFilter(pairs == CollisionMatrix{} ? &legacyFilter : contactFilter_.get());
+    for (auto* body = world_->GetBodyList(); body; body = body->GetNext())
+        for (auto* fixture = body->GetFixtureList(); fixture; fixture = fixture->GetNext())
+            fixture->Refilter();
 }
 
 PhysicsWorld::~PhysicsWorld()

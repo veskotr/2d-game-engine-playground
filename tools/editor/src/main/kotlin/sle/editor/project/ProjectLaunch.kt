@@ -7,7 +7,9 @@ import sle.editor.bridge.NativeEngine
 import sle.editor.model.ScenePlaybackState
 import java.util.concurrent.CompletableFuture
 
-internal data class PreparedProject(val handle: Long,val source: String,val settings: ProjectGameSettings) {
+internal data class PreparedProject(
+    val handle: Long, val source: String, val settings: ProjectGameSettings, val boundKeys: Set<Int> = emptySet(),
+) {
     fun release() { CompletableFuture.runAsync { NativeEngine.releaseProject(handle) } }
     companion object {
         fun open(project: OpenedProject): PreparedProject {
@@ -17,7 +19,7 @@ internal data class PreparedProject(val handle: Long,val source: String,val sett
             return PreparedProject(json.getValue("handle").jsonPrimitive.long,json.getValue("source").jsonPrimitive.content,
                 ProjectGameSettings(json.getValue("title").jsonPrimitive.content,json.getValue("width").jsonPrimitive.int,
                     json.getValue("height").jsonPrimitive.int,json.getValue("vsync").jsonPrimitive.boolean,
-                    targetFPS=json.getValue("targetFPS").jsonPrimitive.int))
+                    targetFPS=json.getValue("targetFPS").jsonPrimitive.int), project.document.settings.boundKeys())
         }
     }
 }

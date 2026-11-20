@@ -17,13 +17,60 @@ internal fun InspectorGallery() {
     val catalog=remember {
         mapOf(
             "Transform" to ComponentDefinition(Json.parseToJsonElement("""{"position":{"x":128,"y":64},"rotation":0,"scale":{"x":1,"y":1}}""").jsonObject,JsonObject(emptyMap())),
-            "Camera2D" to ComponentDefinition(Json.parseToJsonElement("""{"primary":true,"zoom":1,"projection":"Orthographic"}""").jsonObject,
-                Json.parseToJsonElement("""{"projection":["Orthographic","Perspective"]}""").jsonObject),
-            "SpriteRenderer" to ComponentDefinition(Json.parseToJsonElement("""{"texture":"player.png","region":{"x":0,"y":0,"width":16,"height":16},"visible":true}""").jsonObject,JsonObject(emptyMap()))
+            "Camera2D" to decodeComponentCatalog("""
+                {"Camera2D":{
+                  "defaults":{"enabled":true,"zoom":6,"viewSize":{"x":480,"y":270},"projection":"Orthographic"},
+                  "enums":{"projection":["Orthographic","Perspective"]},
+                  "groups":{"view":{"label":"View","order":1}},
+                  "fields":[
+                    {"path":["enabled"],"order":1},
+                    {"path":["zoom"],"group":"view","order":1,"type":"number",
+                     "help":"Camera magnification","hard":{"min":0,"minExclusive":true},
+                     "ui":{"min":0.25,"max":4,"step":0.25,"precision":2,"unit":"×","slider":true},
+                     "visibleWhen":{"path":["enabled"],"equals":true}},
+                    {"path":["viewSize"],"group":"view","order":2},
+                    {"path":["viewSize","y"],"readOnly":true},
+                    {"path":["projection"],"readOnly":true}
+                  ]
+                }}
+            """).getValue("Camera2D"),
+            "SpriteRenderer" to decodeComponentCatalog("""
+                {"SpriteRenderer":{
+                  "defaults":{"texture":"assets/textures/tile2.png","color":{"x":0.7,"y":0.8,"z":1,"w":0.6},
+                    "size":{"x":16,"y":16},"region":{"uv":{"x":0,"y":0,"z":1,"w":1}},"visible":true},
+                  "enums":{},
+                  "fields":[
+                    {"path":["texture"],"type":"resource","drawer":"texture"},
+                    {"path":["color"],"type":"vector","drawer":"color"},
+                    {"path":["region"],"type":"object","drawer":"structured"},
+                    {"path":["region","uv"],"type":"vector","drawer":"uv"}
+                  ]
+                }}
+            """).getValue("SpriteRenderer"),
+            "Script" to ComponentDefinition(
+                Json.parseToJsonElement("""{"variables":{"speed":3,"enabled":true}}""").jsonObject,
+                JsonObject(emptyMap()),
+            ),
         )
     }
-    val prefab=remember { EntityWorkspaceState(catalog).apply { rename("Player");addComponent("SpriteRenderer") } }
-    val scene=remember { SceneWorkspaceState(catalog) { it }.apply { addEntity();selected!!.addComponent("Camera2D") } }
+    val prefab = remember {
+        EntityWorkspaceState(catalog).apply {
+            rename("Player")
+            addComponent("Camera2D")
+            addComponent("SpriteRenderer")
+            inspectorSections.setExpanded(document.key, "Transform", false)
+            inspectorSections.setExpanded(document.key, "Camera2D", false)
+        }
+    }
+    val scene = remember {
+        SceneWorkspaceState(catalog) { it }.apply {
+            addEntity()
+            val owner = checkNotNull(selected)
+            owner.addComponent("Camera2D")
+            owner.addComponent("Script")
+            owner.inspectorSections.setExpanded(owner.document.key, "Transform", false)
+        }
+    }
     Row(horizontalArrangement=Arrangement.spacedBy(LocalEditorMetrics.current.gap)) {
         EditorButton("Undo",{prefab.undo()});EditorButton("Redo",{prefab.redo()})
     }

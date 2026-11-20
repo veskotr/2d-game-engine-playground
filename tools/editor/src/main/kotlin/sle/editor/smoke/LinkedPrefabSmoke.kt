@@ -25,11 +25,32 @@ internal fun runLinkedPrefabSmoke() {
     check(author.prefabDocument().parents["child"]=="actor")
     val project=ProjectFiles.create(root.resolve("Game"),"Game")
     val store=ProjectDocuments(project)
+    val legacySource = """{"key":"legacy","name":"Legacy","entities":[
+        {"key":"actor","components":{"Transform":{"position":[12,34],"rotation":-0.5},
+            "RigidBody":{"mass":2},"BoxCollider":{"size":[20,30],"maskBits":65535}}}
+    ]}"""
+    val legacyFile = project.assets.resolve("Scenes/Legacy.scene.json")
+    store.save(legacyFile, ProjectDocumentKind.Scene, legacySource, emptyMap(), null) { canonicalSceneDocument(it) }
+    val openedLegacy = store.open(legacyFile)
+    val canonicalLegacy = canonicalSceneDocument(openedLegacy.source)
+    store.save(legacyFile, ProjectDocumentKind.Scene, canonicalLegacy, emptyMap(), openedLegacy) {
+        canonicalSceneDocument(it)
+    }
+    val reopenedLegacy = SceneDocument.parse(store.open(legacyFile).source)
+    val legacyValues = reopenedLegacy.entities.single().components
+    check(legacyValues.getValue("Transform").jsonObject["rotation"] == JsonPrimitive(-0.5))
+    check(legacyValues.getValue("RigidBody").jsonObject["mass"]!!.jsonPrimitive.double == 2.0)
+    check(legacyValues.getValue("BoxCollider").jsonObject["maskBits"] == JsonPrimitive(65535))
+    println("LEGACY_PROJECT_SCENE_ROUNDTRIP_SMOKE_PASS file=$legacyFile")
     val asset=store.save(project.assets.resolve("Prefabs/Actor.prefab.json"),ProjectDocumentKind.Prefab,tree.serialize(),emptyMap(),null) { canonicalPrefabDocument(it) }
     val id=AssetIdentity.read(AssetIdentity.sidecar(asset.path))
     val state=SceneWorkspaceState(readComponentCatalog())
     state.insertLinkedPrefab(tree,id,emptyMap());val first=state.selectedKey!!
     state.duplicateSelected();val second=state.selectedKey!!
+    val firstOwner = checkNotNull(state.entity(first))
+    DetailsPropertyActions().replaceComponent(firstOwner, "Audio",
+        """{"component":"Audio","values":{"volume":0.5}}""")
+    check(state.history.undoLabel == "Paste Audio")
     val main=store.open(project.assets.resolve("Scenes/Main.scene.json"))
     var saved=store.saveLinked(main.path,state.document(),state.document().prefabInstances,emptyMap(),main) { canonicalSceneDocument(it) }
     state.savedProject(saved)
@@ -48,7 +69,7 @@ internal fun runLinkedPrefabSmoke() {
         check(native.entities.size==4)
         for(key in listOf(first,second)) {
             val entity=native.entities.first { it.key==key }
-            check(entity.components["Audio"]!!.jsonObject["volume"]!!.jsonPrimitive.double==0.25)
+            check(entity.components["Audio"]!!.jsonObject["volume"]!!.jsonPrimitive.double == if (key == first) 0.5 else 0.25)
             val targets=native.entities.first { it.key=="$key/child" }.components["Animator"]!!.jsonObject["targetEntities"]!!.jsonObject
             check(targets["root"]==JsonPrimitive(key) && targets["self"]==JsonPrimitive("$key/child"))
         }

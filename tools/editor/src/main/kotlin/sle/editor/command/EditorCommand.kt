@@ -32,6 +32,9 @@ internal data class CommandContext(
     val viewportFailed: Boolean = false,
     /** Scene or sandbox playback is running or paused, so the Game view owns its keys. */
     val gameRunning: Boolean = false,
+    val gameActionKeys: Set<Int> = emptySet(),
+    /** The native Game canvas can receive this key event. */
+    val gameInputFocused: Boolean = false,
     val focusedPanel: PanelId? = null,
     val modalOpen: Boolean = false,
     val textInputFocused: Boolean = false,
@@ -39,6 +42,10 @@ internal data class CommandContext(
     val tools: sle.editor.viewport.tools.ViewportToolState? = null,
     /** Snap steps and toggle (per user, per project). */
     val snap: sle.editor.viewport.SnapService? = null,
+    val details: DetailsTarget? = null,
+    val detailsClipboard: DetailsClipboard = DesktopDetailsClipboard,
+    val projectGeneration: Long = 0,
+    val resolveDetailsAsset: ((String) -> String)? = null,
     val actions: EditorActions = EditorActions.None,
 ) {
     val documentKind get() = if(mode != ViewportMode.Entity || linked) DocumentKind.Scene else DocumentKind.Prefab
@@ -59,6 +66,9 @@ internal interface EditorActions {
     fun openPrefabWorkspace() {}
     fun editEntity(key: String) {}
     fun showPanel(panel: PanelId) {}
+    fun showLuaConsole() {}
+    fun projectLuaEnabled(script: sle.editor.scripts.ProjectLuaCommand): Boolean = false
+    fun runProjectLua(script: sle.editor.scripts.ProjectLuaCommand) {}
     fun finishGesture() {}
     fun fit() {}
     /** Fits the Scene view to the selected entities. */

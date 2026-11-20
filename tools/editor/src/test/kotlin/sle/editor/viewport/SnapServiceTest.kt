@@ -43,7 +43,7 @@ class SnapServiceTest {
         assertNull(snap.moveStep());assertEquals(1.0,snap.moveStep(invert=true))
         assertEquals(Vec2(2.3,-0.7),snap.placement(Vec2(2.3,-0.7)))
         assertEquals(Vec2(2.0,-1.0),snap.placement(Vec2(2.3,-0.7),invert=true))
-        var saved: SnapSettings?=null;snap.onChange={ saved=it }
+        var saved: SnapSettings?=null;snap.onChange={ _, value -> saved=value }
         snap.toggle();assertTrue(snap.active());assertFalse(snap.active(invert=true));assertEquals(snap.settings,saved)
         snap.load(SnapSettings(move=0.25));saved=null
         assertEquals(Vec2(2.25,-0.75),snap.placement(Vec2(2.3,-0.7),invert=true));assertNull(saved,"loading is not a change")

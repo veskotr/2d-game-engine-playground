@@ -1,10 +1,47 @@
 #include <sle/physics/PhysicsWorld.hpp>
 
 #include <glm/vec2.hpp>
+#include <box2d/b2_world.h>
 
 #include <iostream>
 
+namespace {
+bool matrixFiltersSolidContacts()
+{
+    sle::physics::PhysicsWorld world({0.0f, 0.0f});
+    sle::components::RigidBodyComponent fixed;
+    fixed.bodyType = sle::components::BodyType::Static;
+    sle::components::RigidBodyComponent moving;
+    moving.bodyType = sle::components::BodyType::Dynamic;
+
+    sle::components::CircleColliderComponent first;
+    first.radius = 10;
+    first.categoryBits = 1u << 15;
+    sle::components::CircleColliderComponent second = first;
+    second.categoryBits = 2;
+
+    sle::physics::CollisionMatrix blocked{};
+    blocked[15] = 2;
+    blocked[1] = 1u << 15;
+    world.setBlockedCollisionPairs(blocked);
+    world.createCircleFixture(world.createBody({0, 0}, fixed), first);
+    world.createCircleFixture(world.createBody({0, 0}, moving), second);
+    world.step(1.0f / 60.0f);
+    if (world.getRawWorld()->GetContactCount() != 0) return false;
+
+    // Existing proxies must be reconsidered when a pair is enabled again.
+    world.setBlockedCollisionPairs({});
+    world.step(1.0f / 60.0f);
+    world.step(1.0f / 60.0f);
+    return world.getRawWorld()->GetContactCount() == 1;
+}
+}
+
 int main() {
+    if (!matrixFiltersSolidContacts()) {
+        std::cerr << "Collision matrix did not block and then restore a solid contact\n";
+        return 1;
+    }
     sle::physics::PhysicsWorld world({0.0f, -9.81f});
 
     constexpr uint32_t invalidBodyId = 0;

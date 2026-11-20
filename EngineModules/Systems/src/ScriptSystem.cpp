@@ -1,7 +1,6 @@
 #include <sle/engine/ScriptSystem.hpp>
 #include <sle/scene/ChunkActivity.hpp>
 #include <sle/engine/Context.hpp>
-#include <sle/core/Log.hpp>
 #include <sle/events/StateMachineEvents.hpp>
 #include <sle/scene/Entity.hpp>
 #include <sle/scene/Registry.hpp>
@@ -36,6 +35,16 @@ void ScriptSystem::ensureStateMachineSubscription(sle::events::EventBus& eventBu
                 if (!event.onEnterCallback.empty())
                     (void)scriptRuntime->callEntityFunctionByName(event.entity.getID(), event.onEnterCallback);
             }));
+}
+
+void ScriptSystem::recordBehaviourReload(uint32_t entity, const std::string& key, const std::string& asset, bool loaded)
+{
+    if (loaded) {
+        if (const auto failures = failedAssets.find(entity); failures != failedAssets.end())
+            failures->second.erase(key);
+    } else {
+        failedAssets[entity][key] = asset;
+    }
 }
 
 void ScriptSystem::update(Context& ctx)
@@ -82,7 +91,6 @@ void ScriptSystem::update(Context& ctx)
         if(!scriptRuntime->hasBehaviour(task.entity.getID(),task.spec.key) &&
            !scriptRuntime->ensureBehaviour(task.entity.getID(),task.spec.key,task.spec.scriptAsset)) {
             failedAssets[task.entity.getID()][task.spec.key]=task.spec.scriptAsset;
-            core::Log::error("Failed to initialize behaviour '{}' ({}) for entity {}",task.spec.key,task.spec.scriptAsset,task.entity.getID());
             continue;
         }
         task.generation=scriptRuntime->getBehaviourGeneration(task.entity.getID(),task.spec.key);

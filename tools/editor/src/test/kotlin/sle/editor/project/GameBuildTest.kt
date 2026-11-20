@@ -17,13 +17,13 @@ class GameBuildTest {
         return ProjectFiles.save(p,p.document.copy(startupScene=AssetIdentity.read(AssetIdentity.sidecar(saved.path)),
             game=ProjectGameSettings(title="Packaged",width=640,height=360,vsync=false,mode="Windowed",targetFPS=30)))
     }
-    private fun bundle(): Path {
+    private fun bundle(engineVersion: String = "0.26.0"): Path {
         val root=Files.createTempDirectory("sle-runtime-")
         Files.writeString(root.resolve("engine_app.exe"),"executable")
         Files.createDirectories(root.resolve("assets/shaders"));Files.writeString(root.resolve("assets/shaders/sprite.vert"),"shader")
         Files.writeString(root.resolve("msvcp140.dll"),"crt")
         Files.writeString(root.resolve("sle-runtime.json"),buildJsonObject {
-            put("format","sle-runtime");put("version",1);put("engineVersion","0.16.0");put("platform","windows-x64");put("configuration","Release");put("executable","engine_app.exe")
+            put("format","sle-runtime");put("version",1);put("engineVersion",engineVersion);put("platform","windows-x64");put("configuration","Release");put("executable","engine_app.exe")
             put("files",buildJsonObject {
                 Files.walk(root).use { paths -> paths.filter { Files.isRegularFile(it) }.forEach { file ->
                     put(root.relativize(file).toString().replace('\\','/'),ProjectDistribution.hash(file))
@@ -34,7 +34,9 @@ class GameBuildTest {
     }
 
     @Test fun buildsConfigAndStoredPackageWithMainSceneSidecarsAndNoLocalState() {
-        val p=project();val runtime=bundle()
+        val legacy = project()
+        val p = ProjectFiles.save(legacy, legacy.document.copy(settings = ProjectSettings(ProjectArtStyle.PixelArt)))
+        val runtime=bundle()
         Files.createDirectories(p.root.resolve(".sle/trash/test"));Files.writeString(p.root.resolve(".sle/trash/test/payload"),"deleted")
         val target=p.root.resolveSibling("Build")
         var validated: Path?=null
@@ -57,6 +59,7 @@ class GameBuildTest {
             assertEquals("sle-package",manifest.getValue("format").jsonPrimitive.content)
             assertEquals(p.document.startupScene,manifest.getValue("mainScene").jsonPrimitive.content)
             assertEquals(p.document.id,manifest.getValue("id").jsonPrimitive.content)
+            assertEquals("pixelArt", manifest.getValue("settings").jsonObject.getValue("artStyle").jsonPrimitive.content)
             val names=entries.map { it.name }.toSet()
             assertTrue("assets/Scripts/modules/value.lua" in names && "assets/Scripts/modules/value.lua.slemeta" in names)
             assertTrue("assets/Scenes/start.scene.json.slemeta" in names)
@@ -70,12 +73,129 @@ class GameBuildTest {
         val distribution=Json.parseToJsonElement(Files.readString(target.resolve("sle-distribution.json"))).jsonObject
         assertEquals("Game.exe",distribution.getValue("executable").jsonPrimitive.content)
         // Versions of the engine runtime and the editor that produced the build.
-        assertEquals("0.16.0",distribution.getValue("engineVersion").jsonPrimitive.content)
+        assertEquals("0.26.0",distribution.getValue("engineVersion").jsonPrimitive.content)
         assertTrue(Regex("0\\.\\d+\\.\\d+").matches(distribution.getValue("editorVersion").jsonPrimitive.content))
         assertFalse(Files.exists(target.resolve("game")))
         // Rebuilding identical sources yields an identical package.
         val again=GameBuild.build(p,runtime,target.resolveSibling("Build Again")) {}
         assertContentEquals(Files.readAllBytes(target.resolve("game.slepkg")),Files.readAllBytes(again.folder.resolve("game.slepkg")))
+    }
+
+    @Test fun styledExportsRejectOlderRuntimeBundles() {
+        val legacy = project()
+        val styled = ProjectFiles.save(legacy, legacy.document.copy(settings = ProjectSettings(ProjectArtStyle.Smooth)))
+        val runtime = bundle("0.25.0")
+        val packageOutput = styled.root.resolveSibling("Package")
+        val sourceOutput = styled.root.resolveSibling("Export")
+        assertFailsWith<IllegalArgumentException> { GameBuild.build(styled, runtime, packageOutput) {} }
+        assertFailsWith<IllegalArgumentException> { ProjectDistribution.export(styled, runtime, sourceOutput) {} }
+        assertFalse(Files.exists(packageOutput))
+        assertFalse(Files.exists(sourceOutput))
+        val exported = ProjectDistribution.export(styled, bundle(), sourceOutput) {}
+        val relocated = Files.move(sourceOutput, sourceOutput.resolveSibling("Relocated"))
+        assertEquals(styled.document, ProjectFiles.open(relocated.resolve(sourceOutput.relativize(exported))).document)
+    }
+
+    @Test fun collisionSettingsTravelWithBothExportFormats() {
+        val legacy = project()
+        val settings = ProjectSettings(collisionLayers = CollisionLayers().withLabel(0, "Player").withPair(0, 15, false))
+        val p = ProjectFiles.save(legacy, legacy.document.copy(settings = settings))
+        val target = p.root.resolveSibling("Package")
+        assertFailsWith<IllegalArgumentException> { GameBuild.build(p, bundle(), target) {} }
+        val runtime = bundle("0.27.0")
+        GameBuild.build(p, runtime, target) {}
+        ZipFile(target.resolve(GameBuild.PACKAGE).toFile()).use { zip ->
+            val manifest = zip.getInputStream(zip.getEntry("manifest.json")).use {
+                Json.parseToJsonElement(it.readBytes().decodeToString()).jsonObject
+            }
+            assertEquals(settings.json(), manifest["settings"])
+        }
+        val export = ProjectDistribution.export(p, runtime, p.root.resolveSibling("Export")) {}
+        assertEquals(settings, ProjectFiles.open(export).document.settings)
+    }
+
+    @Test fun sortingLayerLabelsTravelWithBothExportFormats() {
+        val legacy = project()
+        val settings = ProjectSettings(sortingLayers = mapOf(-4 to "Backdrop", 9 to "Foreground"))
+        val p = ProjectFiles.save(legacy, legacy.document.copy(settings = settings))
+        val target = p.root.resolveSibling("Package")
+        val source = p.root.resolveSibling("Export")
+        val oldRuntime = bundle("0.27.0")
+        assertFailsWith<IllegalArgumentException> { GameBuild.build(p, oldRuntime, target) {} }
+        assertFailsWith<IllegalArgumentException> { ProjectDistribution.export(p, oldRuntime, source) {} }
+
+        val runtime = bundle("0.28.0")
+        GameBuild.build(p, runtime, target) {}
+        ZipFile(target.resolve(GameBuild.PACKAGE).toFile()).use { zip ->
+            val manifest = zip.getInputStream(zip.getEntry("manifest.json")).use {
+                Json.parseToJsonElement(it.readBytes().decodeToString()).jsonObject
+            }
+            assertEquals(settings.json(), manifest["settings"])
+        }
+        val exported = ProjectDistribution.export(p, runtime, source) {}
+        assertEquals(settings, ProjectFiles.open(exported).document.settings)
+    }
+
+    @Test fun tagsTravelWithBothExportFormats() {
+        val legacy = project()
+        val settings = ProjectSettings(tags = mapOf("actor-id" to "Actor"))
+        val project = ProjectFiles.save(legacy, legacy.document.copy(settings = settings))
+        val target = project.root.resolveSibling("Package")
+        val source = project.root.resolveSibling("Export")
+        val oldRuntime = bundle("0.28.0")
+        assertFailsWith<IllegalArgumentException> { GameBuild.build(project, oldRuntime, target) {} }
+        assertFailsWith<IllegalArgumentException> { ProjectDistribution.export(project, oldRuntime, source) {} }
+
+        val runtime = bundle("0.29.0")
+        GameBuild.build(project, runtime, target) {}
+        ZipFile(target.resolve(GameBuild.PACKAGE).toFile()).use { zip ->
+            val manifest = zip.getInputStream(zip.getEntry("manifest.json")).use {
+                Json.parseToJsonElement(it.readBytes().decodeToString()).jsonObject
+            }
+            assertEquals(settings.json(), manifest["settings"])
+        }
+        val exported = ProjectDistribution.export(project, runtime, source) {}
+        assertEquals(settings, ProjectFiles.open(exported).document.settings)
+    }
+
+    @Test fun inputActionsTravelWithBothExportFormats() {
+        val legacy = project()
+        val settings = ProjectSettings(inputActions = mapOf("Jump" to listOf(KeyboardBinding(32), KeyboardBinding(87))))
+        val project = ProjectFiles.save(legacy, legacy.document.copy(settings = settings))
+        val target = project.root.resolveSibling("Package")
+        val source = project.root.resolveSibling("Export")
+        val oldRuntime = bundle("0.29.0")
+        assertFailsWith<IllegalArgumentException> { GameBuild.build(project, oldRuntime, target) {} }
+        assertFailsWith<IllegalArgumentException> { ProjectDistribution.export(project, oldRuntime, source) {} }
+
+        val runtime = bundle("0.30.0")
+        GameBuild.build(project, runtime, target) {}
+        ZipFile(target.resolve(GameBuild.PACKAGE).toFile()).use { zip ->
+            val manifest = zip.getInputStream(zip.getEntry("manifest.json")).use {
+                Json.parseToJsonElement(it.readBytes().decodeToString()).jsonObject
+            }
+            assertEquals(settings.json(), manifest["settings"])
+        }
+        val exported = ProjectDistribution.export(project, runtime, source) {}
+        assertEquals(settings, ProjectFiles.open(exported).document.settings)
+    }
+
+    @Test fun unresolvedMembershipStillRequiresATagCapableBundle() {
+        val project = project()
+        val path = project.assets.resolve("Scenes/start.scene.json")
+        val documents = ProjectDocuments(project)
+        val tagged = """{"key":"start","entities":[{"key":"actor","components":{"Tags":{"ids":["unresolved"]}}}]}"""
+        documents.save(path, ProjectDocumentKind.Scene, tagged, emptyMap(), documents.open(path)) {}
+        val target = project.root.resolveSibling("Package")
+        val source = project.root.resolveSibling("Export")
+        val oldRuntime = bundle("0.28.0")
+        assertFailsWith<IllegalArgumentException> { GameBuild.build(project, oldRuntime, target) {} }
+        assertFailsWith<IllegalArgumentException> { ProjectDistribution.export(project, oldRuntime, source) {} }
+        val supportedRuntime = bundle("0.29.0")
+        GameBuild.build(project, supportedRuntime, target) {}
+        val exported = ProjectDistribution.export(project, supportedRuntime, source) {}
+        val copied = ProjectFiles.open(exported)
+        assertContains(ProjectDocuments(copied).open(copied.assets.resolve("Scenes/start.scene.json")).source, "unresolved")
     }
 
     @Test fun failureConcurrentEditOrOccupiedDestinationNeverPublishes() {

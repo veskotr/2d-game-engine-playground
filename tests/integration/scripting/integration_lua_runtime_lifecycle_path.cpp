@@ -1,4 +1,5 @@
 #include <sle/engine/Runtime.hpp>
+#include <sle/core/Log.hpp>
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/scene/components/Transform.hpp>
 #include <sle/scene/components/BoxColliderComponent.hpp>
@@ -40,5 +41,15 @@ int main()
         const auto bad=runtime.loadScene("bad_builder");
         check(!bad.ok() && runtime.getCurrentSceneName().empty(),"Failed imperative Lua builder must return a load error with no false active scene");
     } catch(const std::exception&) { check(false,"Lua scene builder errors must not escape the runtime result boundary"); }
+    std::vector<sle::core::LogEntry> errors;
+    sle::core::Log::setSink([&](const auto& entry) {
+        if (entry.level == sle::core::LogLevel::Error) errors.push_back(entry);
+    });
+    check(runtime.requestSceneSwitch("bad_builder").ok(), "Queue the Lua scene builder");
+    check(runtime.runForFrames(1) == 1, "Process the pending scene switch");
+    sle::core::Log::setSink({});
+    check(errors.size() == 1 && errors.front().lua &&
+        errors.front().message.find("intentional builder error") != std::string::npos,
+        "A failing Lua scene builder must report one structured error");
     return passed?0:1;
 }

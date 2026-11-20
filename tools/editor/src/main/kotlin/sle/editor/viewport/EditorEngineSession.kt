@@ -81,12 +81,16 @@ internal class EditorEngineSession(
         val dt = ((now-lastNanos)/1e9).coerceIn(0.0,.1).toFloat()
         lastNanos = now
         presenters.toList().forEach { it.updateRequest() }
-        owner.withContext { frames.tick(dt) }
+        owner.withContext {
+            try { frames.tick(dt) }
+            finally { owner.drainConsole() }
+        }
         timer.delay = owner.schedulerDelay
         presenters.toList().filter { it.isShowing && it.width>0 && it.height>0 }.forEach { it.render() }
     }
     fun setProject(value: sle.editor.project.PreparedProject?) = owner.setProject(value)
-    fun setContent(mode: ViewportMode, document: String?, playback: Playback) = owner.setContent(mode,document,playback)
+    fun setContent(mode: ViewportMode, document: String?, playback: Playback, playRevision: Long? = null) =
+        owner.setContent(mode, document, playback, playRevision)
     fun setScene(value: sle.editor.model.SceneWorkspaceState?) = owner.setScene(value)
     fun setAuthoring(value: sle.editor.model.EntityWorkspaceState?) = owner.setAuthoring(value)
     fun setSceneView(game: Boolean, onError: (String)->Unit) = owner.setSceneView(game,onError)

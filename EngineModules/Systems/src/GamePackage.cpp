@@ -1,4 +1,5 @@
 #include "GamePackage.hpp"
+#include "ProjectSettings.hpp"
 #include "StoredZip.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -119,7 +120,7 @@ Mounted mount(const fs::path& package)
     const auto manifest = Json::parse(found->second);
     require(manifest.is_object(), "Game package manifest must be an object");
     for (const auto& [key, value] : manifest.items())
-        require(key == "format" || key == "version" || key == "id" || key == "name" || key == "mainScene", "Unknown game package field: " + key);
+        require(key == "format" || key == "version" || key == "id" || key == "name" || key == "mainScene" || key == "settings", "Unknown game package field: " + key);
     require(manifest.value("format", Json()) == "sle-package" && manifest.contains("version") &&
         manifest.at("version").is_number_integer() && manifest.at("version") == 1, "Unsupported game package format/version");
     require(manifest.contains("id") && uuid(manifest.at("id")), "Invalid game package id");
@@ -138,6 +139,13 @@ Mounted mount(const fs::path& package)
         require(!folders.contains(lower(relative.generic_string())), "Game package path is both a file and a folder: " + relative.generic_string());
 
     Mounted mounted;
+    if (manifest.contains("settings")) {
+        const auto& settings = manifest.at("settings");
+        mounted.textureDefault = detail::artStyleFilter(settings);
+        mounted.blockedPairs = detail::blockedCollisionPairs(settings);
+        mounted.tags = detail::projectTags(settings);
+        mounted.actions = detail::projectInputActions(settings);
+    }
     mounted.id = manifest.at("id").get<std::string>();
     mounted.name = manifest.at("name").get<std::string>();
     if (!manifest.at("mainScene").is_null()) mounted.mainScene = manifest.at("mainScene").get<std::string>();

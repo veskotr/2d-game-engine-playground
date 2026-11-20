@@ -102,6 +102,17 @@ assets/<path relative to the project asset root>   # every file, including .slem
  "id": "<project UUID>", "name": "My Game", "mainScene": "<scene UUID or null>"}
 ```
 
+The optional `settings.artStyle` field carries the exported project's preset
+(`pixelArt` or `smooth`). It applies to textures from that package whose
+sidecars omit a sampler override. Packages without the setting use the legacy
+loader default. The package that selects the main scene supplies
+`settings.collisionLayers` for the entire run, including scenes from later
+packages. The layout matches the [project descriptor](Projects.md#collision-layers).
+Manifest settings can also include [sorting layer labels](Projects.md#sorting-layers).
+The startup package supplies [keyboard input actions](Projects.md#keyboard-input-actions)
+for all scenes in the run. The manifest uses the same `settings.inputActions` field
+as the source project.
+Sprite draw order continues to use the numeric layer stored on each sprite.
 Unknown manifest fields and versions are rejected. Entry paths must be portable:
 no `..`, empty or `.` segments, backslashes, drive letters, control characters,
 characters from `:*?"<>|`, trailing dots or spaces, or Windows device names
@@ -147,3 +158,8 @@ running. Automatic eviction is not implemented.
 - `GameBuildTest` (editor): package/config contents, reproducible output, local
   state exclusion, validation failure, concurrent edits, staged tampering, occupied
   destinations, missing metadata/startup and non-portable names.
+
+
+The startup package supplies `settings.tags` for Lua tag queries across all
+mounted scenes. Scene and prefab memberships retain their IDs when the
+startup package has no matching definition. See [entity tags](Projects.md#entity-tags).

@@ -1,3 +1,4 @@
+#include "LuaSceneBuilderError.hpp"
 #include <sle/engine/SceneManager.hpp>
 #include <sle/engine/Runtime.hpp>
 #include <sle/engine/SceneLoader.hpp>
@@ -40,25 +41,31 @@ bool SceneManager::hasScene(const std::string& sceneName) const
 sle::core::Result<bool> SceneManager::loadScene(
     const std::string& sceneName,
     Runtime& runtime,
-    sle::entity::Scene& scene, bool emitLifecycleEvents)
+    sle::entity::Scene& scene, bool emitLifecycleEvents, bool* errorReported)
 {
+    if (errorReported) *errorReported = false;
     auto it = sceneBuilders.find(sceneName);
     if (it == sceneBuilders.end())
         return sle::core::Result<bool>::error("Scene not registered: " + sceneName);
 
     std::unique_ptr<sle::entity::Scene> staged;
+    std::unordered_map<uint32_t, std::string> stagedKeys;
     if (it->second.jsonData || !it->second.jsonPath.empty())
     {
         staged = scene.createStagingScene();
         const std::string& path = it->second.jsonPath;
         try
         {
+            const auto textureFilter = [&runtime](const std::string& texture) {
+                return runtime.spriteTextureFilter(texture);
+            };
             const auto result = it->second.jsonData
-                ? SceneLoader::loadData(*it->second.jsonData, *staged, path)
-                : SceneLoader::load(path, *staged);
+                ? SceneLoader::loadData(*it->second.jsonData, *staged, path, textureFilter)
+                : SceneLoader::load(path, *staged, textureFilter);
             if (!result.ok())
                 return sle::core::Result<bool>::error(
                     "Failed to load scene '" + sceneName + "' from '" + path + "': " + result.error());
+            stagedKeys = staged->getEntityKeys();
         }
         catch (const std::exception& ex)
         {
@@ -80,6 +87,8 @@ sle::core::Result<bool> SceneManager::loadScene(
         runtime.getGlobalBus().queue(unloadEvent);
     }
 
+    ++sceneInstance;
+    authoredEntityKeys = std::move(stagedKeys);
     if (staged)
     {
         scene.replaceWith(*staged);
@@ -94,6 +103,7 @@ sle::core::Result<bool> SceneManager::loadScene(
         try {
             builder(runtime);
         } catch (const std::exception& ex) {
+            if (errorReported) *errorReported = dynamic_cast<const detail::LuaSceneBuilderError*>(&ex) != nullptr;
             runtime.getScriptEngine().clearSceneScripts();
             scene.destroy();
             return sle::core::Result<bool>::error("Failed to build scene '" + sceneName + "': " + ex.what());
@@ -118,14 +128,14 @@ sle::core::Result<bool> SceneManager::requestSceneSwitch(const std::string& scen
     return sle::core::Result<bool>::success(true);
 }
 
-sle::core::Result<bool> SceneManager::processPendingSwitch(Runtime& runtime, sle::entity::Scene& scene)
+sle::core::Result<bool> SceneManager::processPendingSwitch(Runtime& runtime, sle::entity::Scene& scene, bool& errorReported)
 {
     if (!pendingSceneName.has_value())
         return sle::core::Result<bool>::success(true);
 
     const std::string nextScene = *pendingSceneName;
     pendingSceneName.reset();
-    return loadScene(nextScene, runtime, scene);
+    return loadScene(nextScene, runtime, scene, true, &errorReported);
 }
 
 } // namespace sle

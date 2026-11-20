@@ -55,13 +55,57 @@ internal object ProjectDistribution {
             }
         }
     }
+    private fun hasTagComponents(assets: Path, inventory: Inventory): Boolean {
+        fun hasTags(fields: JsonElement?) = (fields as? JsonObject)?.containsKey("Tags") == true
+
+        return inventory.files.keys.asSequence()
+            .filter { name -> ProjectDocumentKind.entries.any { name.endsWith(it.suffix, ignoreCase = true) } }
+            .any { name ->
+                val path = assets.resolve(name)
+                require(Files.size(path) <= 16 * 1024 * 1024) { "Oversized project document: $name" }
+                val document = Json.parseToJsonElement(Files.readString(path)).jsonObject["document"] as? JsonObject
+                val entities = document?.get("entities") as? JsonArray
+                val prefabs = document?.get("prefabs") as? JsonArray
+                entities.orEmpty().any { hasTags((it as? JsonObject)?.get("components")) } ||
+                    prefabs.orEmpty().any { instance ->
+                        val overrides = (instance as? JsonObject)?.get("overrides") as? JsonObject
+                        overrides?.values.orEmpty().any(::hasTags)
+                    }
+            }
+    }
+
     /** Complete, unmodified Windows x64 Release bundle produced by sle_runtime_bundle. */
-    internal fun runtimeInventory(runtime: Path): Inventory {
+    internal fun runtimeInventory(runtime: Path, settings: ProjectSettings, assets: Path, assetFiles: Inventory): Inventory {
         val runtimeFiles=inventory(runtime)
         val manifest=Json.parseToJsonElement(Files.readString(runtime.resolve("sle-runtime.json"))).jsonObject
         require(manifest["format"]==JsonPrimitive("sle-runtime") && manifest["version"]==JsonPrimitive(1) &&
             manifest["platform"]==JsonPrimitive("windows-x64") && manifest["configuration"]==JsonPrimitive("Release") &&
             manifest["executable"]==JsonPrimitive("engine_app.exe")) { "Select a Windows x64 Release SLE runtime bundle" }
+        val version = (manifest["engineVersion"] as? JsonPrimitive)?.content.orEmpty().split('.')
+        val numbers = version.map(String::toIntOrNull)
+        fun compatible(minor: Int) = numbers.size == 3 && numbers.all { it != null && it >= 0 } &&
+            (numbers[0]!! > 0 || numbers[1]!! >= minor)
+        val hasCollisionSettings = settings.collisionLayers.json().isNotEmpty()
+        val minimumMinor = when {
+            settings.inputActions.isNotEmpty() -> 30
+            settings.tags.isNotEmpty() || (!compatible(29) && hasTagComponents(assets, assetFiles)) -> 29
+            settings.sortingLayers.isNotEmpty() -> 28
+            hasCollisionSettings -> 27
+            settings.artStyle != null -> 26
+            else -> 0
+        }
+        if (minimumMinor > 0) {
+            require(compatible(minimumMinor)) {
+                val feature = when (minimumMinor) {
+                    30 -> "Project input actions"
+                    29 -> "Project tags"
+                    28 -> "Sorting layer labels"
+                    27 -> "Collision layer settings"
+                    else -> "Art-style presets"
+                }
+                "$feature require an SLE 0.$minimumMinor or newer runtime bundle"
+            }
+        }
         val expected=manifest.getValue("files").jsonObject.mapValues { (_,value) -> value.jsonPrimitive.content }
         require(expected==runtimeFiles.files-"sle-runtime.json") { "Runtime bundle files are missing, modified or unexpected; rebuild sle_runtime_bundle" }
         require("engine_app.exe" in runtimeFiles.files && runtimeFiles.files.keys.any { it.startsWith("assets/shaders/") }) { "Runtime executable/resources are missing" }
@@ -103,8 +147,8 @@ internal object ProjectDistribution {
             (!localOutput || (!assets.startsWith(exports) && !exports.startsWith(assets)))) { "Export output must be separate from the asset root" }
         require(raw.parent.toRealPath()==raw.parent) { "Export destination cannot point through a link" }
         require(!Files.exists(target,LinkOption.NOFOLLOW_LINKS)) { "Export destination already exists; choose a new folder" }
-        val runtimeFiles=runtimeInventory(runtime)
         val assetFiles=inventory(assets);identities(assets,assetFiles)
+        val runtimeFiles=runtimeInventory(runtime, source.document.settings, assets, assetFiles)
         val stage=Files.createTempDirectory(target.parent,".sle-export-")
         try {
             copy(runtime,stage,runtimeFiles)

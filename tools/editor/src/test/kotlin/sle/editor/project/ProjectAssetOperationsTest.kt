@@ -6,6 +6,19 @@ import kotlin.test.*
 
 class ProjectAssetOperationsTest {
     private fun project()=ProjectFiles.create(Files.createTempDirectory("sle-ops-").resolve("Game"),"Game")
+    @Test fun textureFilterFollowsAnAssetAcrossRenameAndMove() {
+        val p = project()
+        val file = Files.createFile(p.assets.resolve("Textures/a.png"))
+        val id = AssetIdentity.ensure(file)
+        AssetIdentity.writeFilter(p.root, p.assets, "Textures/a.png", AssetTextureFilter.Nearest)
+        val operation = ProjectAssetOperations(p)
+        operation.move("Textures/a.png", "Textures/renamed.png")
+        operation.move("Textures/renamed.png", "Data/renamed.png")
+        val snapshot = AssetScanner.scan(p.root, p.assets)
+        assertEquals(id, snapshot.idsByPath["Data/renamed.png"])
+        assertEquals(AssetTextureFilter.Nearest, snapshot.textureFilters["Data/renamed.png"])
+    }
+
     @Test fun moveFolderPreservesIdentityAndPortableReferences() {
         val p=project();val file=p.assets.resolve("Textures/a.png");Files.writeString(file,"image")
         val saved=ProjectDocuments(p).save(p.assets.resolve("Scenes/a.scene.json"),ProjectDocumentKind.Scene,"{}",mapOf(file to "a"),null) {}
@@ -16,6 +29,47 @@ class ProjectAssetOperationsTest {
         assertEquals(raw,Files.readString(saved.path))
         assertTrue(ProjectDocuments(p).open(saved.path).assets.containsKey(p.assets.resolve("Data/Pictures/a.png")))
     }
+    @Test fun findReferencesReadsCurrentSavedConsumers() {
+        val p = project()
+        val texture = Files.writeString(p.assets.resolve("Textures/a.png"), "image")
+        val scene = p.assets.resolve("Scenes/a.scene.json")
+        val documents = ProjectDocuments(p)
+        val operations = ProjectAssetOperations(p)
+        val saved = documents.save(scene, ProjectDocumentKind.Scene, "{}", emptyMap(), null) {}
+        assertTrue(operations.findReferences("Textures/a.png").isEmpty())
+
+        documents.save(scene, ProjectDocumentKind.Scene, "{}", mapOf(texture to "a"), saved) {}
+        assertEquals(listOf("Scenes/a.scene.json"), operations.findReferences("Textures/a.png").map { it.documentPath })
+        operations.move("Textures/a.png", "Textures/moved.png")
+        operations.move("Scenes/a.scene.json", "Scenes/moved.scene.json")
+        assertEquals(listOf("Scenes/moved.scene.json"), operations.findReferences("Textures/moved.png").map { it.documentPath })
+
+        operations.delete("Scenes/moved.scene.json")
+        assertTrue(operations.findReferences("Textures/moved.png").isEmpty())
+    }
+
+    @Test fun findReferencesIncludesPrefabFieldsAndStartupSetting() {
+        val p = project()
+        val texture = Files.writeString(p.assets.resolve("Textures/a.png"), "image")
+        val uuid = AssetIdentity.ensure(texture)
+        val prefab = p.assets.resolve("Data/a.prefab.json")
+        val documents = ProjectDocuments(p)
+        val saved = documents.save(prefab, ProjectDocumentKind.Prefab,
+            """{"entities":[{"name":"project-asset://$uuid","components":{"sprite":{"texture":"project-asset://$uuid"}}}]}""",
+            emptyMap(), null) {}
+        val operations = ProjectAssetOperations(p)
+        assertEquals(listOf("Data/a.prefab.json"), operations.findReferences("Textures/a.png").map { it.documentPath })
+
+        documents.save(prefab, ProjectDocumentKind.Prefab,
+            """{"entities":[{"name":"project-asset://$uuid","components":{}}]}""", emptyMap(), saved) {}
+        assertTrue(operations.findReferences("Textures/a.png").isEmpty())
+
+        val startupPath = AssetScanner.scan(p.root, p.assets).pathsById.getValue(p.document.startupScene!!)
+        val startup = operations.findReferences(startupPath).single()
+        assertEquals("Project startup scene", startup.source)
+        assertNull(startup.documentPath)
+    }
+
     @Test fun deletionReportsReferencesRequiresOverrideAndCanRestore() {
         val p=project();val file=p.assets.resolve("Textures/a.png");Files.writeString(file,"image")
         val scene=ProjectDocuments(p).save(p.assets.resolve("Scenes/a.scene.json"),ProjectDocumentKind.Scene,"{}",mapOf(file to "a"),null) {}

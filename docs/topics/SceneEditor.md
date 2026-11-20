@@ -78,6 +78,27 @@ portable `.slescene` workflow.
   retains local-origin placement. New sprite/box components use 64×64 world units;
   circle components use radius 32. Inspector-added shapes still fit an existing sprite.
   These are editor presets; saved documents and native codec defaults are unchanged.
+- Right-click a property label in Scene or Entity Template Details for **Reset**,
+  **Copy**, and **Paste**. Reset uses the catalog default for that property.
+  Vector axes have their own menus, so resetting one axis preserves the
+  others. Property clipboard values use JSON, including quotes around strings.
+  Copy is available for read-only properties while editing. The text fields
+  keep their usual clipboard shortcuts.
+- Sprite color exposes RGBA fields, and **Pick color…** preserves the authored
+  alpha. The texture row offers **Browse…**, **Clear**, a thumbnail, and
+  **Use image size**. Expand the SpriteRenderer section to edit the UV rectangle
+  using U0, V0, U1, and V1. Free-form Script variables remain JSON.
+- Right-click a component heading in either Details host for **Reset**, **Copy**,
+  and **Paste**. Reset restores writable catalog defaults. Copy writes a JSON
+  object with `component` and `values` keys. Paste requires the same component
+  type and updates the supplied fields. Both actions preserve destination entity
+  references, legacy-only fields, and read-only values. Copy is available while
+  editing a read-only component. Component reordering is deferred because the
+  document format stores components by type.
+- Reset and Paste validate the destination document before changing it.
+  An invalid value, an unresolved asset, or another invalid authored value
+  can produce a diagnostic in the status bar. Each successful change can
+  be undone in one step.
 - **Duplicate** (Ctrl+D) copies the selected subtrees with new UUIDs, preserves references to
   other scene entities and selects the copies. A selected entity whose ancestor is also
   selected is copied once, with that ancestor. **Edit → Delete** (Delete) removes every
@@ -134,6 +155,9 @@ the active authoring mode, including Save-to-scene for edited scene copies.
 
 ## Scene cameras and gameplay
 
+The [editor property schema](EditorPropertySchema.md) lists the metadata supplied
+to Details for transforms, sprites, cameras, rigid bodies and colliders.
+
 **Create → Camera → At Scene Root** creates an entity with Camera2D. Use
 **Create → Camera → As Child** to
 attach one to a selected actor. The Details panel edits its logical view size, zoom,
@@ -161,6 +185,233 @@ with `engine_app.exe --config examples/editor_camera/engine.json`. The example r
 The compact tool layout defaults to **UI 100%**. **View → UI Scale** offers
 75%, 85% and 100%; changing scale preserves documents/selection and updates native
 viewport sizing.
+
+## Live Inspector
+
+During embedded Play, the Hierarchy and Details panels switch to **Live
+Hierarchy** and **Live Details**. Select a runtime entity to inspect its local
+Transform, SpriteRenderer values and Lua behaviour attachments. Runtime-spawned
+entities appear under their current parents. The hierarchy uses scene and
+prefab names when available, then the authored key or runtime ID.
+
+Live values refresh during Play and after **Step**, and
+remain available while paused. The runtime selection clears when its entity is
+destroyed, the runtime switches scenes, or you stop Play. **Stop** returns the
+panels to the authored scene and its selection.
+
+During **Play Scene**, pause and select an authored entity in **Live Hierarchy**.
+If its local Transform changed, **Live Details** previews the changed fields.
+Click **Keep Changes** to apply the preview to the scene in one Undo step, then
+save normally to keep it on disk. If any affected authored field changed since
+Play started, the action rejects the entire preview. The action requires the
+original scene and parent mapping. Spawned entities, linked prefab instances,
+and **Run Project** sessions are ineligible. **Stop** discards any remaining
+runtime changes.
+
+### Reload a Lua behaviour
+
+With a project open, save the Lua file under its asset root. Select an
+entity in **Live Hierarchy** during **Play Scene** or **Run Project**, then
+click **Reload Script** beside its attachment in **Live Details**.
+Reload works while running or paused. It restarts enabled
+attachments using the same saved source in the current scene, including
+active attachments that failed to initialize. Attachments in suspended
+chunks are skipped. The Console reports the result for each attempt.
+
+The new file must compile and run its top-level code before the current
+attachment is retired. Keep top-level code to declarations and local
+setup. Move game API calls, module imports and other runtime work into
+`init`. A syntax or top-level error leaves the previous attachment active.
+After successful staging, the old behaviour is torn down and the new
+behaviour starts with a fresh environment and fresh local state. If `init` fails, correct the source
+and click **Reload Script** again. Any game-state changes made by `destroy`
+or `init` persist in the current run.
+
+## Engine Console
+
+Select **Console** beside **Assets**, or choose **Windows → Console →
+Show / Focus**. The panel captures engine messages while hidden. Filter by
+severity or search message text, source locations, behaviour keys and Lua
+tracebacks. Consecutive identical entries show a repeat count. The Console
+reports when either the native queue or the displayed history drops older
+messages.
+
+**Clear** clears pending and displayed messages. **Clear on Play** is a
+per-user preference that clears before a new scene or project run starts,
+so startup errors are visible. Stopping Play leaves the captured history
+available.
+
+Enable **Pause on Lua Error** in the Console to pause embedded Play after
+the first frame that reports a Lua error. The status bar shows the first
+error from that frame, and the viewport marks its entity while it remains
+in the live scene and has a transform. Each step refreshes the pause
+message and marker for that frame. The preference also works while
+the Console is hidden.
+
+While Play is paused, use **Step** in the Edit menu or viewport toolbar
+to advance the scene and UI by 1/60 s. Each step leaves playback and audio
+paused.
+
+Lua errors include the entity ID and behaviour key when available. Select the
+source button to open the resolved Lua file at the reported line. The Lua
+Profiler can also open the source file for an entry.
+
+In **Details**, expand **Script** and choose **Open in IDE** beside the
+primary script or a named behavior. The same action is available in read-only
+Live Details during Play. In **Assets**, select a Lua file and choose **Open in
+IDE** in its details pane.
+
+Use **Configure Script Editor…** in the Console to choose an IDE across all
+projects. Enter the executable path and place each argument on its own row.
+Use `{file}` for the path and `{line}` for the line number. For example, VS
+Code uses `{file}` for file arguments and two rows, `--goto` and
+`{file}:{line}`, for line arguments. If you leave line arguments blank or no
+positive line is available, SLE uses the file arguments. Paths with spaces
+stay within the corresponding argument.
+
+**Reset to Defaults** clears the saved preference. SLE then uses the executable
+in `SLE_SCRIPT_EDITOR` with VS Code arguments, or discovers VS Code if the
+variable is unset. On Windows it looks for `Code.exe`. On Linux it runs
+`code` from PATH. Enter executable paths without surrounding quotes.
+
+### Run Lua
+
+Open **View → Run Lua…** from the Scene workspace. Enter multiline Lua and
+use **Run Lua** or **Ctrl+Enter** to submit. **Previous** and **Next** recall
+commands. Use `print(...)` to write to the Console.
+
+While stopped, each command gets a fresh, sandboxed Lua state and a detached
+`snapshot`. Read `snapshot.scene.entities`, `snapshot.selection` (ordered
+entity keys), and, in a project, `snapshot.project` and `snapshot.assets`.
+Asset paths are relative to the configured asset folder. To edit the scene,
+return an ordered array of operation tables. For example, select an entity
+with a Transform and run this command.
+
+```lua
+local entity = assert(snapshot.selection[1], "Select an entity first")
+return {
+    {op = "setField", entity = entity, component = "Transform",
+     path = {"position", "x"}, value = 100},
+}
+```
+
+Other operations use the following fields.
+
+| Operation | Fields |
+| --- | --- |
+| `addComponent`, `removeComponent` | `entity`, `component` |
+| `createEntity` | A unique `entity` key and `name`. Later edits can use the new key. |
+| `deleteEntity` | `entity`. Removes its subtree. |
+| `reparentEntity` | `entity`, optional `parent`. Omitting `parent` moves the entity to the root. The local transform stays the same. |
+| `createAsset` | `path`, `contents` (UTF-8 text). The parent asset folder must already exist. |
+
+The editor validates the whole list before applying it as one **Run Lua**
+undo step. Asset creation requires an open project and an unused destination.
+Undo checks that the created file and its asset metadata still match the command.
+Unpack linked entity templates before deleting or reparenting them from Lua.
+
+During embedded Play or Pause, the console runs commands in the game Lua VM
+with the gameplay APIs. Changes affect the current run and errors appear
+in the Console. **Pause on Lua Error** also applies to these commands.
+
+## Project Editor Commands
+
+Save a text Lua script in `Editor/` beside the `.sleproject` descriptor with
+a name ending in `.editor.lua`. Open or reopen the project to load it. The
+first time the editor finds scripts, it asks whether you trust the project.
+The decision stays in your local editor settings for that project ID and
+canonical descriptor path. Use **File → Project Settings → Project Editor
+Scripts** to grant or revoke trust.
+
+Return an array of command descriptors. Each command needs a project-unique
+`id`, a `label`, and a `run(snapshot)` function. The optional `menu` names the
+top-level menu and defaults to **Tools**. The optional `shortcut` uses the
+editor's key chord syntax, such as `Ctrl+Shift+F8`. Conflicting shortcuts are
+reported in the Console. Keep the returned descriptors independent of the
+scene snapshot. Use an optional `enabled(snapshot)` function to determine
+whether each command is available.
+
+```lua
+return {
+    {
+        id = "move-to-origin",
+        label = "Move Selection to Origin",
+        menu = "Tools",
+        shortcut = "Ctrl+Shift+F8",
+        enabled = function(s) return #s.selection > 0 end,
+        run = function(s)
+            local edits = {}
+            for _, entity in ipairs(s.selection) do
+                for _, axis in ipairs({"x", "y"}) do
+                    edits[#edits + 1] = {op = "setField", entity = entity,
+                        component = "Transform", path = {"position", axis}, value = 0}
+                end
+            end
+            return edits
+        end,
+    },
+}
+```
+
+Commands are available in the stopped Scene workspace. Callbacks run in a
+fresh, bounded editor Lua sandbox and receive the same detached snapshot
+described under **Run Lua**. Return the same edit operations to apply them as
+one undo step, or return `nil` for a command that makes no edits. Lua errors
+and `print(...)` output appear in the Console. Revoking trust removes the
+project's commands as soon as the editor accepts the change.
+
+### Project drawers and panels
+
+To declare UI alongside commands, return a table with optional `commands`,
+`drawers`, and `panels` lists. Put your existing command descriptors in
+`commands`. For example, if your project registers `move-to-origin`:
+
+```lua
+return {
+    drawers = {
+        {component = "SpriteRenderer", path = {"color"}, widget = "color"},
+    },
+    panels = {
+        {id = "placement", label = "Placement Tools", widgets = {
+            {kind = "label", text = "Reset the selected entities’ positions."},
+            {kind = "button", command = "move-to-origin"},
+        }},
+    },
+}
+```
+
+A drawer binds one component field path in Details to a built-in
+presentation. Available widgets are `color` (four-channel vector), `uv`
+(vector), `resource` (resource field), `texture` (`SpriteRenderer.texture`),
+and `structured` (structured object). The editor uses its normal widget
+if the binding is incompatible with the field. Editing through a drawer
+uses the field's existing validation, write permissions and undo history.
+
+Open the panel by its label in **Windows**. Each panel has a project-unique
+ID and up to 16 widgets. A button takes the ID of a registered project
+command, including commands declared in another file. It uses the command's
+label, availability and undo transaction. Invalid declarations are reported
+in the Console. A Lua execution or result serialization error skips that
+script file. Switching projects or revoking trust closes project panels
+and clears their drawer bindings.
+
+## Lua Profiler
+
+Open **Lua Profiler** beside **Console** or from **Windows**, then enable
+**Capture Lua** before or during Play. The graph shows up to 120 samples.
+The latest sample shows Lua VM memory and the 512 behaviour rows with the
+most Lua time. Each row reports timings and counts for init, update, callback
+and chunk execution, plus bytes allocated or freed within those calls. Use
+**Select entity** to open its Live Details, or use the filename button to open
+the Lua source through the same launcher as the Console.
+
+Call times are wall-clock and exclude nested engine-dispatched Lua calls
+that have their own row. They include synchronous engine work invoked by Lua.
+The explicit GC figure is the measured time in Lua's collection and step
+requests and is part of the Lua total. Automatic collection inside Lua
+execution is included in call timings. VM memory covers all Lua allocations.
+The profiler clears samples on Stop, scene replacement or capture disable.
+The capture toggle stays armed across Play runs until disabled.
 
 ## Files and engine loading
 
@@ -251,4 +502,38 @@ Pause/Resume/Stop, and unchanged authored data. Screenshots include
 `gradlew.bat run --args=--context-menu-smoke` checks real right-click tree
 selection, cascading menus, child-camera creation, subtree duplication and
 component attachment/filtering. Menus use the editor colors, icons and UI scale;
-creation is disabled while scene gameplay is running or paused.
+creation is disabled while scene gameplay is running or paused. The context-menu
+smoke checks dialogs in the starting theme. The dedicated
+`--editor-appearance-smoke` checks them in both themes.
+
+## Create a Lua behavior
+
+With a project open, select an editable entity in Scene or Entity Template
+and choose **New Lua Behavior…** in Details. Choose a basic template or one
+with an exposed property, then enter an unused `.lua` path relative to the
+project's asset root. The default destination is `Scripts/Behavior.lua`.
+
+Add project templates by placing direct `.lua` files in `ScriptTemplates/`
+at the project root. `Basic.lua` and `ExposedProperty.lua` replace the matching
+built-ins. Other filenames appear as additional choices. The picker skips
+files larger than 1 MiB and links that resolve outside `ScriptTemplates/`.
+The editor copies the selected file byte for byte without running or parsing it.
+
+**Create and Attach** registers the source in Assets and adds a named
+behavior to the entity. Save the scene or template to keep the attachment.
+Undo detaches the behavior, leaving the Lua file and any IDE edits on disk.
+Redo reattaches the same file. Use **Open in IDE** on the attachment or in
+Assets to edit the source.
+
+## Behavior parameters
+
+Expand the Script component in the scene or entity template Inspector. Named
+behaviors with exposed properties show a field for each declaration. An edit
+saves an override for that attachment. **Reset** removes the override and
+restores the script default. Edits and resets participate in document undo and
+redo, and the overrides persist with the scene or template.
+
+The Inspector refreshes its fields when the script changes. A discovery error
+appears under the attachment and preserves its saved overrides. See
+[exposed behavior parameters](Scripting.md#exposed-behavior-parameters) for the
+Lua declaration and runtime API.

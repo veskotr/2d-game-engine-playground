@@ -101,6 +101,59 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     val canRedo get()=history.canRedo
     fun document() = SceneDocument(key,name,entities.map { it.document },parents,prefabInstances)
     fun serialize() = document().serialize()
+    fun validatePropertyCandidate(owner: EntityWorkspaceState, candidate: EntityDocument) {
+        require(entity(candidate.key) === owner) { "The scene entity is no longer available" }
+        val next = document().copy(entities = entities.map { if (it === owner) candidate else it.document })
+        linkedInstance(candidate.key)?.let { link -> link.copy(parent = next.parents[link.key]).capture(next) }
+        canonicalize(next.serialize())
+    }
+    fun applyLuaConsoleEdits(captured: SceneDocument, edits: JsonArray,
+        project: sle.editor.project.OpenedProject? = null) {
+        require(document() == captured && !gestureActive) { "Scene changed while Lua was running" }
+        require(edits.size <= 128) { "Too many console edits" }
+        val (assetEdits, sceneEdits) = edits.partition { it.jsonObject["op"] == JsonPrimitive("createAsset") }
+        val created = if (assetEdits.isEmpty()) null else sle.editor.console.ConsoleAssets(
+            requireNotNull(project) { "Open a project before creating an asset" }, assetEdits.map { it.jsonObject })
+        val next = sle.editor.console.applyConsoleEdits(captured, JsonArray(sceneEdits)) { type ->
+            requireNotNull(catalog[type]) { "Unknown component: $type" }.defaults
+        }
+        if (next == captured && created == null) return
+        val beforeByKey = captured.entities.associateBy { it.key }
+        val afterByKey = next.entities.associateBy { it.key }
+        val beforeKeys = beforeByKey.keys.toList()
+        val afterKeys = afterByKey.keys.toList()
+        for (entity in next.entities) {
+            val animator = entity.components["Animator"] as? JsonObject
+            val targets = animator?.get("targetEntities") as? JsonObject ?: continue
+            require(targets.values.all { value ->
+                val target = value as? JsonPrimitive ?: return@all false
+                if (target.isString) target.content in afterByKey
+                else target.intOrNull?.let { ordinal ->
+                    val key = afterKeys.getOrNull(ordinal - 1)
+                    key != null && key == beforeKeys.getOrNull(ordinal - 1)
+                } == true
+            }) { "Console edits would invalidate an Animator target" }
+        }
+        next.prefabInstances.forEach { it.copy(parent = next.parents[it.key]).capture(next) }
+        canonicalize(next.serialize())
+
+        val before = structure()
+        val selectionBefore = selection.snapshot()
+        val live = before.entities.associateBy { it.document.key }
+        val after = before.copy(entities = next.entities.map { entity ->
+            live[entity.key] ?: EntityWorkspaceState(catalog).apply { resetTo(entity, emptyMap()) }
+        }, parents = next.parents)
+        val modified = beforeByKey.keys.intersect(afterByKey.keys).filter { beforeByKey[it] != afterByKey[it] }
+        fun publish(target: Structure, documents: Map<String, EntityDocument>) {
+            modified.forEach { live.getValue(it).applyStructure(documents.getValue(it)) }
+            restore(target)
+        }
+        created?.create()
+        publish(after, afterByKey)
+        history.record(History.Entry("Run Lua", undoSelection = selectionBefore, redoSelection = selection.snapshot(),
+            undo = { created?.undo(); publish(before, beforeByKey) },
+            redo = { created?.create(); publish(after, afterByKey) }))
+    }
     fun allAssets() = extras + entities.flatMap { it.assets.entries }.associate { it.key to it.value }
     private fun structure() = Structure(entities,name,parents,entities.associate { it.document.key to it.document.components["Transform"] },entities.associate { it.document.key to (it.document.components["Camera2D"] as? JsonObject)?.get("primary") },links=prefabInstances)
     private fun requireReferences(states: List<EntityWorkspaceState>) {

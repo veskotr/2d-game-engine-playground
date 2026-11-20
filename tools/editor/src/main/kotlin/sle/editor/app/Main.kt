@@ -3,6 +3,11 @@ package sle.editor.app
 import sle.editor.workspace.*
 import sle.editor.viewport.ViewId
 import sle.editor.project.assets.LocalProjectAssets
+import sle.editor.scripts.LocalNewScriptBehavior
+import sle.editor.scripts.ScriptCreation
+import sle.editor.scripts.ScriptCreationDialog
+import sle.editor.scripts.LocalOpenScriptAttachment
+import sle.editor.scripts.ScriptSourceActions
 import sle.editor.project.assets.projectAssetControls
 import sle.editor.project.assets.AssetBrowserState
 import sle.editor.smoke.runAssetBrowserSmoke
@@ -65,7 +70,19 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.*
+import sle.editor.console.ConsoleSeverity
+import sle.editor.console.editorConsoleSnapshot
+import sle.editor.command.menuEntry
+import sle.editor.scripts.LocalProjectDrawers
+import sle.editor.scripts.ProjectLuaCommand
+import sle.editor.scripts.ProjectLuaPanelContent
+import sle.editor.scripts.rememberProjectLuaScripts
+import sle.editor.scripts.requireLuaSuccess
 import javax.swing.Timer
 import java.awt.Robot
 import java.awt.Rectangle
@@ -79,6 +96,8 @@ fun main(args: Array<String>) {
     if("--layout-persistence-phase" in args) System.setProperty("sle.workspaceData",java.nio.file.Path.of(args[2],"standalone").toString())
     if("--docking-workspace-smoke" in args) System.setProperty("sle.workspaceData",java.nio.file.Files.createTempDirectory("sle-docking-layout").toString())
     if ("--owner-failure-smoke" in args) { sle.editor.smoke.runMultiViewportSmoke(ownerFailure=true); return }
+    if ("--input-actions-smoke" in args) { sle.editor.smoke.runInputActionsSmoke(); return }
+    if ("--console-smoke" in args) { sle.editor.smoke.runConsoleSmoke(); return }
     if ("--multi-viewport-smoke" in args) { sle.editor.smoke.runMultiViewportSmoke(); return }
     if ("--docking-feasibility-smoke" in args) { sle.editor.smoke.runDockingFeasibilitySmoke("--docking-feasibility-gpu" in args); return }
     if ("--authoring-smoke" in args) { runAuthoringSmoke(); return }
@@ -147,6 +166,7 @@ private fun launchEditor(args: Array<String>) = application {
     SideEffect {
         val colors=sle.editor.ui.theme.editorColors(appearance.mode)
         workspace.engineSession.owner.editorSelectionColor=colors.selectionOutline
+        workspace.engineSession.owner.luaErrorColor=colors.error
         workspace.engineSession.owner.editorAxisColors=colors.viewportXAxis to colors.viewportYAxis
     }
     LaunchedEffect(appearance) { sle.editor.ui.theme.applyEditorSwingAppearance(appearance) }
@@ -177,6 +197,10 @@ private fun launchEditor(args: Array<String>) = application {
     DisposableEffect(engineSession) { onDispose { java.awt.EventQueue.invokeLater { workspace.close() } } }
     var saveActive by remember { mutableStateOf<(() -> Unit)?>(null) }
     var canvas by remember { mutableStateOf<EngineCanvas?>(null) }
+    val scriptEditorStore = remember { sle.editor.scripts.ScriptEditorSettingsStore() }
+    val scriptEditor = remember(scriptEditorStore) { sle.editor.scripts.ScriptEditor(scriptEditorStore) }
+    var scriptEditorSettings by remember { mutableStateOf<sle.editor.scripts.ScriptEditorSettings?>(null) }
+    var scriptEditorDialog by remember { mutableStateOf(false) }
     var snapDialog by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Preparing engine viewport…") }
 
@@ -506,7 +530,19 @@ private fun launchEditor(args: Array<String>) = application {
             val assets=rememberAssetBrowser(project.opened,window)
             SideEffect { if(assetSmoke || documentSmoke || runtimeSmoke || appearanceSmoke) observedAssets=assets }
             val recentDirectory=remember { if(testing) java.nio.file.Files.createTempDirectory("sle-smoke-recents") else null }
+            val projectScripts = rememberProjectLuaScripts(project.opened, project.activationRevision, recentDirectory) {
+                engineSession.owner.console.commandMessage(it, ConsoleSeverity.ERROR)
+            }
+            val currentScripts by rememberUpdatedState(projectScripts)
+            val scripts = projectScripts.commands
+            val scriptPanels = projectScripts.declarations.panels
+            val openScriptPanels = remember(projectScripts) { mutableStateListOf<String>() }
+            val scriptWindows = remember(projectScripts) { mutableMapOf<String, java.awt.Window>() }
+            LaunchedEffect(projectScripts.trusted) {
+                if (projectScripts.trusted != true) openScriptPanels.clear()
+            }
             val commands=projectControls(project,
+                scriptTrust=projectScripts.trusted,scriptTrustBusy=projectScripts.checkingTrust,setScriptTrust={ projectScripts.setTrust(it) },
                 recentDirectory=recentDirectory,
                 confirmSwitch={confirmDiscard(authoring.getOrNull()) && confirmDiscardScene(scene.getOrNull())},
                 resetWorkspace={
@@ -527,28 +563,148 @@ private fun launchEditor(args: Array<String>) = application {
                 })
             SideEffect { if(documentSmoke || projectSmoke) observedDocumentCommands=documents }
             val notices=workspace.notices
+            val scriptSources = remember(project.activationRevision, project.opened?.document?.assetRoot) {
+                ScriptSourceActions(project, scriptEditor)
+            }
+            fun openScriptSource(open: () -> Process) {
+                runCatching(open).onFailure { notices.warning(it.message ?: "Could not open Lua source.") }
+            }
+            val openLuaSource: (sle.editor.console.LuaSource) -> Unit = { source ->
+                openScriptSource { scriptEditor.open(source.path, source.line) }
+            }
             val distribution=sle.editor.project.projectDistributionControls(project,notices)
             val runProject=sle.editor.project.projectRunAction(project,scenePlayback) { canvas?.finishGesture();editingSceneKey=null;showScene(true) }
+            SideEffect {
+                val opened = project.opened
+                engineSession.owner.setEditorAssetRoot(opened?.let { it.root.resolve(it.document.assetRoot) },
+                    opened?.document?.settings ?: sle.editor.project.ProjectSettings())
+            }
             val assetCommands=projectAssetControls(project,assets,window,canMutate={
                 scenePlayback.editing && scene.getOrNull()?.let { it.file==null && !it.dirty && it.entities.isEmpty() && it.allAssets().isEmpty() }!=false &&
                     authoring.getOrNull()?.let { it.file==null && !it.dirty && it.assets.isEmpty() }!=false
-            })
+            },onTextureFilterChanged=engineSession.owner::refreshPreview,
+                openDocument={ documents?.openPath?.invoke(it) },
+                openProjectSettings=commands.settings)
             SideEffect { if(assetSmoke) observedAssetCommands=assetCommands }
-            CompositionLocalProvider(LocalProjectAssets provides assetCommands,sle.editor.ui.LocalEditorNotices provides notices) {
+            val creationScope = rememberCoroutineScope()
+            val currentScriptTarget by rememberUpdatedState(inspector)
+            val currentScriptAssets by rememberUpdatedState(assets)
+            var scriptCreation by remember { mutableStateOf<ScriptCreation?>(null) }
+            var creatingScript by remember { mutableStateOf(false) }
+            var scriptCreationError by remember { mutableStateOf<String?>(null) }
+            val newScriptBehavior: ((EntityWorkspaceState) -> Unit)? =
+                if (project.opened == null || project.busy || !scenePlayback.editing) null
+                else { target ->
+                    if (currentScriptTarget === target) {
+                        target.endGesture()
+                        scriptCreationError = null
+                        scriptCreation = ScriptCreation(project, target) {
+                            currentScriptTarget === target && scenePlayback.editing && !project.busy
+                        }
+                    }
+                }
+            CompositionLocalProvider(
+                LocalNewScriptBehavior provides newScriptBehavior,
+                LocalProjectAssets provides assetCommands,
+                sle.editor.ui.LocalEditorNotices provides notices,
+                LocalOpenScriptAttachment provides { reference ->
+                    openScriptSource { scriptSources.openAttachment(reference) }
+                },
+            ) {
             val editorMenuHandler=editorMenuLauncher {
                 if(mode==ViewportMode.Scene) scene.getOrNull()?.let { sceneCreationMenu(it,scenePlayback.editing,onEditEntity={ key -> editSceneEntity(key) },position=engineSession.owner.contextPosition) } ?: emptyList()
                 else activeEntity?.let { entityCreationMenu(it,linkedEntity!=null,assetCommands) } ?: emptyList()
             }
             // One command context for menus, toolbar actions and the keyboard dispatcher.
+            val consoleScope = rememberCoroutineScope()
+            val activeScene = scene.getOrNull()
+            val currentAssets by rememberUpdatedState(assets)
+            val enabledScripts by sle.editor.scripts.rememberEnabledProjectLuaCommands(
+                scripts, activeScene, selectedTab == 2 && scenePlayback.editing && !project.busy,
+                project.opened, project.activationRevision, assets?.snapshot,
+            ) { engineSession.owner.console.commandMessage(it, ConsoleSeverity.ERROR) }
+            val currentEnabledScripts by rememberUpdatedState(enabledScripts)
+            fun projectLuaAvailable(script: ProjectLuaCommand): Boolean =
+                currentScripts.generation == project.activationRevision && currentScripts.trusted == true &&
+                    currentScripts.commands.any { it.script === script } &&
+                    selectedTab == 2 && scenePlayback.editing && !project.busy
+
+            fun submitLua(source: String, script: ProjectLuaCommand? = null) {
+                val owner = workspace.engineSession.owner
+                val console = owner.console
+                if (console.commandRunning || (script != null && !projectLuaAvailable(script))) return
+                if (!scenePlayback.editing) {
+                    try { owner.queuePlayLua(source) }
+                    catch (failure: Exception) {
+                        console.commandMessage(failure.message ?: "Play Lua command failed", ConsoleSeverity.ERROR)
+                    }
+                    return
+                }
+                val state = scene.getOrNull() ?: return
+                canvas?.finishGesture()
+                state.selected?.endGesture()
+                val captured = state.document()
+                val revision = state.history.revision
+                val generation = project.activationRevision
+                val openedProject = project.opened
+                val selection = state.selection.keys.toList()
+                val assetSnapshot = currentAssets?.snapshot
+                val playRevision = scenePlayback.playRevision
+                console.commandRunning = true
+                consoleScope.launch {
+                    try {
+                        val response = withContext(Dispatchers.Default) {
+                            val snapshot = editorConsoleSnapshot(captured, selection, revision, generation,
+                                openedProject, assetSnapshot).toString().encodeToByteArray()
+                            script?.evaluate("run", snapshot) ?: Json.parseToJsonElement(
+                                sle.editor.bridge.NativeEngine.runEditorLua(source.encodeToByteArray(), snapshot)
+                                    .decodeToString()).jsonObject
+                        }
+                        response.getValue("output").jsonPrimitive.content.takeIf { it.isNotEmpty() }
+                            ?.let { console.commandMessage(it.trimEnd('\n')) }
+                        response.requireLuaSuccess()
+                        val edits = response.getValue("edits").jsonArray
+                        if (edits.isNotEmpty()) {
+                            require(scene.getOrNull() === state && selectedTab == 2 && scenePlayback.editing &&
+                                project.activationRevision == generation && project.opened === openedProject &&
+                                state.history.revision == revision) { "Scene or project changed while Lua was running" }
+                            if (script != null) {
+                                require(projectLuaAvailable(script) && scenePlayback.playRevision == playRevision &&
+                                    state.selection.keys.toList() == selection && currentAssets?.snapshot == assetSnapshot) {
+                                    "Scene selection, assets, playback or script trust changed while Lua was running"
+                                }
+                            }
+                            state.applyLuaConsoleEdits(captured, edits, openedProject)
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (failure: Exception) {
+                        val diagnostic = failure.message ?: "Lua command failed"
+                        console.commandMessage(script?.let { "${it.filename} (${it.id}) — $diagnostic" } ?: diagnostic,
+                            ConsoleSeverity.ERROR)
+                    } finally {
+                        console.commandRunning = false
+                    }
+                }
+            }
             val showSceneView: (Boolean)->Unit=::showScene
             val editorActions=remember { object: sle.editor.command.EditorActions {
                 var projectCommands: ProjectCommands?=null
                 var run: ()->Unit={}
+                var keymap = sle.editor.command.standardKeymap
+                var luaEnabled: (ProjectLuaCommand) -> Boolean = { false }
+                var runLua: (ProjectLuaCommand) -> Unit = {}
+                override fun projectLuaEnabled(script: ProjectLuaCommand) = luaEnabled(script)
+                override fun runProjectLua(script: ProjectLuaCommand) = runLua(script)
                 override val project get()=projectCommands
                 override fun showScene(game: Boolean)=showSceneView(game)
                 override fun openPrefabWorkspace() { editingSceneKey=null;switchTab(0) }
                 override fun editEntity(key: String)=editSceneEntity(key)
                 override fun showPanel(panel: PanelId)=manager.showPanel(panel)
+                override fun showLuaConsole() {
+                    manager.showPanel(PanelId("console"))
+                    workspace.engineSession.owner.console.focusCommand()
+                }
                 override fun finishGesture() { canvas?.finishGesture() }
                 override fun fit() { canvas?.fitEntity() }
                 override fun frameSelected() {
@@ -559,16 +715,44 @@ private fun launchEditor(args: Array<String>) = application {
                 }
                 override fun configureSnap() { snapDialog=true }
                 override fun runProject()=run()
-                override fun showKeyboardShortcuts()=sle.editor.ui.showKeyboardShortcuts()
+                override fun showKeyboardShortcuts()=sle.editor.ui.showKeyboardShortcuts(keymap)
             } }
-            SideEffect { editorActions.projectCommands=commands;editorActions.run=runProject }
-            val commandContext={ sle.editor.command.CommandContext(
-                mode=mode,linked=linkedEntity!=null,scene=scene.getOrNull(),entity=inspector,prefab=authoring.getOrNull(),
-                playback=scenePlayback,editable=scenePlayback.editing,projectOpen=project.opened!=null,projectBusy=project.busy,
-                viewportFailed=failed,
-                gameRunning=(mode==ViewportMode.Scene && scenePlayback.playback!=Playback.Stopped) || (mode==ViewportMode.Sandbox && playback!=Playback.Stopped),
-                tools=workspace.tools,snap=workspace.snap,actions=editorActions) }
-            sle.editor.ui.EditorShortcuts(manager,sle.editor.command.standardKeymap,commandContext)
+            val keymap = remember(scripts) {
+                if (scripts.isEmpty()) sle.editor.command.standardKeymap
+                else sle.editor.command.Keymap(sle.editor.command.CommandRegistry(
+                    sle.editor.command.standardCommands.commands + scripts.map { it.command }))
+            }
+            SideEffect {
+                editorActions.projectCommands=commands
+                editorActions.run=runProject
+                editorActions.keymap=keymap
+                editorActions.luaEnabled = { script ->
+                    projectLuaAvailable(script) && !engineSession.owner.console.commandRunning &&
+                        (!script.hasPredicate || script in currentEnabledScripts)
+                }
+                editorActions.runLua = { submitLua("", it) }
+            }
+            val commandContext = {
+                val currentMode = when (selectedTab) { 0 -> ViewportMode.Entity; 1 -> ViewportMode.Sandbox; else -> ViewportMode.Scene }
+                val currentScene = scene.getOrNull()
+                val currentPrefab = authoring.getOrNull()
+                val currentLinked = editingSceneKey?.let { currentScene?.entity(it) }
+                sle.editor.command.CommandContext(
+                    mode=currentMode,linked=currentLinked!=null,scene=currentScene,prefab=currentPrefab,
+                    entity=if(currentMode==ViewportMode.Scene) currentScene?.selected else currentLinked ?: currentPrefab,
+                    playback=scenePlayback,editable=scenePlayback.editing,projectOpen=project.opened!=null,
+                    projectBusy=project.busy,viewportFailed=failed,
+                    gameRunning=(currentMode==ViewportMode.Scene && scenePlayback.playback!=Playback.Stopped) ||
+                        (currentMode==ViewportMode.Sandbox && playback!=Playback.Stopped),
+                    gameActionKeys=if (currentMode==ViewportMode.Scene) engineSession.owner.activeActionKeys else emptySet(),
+                    tools=workspace.tools,snap=workspace.snap,actions=editorActions,
+                    modalOpen=sle.editor.ui.editorDialogOpen(),projectGeneration=project.activationRevision,
+                    resolveDetailsAsset=project.opened?.let { opened ->
+                        { text -> sle.editor.project.ProjectDocuments(opened).resolvePropertyAsset(text) }
+                    },
+                )
+            }
+            sle.editor.ui.EditorShortcuts(manager,keymap,commandContext)
             // Every delete path records through the scene; the notice offers the registered Undo.
             val liveCommandContext by rememberUpdatedState(commandContext)
             SideEffect { scene.getOrNull()?.let { state -> state.onDeleted={ subject -> sle.editor.ui.reportDeletion(notices,state,subject) { liveCommandContext() } } } }
@@ -634,7 +818,9 @@ private fun launchEditor(args: Array<String>) = application {
                                     }
                                 }
                 engineSession.setProject(desiredProject)
-                engineSession.setContent(mode,desiredSource,desiredPlayback)
+                engineSession.owner.consumeSceneStep=scenePlayback::consumeStep
+                engineSession.owner.onLuaErrorPause=scenePlayback::pause
+                engineSession.setContent(mode, desiredSource, desiredPlayback, scenePlayback.keepChangesRevision)
                 engineSession.setScene(if(mode==ViewportMode.Scene || linkedEntity!=null) scene.getOrNull() else null)
                 engineSession.setAuthoring(inspector)
                 engineSession.setSceneView(desiredGame) { message -> scenePlayback.stop();scene.getOrNull()?.error=message }
@@ -666,6 +852,8 @@ private fun launchEditor(args: Array<String>) = application {
                                 modifier=Modifier.onGloballyPositioned { if(documentSmoke || runtimeSmoke) assetBounds["RunProject"]=it.boundsInWindow() })
                             if(mode==ViewportMode.Scene) SceneViewControls(scenePlayback,!failed,onPlay={
                                 sle.editor.command.PlayCommands.play.run(commandContext())
+                            },onStep={
+                                sle.editor.command.PlayCommands.step.run(commandContext())
                             },onStop={scenePlayback.stop()})
                             if(mode==ViewportMode.Sandbox) SandboxControls(playback,!failed) { playback=it }
                             if(!game) Row(horizontalArrangement=Arrangement.spacedBy(m.borderWidth)) {
@@ -717,7 +905,8 @@ private fun launchEditor(args: Array<String>) = application {
             }
             Surface(Modifier.fillMaxSize(),color=sle.editor.ui.theme.LocalEditorColors.current.background) {
                 Column {
-                    val applicationMenus=editorApplicationMenus(commandContext(),onScale={uiScale=it},
+                    val context = commandContext()
+                    val baseMenus=editorApplicationMenus(context,onScale={uiScale=it},keymap=keymap,
                         onTheme={ workspace.appearance.update(appearance.copy(mode=it)) },
                         onDensity={ workspace.appearance.update(appearance.copy(density=it)) },
                         onExit={if(manager.requestExit { !project.busy && confirmDiscard(authoring.getOrNull()) && confirmDiscardScene(scene.getOrNull()) && workspace.saveProjectEditorState() }) exitApplication()},
@@ -725,23 +914,59 @@ private fun launchEditor(args: Array<String>) = application {
                             sle.editor.ui.EditorMenuEntry("Export Game…",project.opened!=null && !project.busy,action=distribution.exportGame)),
                         projectAssets=assetCommands,projectDocuments=documents,
                         assetEntries=assetBrowserMenu(assets,assetBrowserVisible) { if(assetBrowserVisible) manager.hidePanel(PanelId("assets")) else manager.showPanel(PanelId("assets")) },
-                    ) + windowsMenu(manager) { workspace.prefabSession }
+                    ) + windowsMenu(manager) { workspace.prefabSession }.let { (label, entries) ->
+                        label to (entries + scriptPanels.map { panel ->
+                            sle.editor.ui.EditorMenuEntry(panel.label) {
+                                if (currentScripts === projectScripts && currentScripts.trusted == true) {
+                                    val existing = scriptWindows[panel.id]
+                                    if (existing != null) existing.toFront()
+                                    else if (panel.id !in openScriptPanels) openScriptPanels.add(panel.id)
+                                }
+                            }
+                        })
+                    }
+                    val scriptMenus = scripts.groupBy { it.script.menu }.mapValues { (_, entries) ->
+                        entries.map { it.command.menuEntry(context, keymap, liveContext = { liveCommandContext() }) }
+                    }
+                    val applicationMenus = baseMenus.map { (label, entries) ->
+                        label to (entries + scriptMenus[label]?.let { listOf(sle.editor.ui.EditorMenuEntry.Separator) + it }.orEmpty())
+                    } + scriptMenus.filterKeys { label -> baseMenus.none { it.first == label } }.toList()
                     SideEffect { saveActive=applicationMenus.first { it.first=="File" }.second.first { it.label=="Save" }.action }
                     EditorMenuStrip(applicationMenus,window=window,onMenuBounds={label,bounds -> if(menuSmoke || walkSmoke) shellBounds[label]=bounds},title=(if(project.busy) "Project busy… — " else project.opened?.let { "${it.document.name} — " } ?: "")+
                         if(mode==ViewportMode.Entity) (activeEntity?.document?.name ?: "Entity Template")+(if(activeEntity?.dirty==true) " *" else "")
                         else (scene.getOrNull()?.name ?: "Scene")+(if(scene.getOrNull()?.dirty==true) " *" else ""))
                     val panels=WorkspacePanels(mapOf(
-                        PanelId("hierarchy") to { Box(Modifier.fillMaxSize().assetDropTarget { path,_ -> dropAsset(path,null) }) {
-                            if(mode==ViewportMode.Scene) scene.getOrNull()?.let { state ->
-                                SceneWorkspace(state,onEditEntity={editSceneEntity(it)},onEntityBounds={key,bounds -> if(sceneSmoke || menuSmoke || documentSmoke || walkSmoke) treeNodeBounds[key]=bounds},editable=scenePlayback.editing)
-                            } else if(linkedEntity!=null) SceneTree(scene.getOrThrow(),Modifier.fillMaxSize(),onEditEntity={editSceneEntity(it)})
-                            else activeEntity?.let { EntityOutline(it,Modifier.fillMaxSize()) }
-                        } },
+                        PanelId("hierarchy") to {
+                            if (mode == ViewportMode.Scene && !scenePlayback.editing) {
+                                sle.editor.ui.LiveHierarchy(engineSession.owner.liveInspection, engineSession.owner::selectLiveEntity)
+                            } else Box(Modifier.fillMaxSize().assetDropTarget { path,_ -> dropAsset(path,null) }) {
+                                if(mode==ViewportMode.Scene) scene.getOrNull()?.let { state ->
+                                    SceneWorkspace(state,onEditEntity={editSceneEntity(it)},onEntityBounds={key,bounds -> if(sceneSmoke || menuSmoke || documentSmoke || walkSmoke) treeNodeBounds[key]=bounds},editable=scenePlayback.editing)
+                                } else if(linkedEntity!=null) SceneTree(scene.getOrThrow(),Modifier.fillMaxSize(),onEditEntity={editSceneEntity(it)})
+                                else activeEntity?.let { EntityOutline(it,Modifier.fillMaxSize()) }
+                            }
+                        },
                         PanelId("inspector") to {
-                            if(mode==ViewportMode.Scene) scene.getOrNull()?.let { SceneEntityInspector(it,editable=scenePlayback.editing,onNameBounds={ bounds -> if(menuSmoke) shellBounds["SceneNameField"]=bounds }) }
-                            else Column(Modifier.fillMaxSize()) {
-                                activeEntity?.let { state ->
-                                    Box(Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { if(menuSmoke) entityMenuBounds[0]=it.boundsInWindow() }) { EntityWorkspace(state,embedded=linkedEntity!=null) }
+                            if (mode == ViewportMode.Scene && !scenePlayback.editing) {
+                                val owner = engineSession.owner
+                                val authored = scene.getOrNull()
+                                val preview = authored?.let { scenePlayback.previewKeepChanges(it, owner.liveInspection) }
+                                sle.editor.ui.LiveDetails(owner.liveInspection, authoring.getOrNull()?.catalog.orEmpty(), preview, owner::reloadLiveScript) { shown ->
+                                    scenePlayback.keepChanges(checkNotNull(scene.getOrNull()), owner.readPausedPlaySelection(), shown)
+                                }
+                            } else CompositionLocalProvider(
+                                LocalProjectDrawers provides projectScripts.declarations.drawers,
+                                sle.editor.ui.inspector.LocalDetailsContext provides { liveCommandContext() },
+                                sle.editor.ui.inspector.LocalSortingLayers provides
+                                    project.opened?.document?.settings?.sortingLayers.orEmpty(),
+                                sle.editor.ui.inspector.LocalCollisionLayers provides
+                                    (project.opened?.document?.settings?.collisionLayers ?: sle.editor.project.CollisionLayers()),
+                            ) {
+                                if(mode==ViewportMode.Scene) scene.getOrNull()?.let { SceneEntityInspector(it,editable=scenePlayback.editing,tags=project.opened?.document?.settings?.tags.orEmpty(),onNameBounds={ bounds -> if(menuSmoke) shellBounds["SceneNameField"]=bounds }) }
+                                else Column(Modifier.fillMaxSize()) {
+                                    activeEntity?.let { state ->
+                                        Box(Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { if(menuSmoke) entityMenuBounds[0]=it.boundsInWindow() }) { EntityWorkspace(state,embedded=linkedEntity!=null,tags=project.opened?.document?.settings?.tags.orEmpty()) }
+                                    }
                                 }
                             }
                         },
@@ -749,9 +974,29 @@ private fun launchEditor(args: Array<String>) = application {
                             if(assets==null) EditorEmptyState("No project open","Open or create a project to browse its assets.",brand=true)
                             else AssetBrowserPanel(assets,project.opened?.document?.assetRoot ?: "Assets",Modifier.fillMaxSize(),commands=assetCommands,onOpen={ relative -> project.opened?.let { documents?.openPath?.invoke(it.root.resolve(it.document.assetRoot).resolve(relative)) } },
                                 dragPath={ relative -> project.opened?.let { it.root.resolve(it.document.assetRoot).resolve(relative) } },onBounds={id,bounds -> if(assetSmoke || documentSmoke || runtimeSmoke) assetBounds[id]=bounds},
+                                onOpenScript={ relative, id -> openScriptSource { scriptSources.openAsset(relative, id) } },
                                 entityDrop=if(scene.getOrNull()?.projectCreatePrefab==null) null else { relative,payload ->
                                     project.opened?.let { dropEntity(it.root.resolve(it.document.assetRoot).resolve(relative),payload) }
                                 })
+                        },
+                        PanelId("console") to {
+                            val consoleOwner = workspace.engineSession.owner
+                            sle.editor.console.ConsolePanel(consoleOwner.console, consoleOwner::clearConsole,
+                                canRun = selectedTab == 2 && scene.getOrNull() != null && !project.busy,
+                                submit = { submitLua(it) }, onOpenSource = openLuaSource, onConfigureEditor = {
+                                    scriptEditorSettings = runCatching { scriptEditorStore.load() }
+                                        .onFailure { notices.warning(it.message ?: "Could not read script editor settings.") }
+                                        .getOrNull()
+                                    scriptEditorDialog = true
+                                })
+                        },
+                        PanelId("luaProfiler") to {
+                            val owner = workspace.engineSession.owner
+                            sle.editor.profiler.LuaProfilerPanel(owner.luaProfiler, owner.liveInspection,
+                                onEntity = {
+                                    owner.selectLiveEntity(it)
+                                    manager.showPanel(PanelId("inspector"))
+                                }, onOpenSource = openLuaSource)
                         },
                         PanelId("scene") to { viewportPanel(false,false) },
                         PanelId("game") to { viewportPanel(true,false) },
@@ -766,16 +1011,74 @@ private fun launchEditor(args: Array<String>) = application {
                             mode==ViewportMode.Entity -> "Entity template workspace: drag a handle to edit a shape; Esc cancels the drag"
                             mode==ViewportMode.Sandbox -> "Sandbox: the game view receives keys while it has focus"
                             scenePlayback.editing && scenePlayback.gameView -> "Game view: "+sle.editor.command.standardKeymap.hint(sle.editor.command.PlayCommands.play.id,"play")+" to run the scene"
+                            scenePlayback.playback==Playback.Paused && engineSession.owner.luaPauseMessage!=null ->
+                                "Paused on Lua error • ${engineSession.owner.luaPauseMessage}"
                             !scenePlayback.editing -> "Play mode: scene edits are disabled; "+sle.editor.command.standardKeymap.hint(sle.editor.command.PlayCommands.stop.id,"stop")+" to edit"
                             else -> workspace.tools.gestureHint ?: sle.editor.viewport.tools.toolHint(workspace.tools.active,
                                 sle.editor.viewport.tools.ToolHintContext(workspace.snap.settings,sceneState?.selection?.size ?: 0,workspace.tools.pivot))
                         },
-                        progress=if(distribution.exporting) "Exporting game�" else if(project.busy) "Working�" else null,
+                        progress=if(distribution.exporting) "Exporting game…" else if(project.busy) "Working…" else null,
                         selectionCount=if(mode==ViewportMode.Scene) sceneState?.selection?.size ?: 0 else 0,
                         playState=when(desiredPlayback) { Playback.Running -> "Playing"; Playback.Paused -> "Paused"; else -> if(mode==ViewportMode.Scene) "Editing" else null },
                         dirty=if(mode==ViewportMode.Entity) activeEntity?.dirty==true else sceneState?.dirty==true,
                     ),Modifier.onGloballyPositioned { if(appearanceSmoke || menuSmoke || dockingSmoke || walkSmoke) shellBounds["StatusBar"]=it.boundsInWindow() })
+                    scriptCreation?.let { request ->
+                        ScriptCreationDialog(request, creatingScript, scriptCreationError, onDismiss = { scriptCreation = null }) { destination, template ->
+                            if (!creatingScript) {
+                                creatingScript = true
+                                scriptCreationError = null
+                                creationScope.launch {
+                                    try {
+                                        request.requireCurrent()
+                                        val source = withContext(Dispatchers.IO) { request.create(destination, template) }
+                                        runCatching { request.attach(source) }.onFailure {
+                                            notices.warning("Created ${source} without an attachment. ${it.message.orEmpty()}")
+                                        }
+                                        scriptCreation = null
+                                    } catch (failure: CancellationException) {
+                                        throw failure
+                                    } catch (failure: Exception) {
+                                        scriptCreationError = failure.message ?: "Could not create the Lua file."
+                                    } finally {
+                                        currentScriptAssets?.refresh()
+                                        creatingScript = false
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (scriptEditorDialog) sle.editor.scripts.ScriptEditorSettingsDialog(
+                        scriptEditorSettings, onDismiss = { scriptEditorDialog = false },
+                        onSave = {
+                            scriptEditorStore.save(it)
+                            scriptEditorDialog = false
+                        },
+                        onReset = {
+                            runCatching { scriptEditorStore.reset() }
+                                .onSuccess { scriptEditorDialog = false }
+                                .onFailure { notices.warning(it.message ?: "Could not reset script editor settings.") }
+                        },
+                        onFailure = { notices.warning(it) },
+                    )
                     if(snapDialog) sle.editor.ui.SnapSettingsDialog(workspace.snap.settings,onDismiss={ snapDialog=false }) { workspace.snap.update(it);snapDialog=false }
+                    scriptPanels.filter { it.id in openScriptPanels }.forEach { panel ->
+                        key(projectScripts, panel.id) {
+                            Window(
+                                icon = appIcon,
+                                title = panel.label,
+                                onCloseRequest = { openScriptPanels.remove(panel.id) },
+                                state = rememberWindowState(width = 360.dp, height = 260.dp),
+                            ) {
+                                DisposableEffect(window) {
+                                    scriptWindows[panel.id] = window
+                                    onDispose { scriptWindows.remove(panel.id) }
+                                }
+                                EditorTheme(appearance) {
+                                    ProjectLuaPanelContent(panel, commandContext()) { liveCommandContext() }
+                                }
+                            }
+                        }
+                    }
                     manager.layout.hosts.filter { it.id!=manager.layout.mainHost }.forEach { host ->
                         key(host.id) {
                             Window(icon=appIcon,visible=!manager.loading,onCloseRequest={manager.closeHost(host.id)},title="SLE — "+host.root?.let { root -> root.tabs().flatMap { it.panels }.joinToString(" / ") { manager.registry.byId.getValue(it).title } },

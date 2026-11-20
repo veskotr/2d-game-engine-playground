@@ -13,7 +13,7 @@ using Json = nlohmann::json;
 // Shared, VM-independent component codecs. Runtime mutation hooks stay in Runtime.
 struct Descriptor
 {
-    std::function<Json(entity::Registry&, entity::Entity)> get;
+    std::function<Json(const entity::Registry&, entity::Entity)> get;
     std::function<Json(entity::Registry&, entity::Entity, const Json&)> validate;
     std::function<void(entity::Registry&, entity::Entity, const Json&)> set;
     std::function<void(entity::Registry&, entity::Entity)> remove;

@@ -28,6 +28,7 @@ public:
     // Optional authored identity, independent of registry-local runtime IDs.
     // A nonempty key belongs to one live entity in this scene. Renaming is atomic.
     bool setEntityKey(Entity entity, const std::string& key);
+    const std::unordered_map<uint32_t, std::string>& getEntityKeys() const { return entityKeys; }
     Entity findEntityByKey(const std::string& key) const;
 
     // Hierarchy

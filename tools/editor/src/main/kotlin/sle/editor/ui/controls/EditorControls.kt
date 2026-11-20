@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.input.TextFieldValue
@@ -269,7 +270,9 @@ internal fun EditorTextField(value: TextFieldValue, onValueChange: (TextFieldVal
     modifier: Modifier = Modifier, enabled: Boolean = true, readOnly: Boolean = false,
     invalid: Boolean = false, help: String? = null, placeholder: String = "",
     numeric: Boolean = false, onFocusChange: (Boolean) -> Unit = {},
-    onCommit: () -> Unit = {}, onCancel: () -> Unit = {}, singleLine: Boolean = true) {
+    onCommit: () -> Unit = {}, onCancel: () -> Unit = {}, singleLine: Boolean = true,
+    onEditKey: (KeyEvent) -> Boolean = { false },
+    focusRequester: androidx.compose.ui.focus.FocusRequester? = null) {
     val c=LocalEditorColors.current
     val m=LocalEditorMetrics.current
     val t=LocalEditorTypography.current
@@ -282,10 +285,13 @@ internal fun EditorTextField(value: TextFieldValue, onValueChange: (TextFieldVal
     val textFocus=remember { Any() }
     DisposableEffect(textFocus) { onDispose { sle.editor.workspace.TextInputFocus.report(textFocus,false) } }
     EditorTooltip(help,modifier) {
-        BasicTextField(value,onValueChange,Modifier.fillMaxWidth()
+        BasicTextField(value,onValueChange,Modifier.fillMaxWidth().then(
+            if (focusRequester == null) Modifier else Modifier.focusRequester(focusRequester))
             .onFocusChanged { sle.editor.workspace.TextInputFocus.report(textFocus,it.isFocused);onFocusChange(it.isFocused) }
             .onPreviewKeyEvent {
-                if(it.type!=KeyEventType.KeyDown || !enabled || readOnly) false
+                if (!enabled || readOnly) false
+                else if (onEditKey(it)) true
+                else if (it.type != KeyEventType.KeyDown) false
                 else when(it.key) { Key.Enter -> {if(singleLine) {onCommit();true} else false};Key.Escape -> {onCancel();true};else -> false }
             }
             .semantics { contentDescription=label;if(invalid) error("Enter a valid value") }
@@ -308,16 +314,72 @@ internal fun EditorTextField(value: TextFieldValue, onValueChange: (TextFieldVal
 /** No transaction cleanup on disposal: the entity owner survives dock/window recreation. */
 @Composable
 internal fun EditorNumberField(edit: NumberEdit, label: String, modifier: Modifier = Modifier,
-    enabled: Boolean = true, readOnly: Boolean = false, help: String? = null) {
+    enabled: Boolean = true, readOnly: Boolean = false, help: String? = null,
+    presentation: NumberPresentation? = null, authoredValue: Double = 0.0) {
     var field by remember(edit) { mutableStateOf(TextFieldValue(edit.text)) }
     if(field.text!=edit.text) field=field.copy(text=edit.text,selection=androidx.compose.ui.text.TextRange(edit.text.length))
     var hadFocus by remember(edit) { mutableStateOf(false) }
+    var stepKey by remember(edit) { mutableStateOf<Key?>(null) }
     EditorTextField(field,{field=it;edit.updateText(it.text,enabled && !readOnly)},label,modifier,enabled,readOnly,edit.invalid,help,numeric=true,
         onFocusChange={focused ->
             if(enabled && !readOnly && focused!=hadFocus) {if(focused) edit.focus() else edit.blur()}
+            if (!focused) stepKey = null
             hadFocus=focused
         },
-        onCommit={edit.commit()},onCancel={edit.cancel()})
+        onCommit={edit.commit()},onCancel={ edit.cancel() },
+        onEditKey = { event ->
+            when {
+                event.type == KeyEventType.KeyUp && event.key == stepKey -> {
+                    stepKey = null
+                    edit.commit()
+                    true
+                }
+                presentation?.canStep == true && event.isAltPressed && event.type == KeyEventType.KeyDown &&
+                    (event.key == Key.DirectionUp || event.key == Key.DirectionDown) -> {
+                    val continuing = stepKey != null
+                    if (!continuing || edit.active) {
+                        val direction = if (event.key == Key.DirectionUp) 1 else -1
+                        presentation.stepText(edit.text, direction)?.let { generated ->
+                            if (!continuing) edit.blur()
+                            stepKey = event.key
+                            edit.updateText(generated, true)
+                        }
+                    }
+                    true
+                }
+                else -> false
+            }
+        })
+    if (presentation?.hasSlider == true) {
+        var sliderEditing by remember(edit) { mutableStateOf(false) }
+        Text(presentation.sliderLabel(authoredValue), style = LocalEditorTypography.current.secondary)
+        Slider(
+            value = presentation.sliderPosition(authoredValue),
+            onValueChange = { position ->
+                if (enabled && !readOnly && (!sliderEditing || edit.active)) {
+                    presentation.sliderText(position)?.let { generated ->
+                        if (generated.toDouble() != edit.text.toDoubleOrNull() || edit.invalid) {
+                            if (!sliderEditing) edit.blur()
+                            sliderEditing = true
+                            edit.updateText(generated, true)
+                        }
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "$label slider" }
+                .onPreviewKeyEvent {
+                    if (enabled && !readOnly && it.type == KeyEventType.KeyDown && it.key == Key.Escape) {
+                        edit.cancel()
+                        true
+                    } else false
+                },
+            enabled = enabled && !readOnly,
+            onValueChangeFinished = {
+                if (sliderEditing && enabled && !readOnly) edit.commit()
+                sliderEditing = false
+            },
+        )
+    }
 }
 
 /**
@@ -327,16 +389,17 @@ internal fun EditorNumberField(edit: NumberEdit, label: String, modifier: Modifi
  */
 @Composable
 internal fun EditorPropertyRow(label: String, modifier: Modifier = Modifier, help: String? = null,
+    labelModifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit) {
     val m=LocalEditorMetrics.current
     val labelStyle=LocalEditorTypography.current.body
     val labelColor=LocalEditorColors.current.textSecondary
     BoxWithConstraints(modifier.fillMaxWidth()) {
         if(maxWidth<m.propertyStackThreshold) Column(verticalArrangement=Arrangement.spacedBy(m.gap/2)) {
-            EditorTooltip(help ?: label) { Text(label,color=labelColor,style=labelStyle,maxLines=1,overflow=TextOverflow.Ellipsis) }
+            EditorTooltip(help ?: label,labelModifier) { Text(label,color=labelColor,style=labelStyle,maxLines=1,overflow=TextOverflow.Ellipsis) }
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(m.gap),verticalAlignment=Alignment.CenterVertically,content=content)
         } else Row(Modifier.fillMaxWidth().heightIn(min=m.propertyRow),verticalAlignment=Alignment.CenterVertically) {
-            EditorTooltip(help ?: label,Modifier.width(this@BoxWithConstraints.maxWidth*m.propertyLabelFraction)) {
+            EditorTooltip(help ?: label,labelModifier.width(this@BoxWithConstraints.maxWidth*m.propertyLabelFraction)) {
                 Text(label,Modifier.padding(end=m.panelPadding),color=labelColor,style=labelStyle,maxLines=1,overflow=TextOverflow.Ellipsis)
             }
             Row(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(m.gap),verticalAlignment=Alignment.CenterVertically,content=content)
@@ -443,14 +506,15 @@ internal fun EditorPanelHeader(title: String, modifier: Modifier = Modifier, act
 /** Collapsible inspector section: the whole header row toggles; actions stay on the right. */
 @Composable
 internal fun EditorInspectorSection(title: String, expanded: Boolean, onExpandedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
+    modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {},
+    headingModifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val c=LocalEditorColors.current
     val m=LocalEditorMetrics.current
     val source=remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
     val focused by source.collectIsFocusedAsState()
     Column(modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().heightIn(min=m.sectionHeader)
+        Row(headingModifier.fillMaxWidth().heightIn(min=m.sectionHeader)
             .background(if(hovered) c.hoverBackground else c.surfaceRaised)
             .then(if(focused) Modifier.border(m.borderWidth,c.focusRing) else Modifier)
             .toggleable(expanded,source,null,role=Role.Button,onValueChange=onExpandedChange)

@@ -153,6 +153,27 @@ focusing its panel during Play preserves the session. Entity preview uses the
 existing separate content mode. Hierarchy, Details panel and File/Edit commands follow
 the active authoring mode, including Save-to-scene for edited scene copies.
 
+## State Machines and Event Areas
+
+- In **Details → Add Component → Scripting**, add **State Machine**. Use
+  **Browse…** to attach an existing definition, or **Create Definition…** in
+  a project to create and attach a starter JSON asset. The starter begins in
+  `Idle`, switches to `Active` when Lua calls
+  `Engine.setStateMachineTrigger(entity, "activate")`, and returns to `Idle`
+  after one second. To change the state graph, select the definition in Assets
+  and use **Open Externally**. Use the Live Inspector during Play to see the
+  current state.
+- To place a trigger, use **Create → Box Event Area** or **Circle Event Area**
+  in the Scene view. To attach one to an existing scene entity or entity
+  template, use **Add Component → Event Areas**. The editor initializes the
+  zone ID and supplies a static Rigid Body when the entity has none. Adjust the
+  shape, zone ID and collision layers in Details. The runtime component names
+  are `BoxZone` and `CircleZone`.
+- Add a **Lua Behavior** using the **Event area listener** template on the
+  zone entity. During Play, move an eligible dynamic body with a collider
+  through the shape. The template logs `zone.enter` and `zone.exit` callbacks
+  in the Console. Replace the log calls with your gameplay logic.
+
 ## Scene cameras and gameplay
 
 The [editor property schema](EditorPropertySchema.md) lists the metadata supplied

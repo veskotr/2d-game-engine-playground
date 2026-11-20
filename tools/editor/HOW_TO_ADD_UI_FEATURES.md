@@ -91,7 +91,7 @@ Toolbar buttons call the same command and show the chord in their tooltip:
 
 ```kotlin
 EditorToolbar {
-    SceneViewControls(scenePlayback, enabled, onPlay = { PlayCommands.play.run(commandContext()) }, onStop = { … })
+    SceneViewControls(commandContext, keymap)
     EditorToolbarDivider()
     EditorGlyphButton("Zoom in", { panelCanvas?.zoomEntity(.8f) }) { tint -> EditorGlyphIcon(EditorGlyph.Plus, tint) }
     EditorButton("Fit", { panelCanvas?.fitEntity() }, help = standardKeymap.hint(ViewCommands.fit.id), style = EditorButtonStyle.Ghost)

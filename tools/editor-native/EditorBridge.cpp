@@ -567,6 +567,18 @@ extern "C" JNIEXPORT jfloatArray JNICALL Java_sle_editor_bridge_NativeEngine_pla
     });
     return result;
 }
+extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_drawEntityPreview(
+    JNIEnv* env, jobject, jlong token, jint width, jint height)
+{
+    guarded(env, [&] {
+        validate(token);
+        const auto rendered = previewMode ? session->renderEntityPreview(width, height, fitRequested)
+                                          : session->renderEmbeddedFrame(width, height);
+        if (!rendered.ok()) throw std::runtime_error(rendered.error());
+        if (previewMode) fitRequested = false;
+    });
+}
+
 extern "C" JNIEXPORT void JNICALL Java_sle_editor_bridge_NativeEngine_drawEmbeddedFrame(
     JNIEnv* env,jobject,jlong token,jint width,jint height) {
     guarded(env,[&] {

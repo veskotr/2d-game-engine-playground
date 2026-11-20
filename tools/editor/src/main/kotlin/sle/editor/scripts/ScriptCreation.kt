@@ -30,6 +30,22 @@ internal enum class BuiltInScriptTemplate(
                 local speed = parameters.speed
             end,
         }
+    """.trimIndent()),
+    EventArea("Event area listener", """
+        return {
+            init = function(entity)
+                Engine.Events.subscribe("zone.enter", function(event)
+                    if event.entityA == entity then
+                        Engine.log("Entered event area " .. (event.zoneId or tostring(entity)))
+                    end
+                end)
+                Engine.Events.subscribe("zone.exit", function(event)
+                    if event.entityA == entity then
+                        Engine.log("Exited event area " .. (event.zoneId or tostring(entity)))
+                    end
+                end)
+            end,
+        }
     """.trimIndent());
 
     override val filename get() = "$name.lua"

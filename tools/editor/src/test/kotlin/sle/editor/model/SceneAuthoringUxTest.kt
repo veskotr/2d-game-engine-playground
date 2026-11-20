@@ -14,6 +14,7 @@ import kotlin.test.*
 
 class SceneAuthoringUxTest {
     private val catalog=mapOf(
+        "RigidBody" to ComponentDefinition(buildJsonObject { put("bodyType", "Dynamic") }, JsonObject(emptyMap())),
         "Transform" to ComponentDefinition(Json.parseToJsonElement("""{"position":{"x":0,"y":0},"rotation":0,"scale":{"x":1,"y":1}}""").jsonObject,JsonObject(emptyMap())),
         "SpriteRenderer" to ComponentDefinition(Json.parseToJsonElement("""{"size":{"x":1,"y":1},"offset":{"x":0,"y":0},"region":{"uv":{"x":0,"y":0,"z":1,"w":1}},"color":{"x":1,"y":1,"z":1,"w":1},"visible":true,"layer":0,"texture":""}""").jsonObject,JsonObject(emptyMap())),
     )
@@ -44,13 +45,19 @@ class SceneAuthoringUxTest {
         val shapes=mapOf(
             "BoxCollider" to "{\"size\":{\"x\":1,\"y\":1}}",
             "CircleCollider" to "{\"radius\":0.5}",
-            "BoxZone" to "{\"size\":{\"x\":1,\"y\":1}}",
-            "CircleZone" to "{\"radius\":0.5}"
+            "BoxZone" to "{\"size\":{\"x\":1,\"y\":1},\"zoneId\":\"\"}",
+            "CircleZone" to "{\"radius\":0.5,\"zoneId\":\"\"}"
         ).mapValues { ComponentDefinition(Json.parseToJsonElement(it.value).jsonObject,JsonObject(emptyMap())) }
         val scene=SceneWorkspaceState(catalog+shapes) { it }
         scene.addEntity();val state=scene.selected!!
         for(type in listOf("SpriteRenderer")+shapes.keys) state.addComponent(type)
         val reopened=SceneDocument.parse(scene.serialize()).entities.single()
+        assertEquals("Static", reopened.components.getValue("RigidBody").jsonObject.getValue("bodyType").jsonPrimitive.content)
+        val areaIds = listOf("BoxZone", "CircleZone").map {
+            reopened.components.getValue(it).jsonObject.getValue("zoneId").jsonPrimitive.content
+        }
+        assertTrue(areaIds.all { it.isNotBlank() })
+        assertEquals(2, areaIds.toSet().size)
         for(type in listOf("SpriteRenderer","BoxCollider","BoxZone")) {
             val size=reopened.components.getValue(type).jsonObject.getValue("size").jsonObject
             assertEquals(64.0,size.getValue("x").jsonPrimitive.double)

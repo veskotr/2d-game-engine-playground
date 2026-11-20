@@ -679,7 +679,7 @@ internal class NativeViewportOwner(
             NativeEngine.drawSceneView(session,pixelWidth,pixelHeight,game,false)
             actualGameView=desiredGameView
         } else if(desiredMode==ViewportMode.Sandbox) NativeEngine.drawEmbeddedFrame(session,pixelWidth,pixelHeight)
-        else NativeEngine.render(session,pixelWidth,pixelHeight,0f)
+        else NativeEngine.drawEntityPreview(session,pixelWidth,pixelHeight)
         GL11.glViewport(0,0,pixelWidth,pixelHeight)
         val view = when {
             desiredMode == ViewportMode.Sandbox -> null

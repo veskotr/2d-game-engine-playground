@@ -346,7 +346,10 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         require(entities.size<MAX_SCENE_ENTITIES) { "Scene entity limit reached" }
         val parent=if(asChild) selectedKey else null
         val state=EntityWorkspaceState(catalog)
-        if(type!=null) {
+        if (type != null && isEventArea(type)) {
+            val label = if (type == "BoxZone") "Box Event Area" else "Circle Event Area"
+            state.document = state.document.copy(name = label).addEditorComponent(type, catalog)
+        } else if(type!=null) {
             val defaults=catalog[type]?.defaults ?: if(type=="Camera2D") buildJsonObject {
                 put("enabled",true);put("primary",true);put("viewSize",buildJsonObject { put("x",480);put("y",270) });put("zoom",1)
             } else error("Component unavailable: $type")

@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import kotlinx.serialization.json.*
 import sle.editor.model.EntityWorkspaceState
+import sle.editor.ui.EditorDialogs
 import sle.editor.ui.controls.*
 import sle.editor.ui.theme.LocalEditorColors
 
@@ -98,6 +99,26 @@ internal fun ResourceDrawer(
         readOnly = readOnly || importedName != null, invalid = property.id in state.fieldErrors)
     FlowResourceActions(!readOnly, browseEnabled, browse,
         if (display.isNotBlank()) ({ state.setValue(property.component, property.path, JsonPrimitive("")) }) else null)
+    if (property.component == "StateMachine" && property.path == listOf("definitionAsset")) {
+        val projectAssets = LocalProjectAssets.current
+        val create = projectAssets?.createStateMachine
+        val context = LocalDetailsContext.current
+        if (projectAssets != null && create != null && context != null && browseEnabled && !readOnly &&
+            property.value.jsonPrimitive.content.isBlank()) {
+            EditorButton("Create Definition…", enabled = !projectAssets.busy, onClick = {
+                val original = state.document
+                val relative = EditorDialogs.showInputDialog(null,
+                    "State Machine definition path relative to the project asset folder",
+                    "StateMachines/Behavior.statemachine.json")?.trim()
+                fun targetIsCurrent() = state.document === original && context().let { it.editable && it.entity === state }
+                if (!relative.isNullOrEmpty() && targetIsCurrent()) create(relative) { path ->
+                    if (targetIsCurrent()) {
+                        state.setValue(property.component, property.path, JsonPrimitive(path.toString().replace('\\', '/')))
+                    }
+                }
+            })
+        }
+    }
     if (showTexture) {
         SpriteRegionPicker(state, display, readOnly)
         if (display.isNotBlank()) TexturePreview(state, property, display, readOnly)

@@ -30,7 +30,7 @@ class ScriptCreationTest {
         }
         val action = ScriptCreation(workspace, EntityWorkspaceState(emptyMap())) { true }
         val templates = action.templates()
-        assertEquals(listOf("Basic.lua", "ExposedProperty.lua", "Camera Rig.lua"), templates.map { it.filename })
+        assertEquals(listOf("Basic.lua", "ExposedProperty.lua", "EventArea.lua", "Camera Rig.lua"), templates.map { it.filename })
         val destination = action.create("Scripts/Raw.lua", templates.first())
         assertContentEquals(raw, Files.readAllBytes(destination))
         val extra = action.create("Scripts/Camera.lua", templates.last())

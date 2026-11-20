@@ -46,6 +46,7 @@ internal object NativeEngine {
     external fun takeLuaProfile(session: Long, advanced: Boolean): ByteArray?
     external fun advanceFrame(session: Long, dt: Float, step: Boolean, pauseOnError: Boolean): ByteArray?
     external fun playEntityPosition(session: Long, id: Long): FloatArray?
+    external fun drawEntityPreview(session: Long, width: Int, height: Int)
     external fun drawEmbeddedFrame(session: Long, width: Int, height: Int)
     external fun drawSceneView(session: Long, width: Int, height: Int, gameView: Boolean, fit: Boolean)
     external fun renderSceneView(session: Long, width: Int, height: Int, dt: Float, gameView: Boolean, playing: Boolean)

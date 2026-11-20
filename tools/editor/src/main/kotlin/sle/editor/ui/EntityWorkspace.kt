@@ -88,9 +88,12 @@ internal fun InspectorComponent(state: EntityWorkspaceState, component: String, 
     SideEffect {
         state.finishHiddenNumberEdit(component) { inspectorPathVisible(fields, state.catalog[component], it) }
     }
-    sle.editor.ui.controls.EditorInspectorSection(component,state.inspectorSections.expanded(identity,component),
+    sle.editor.ui.controls.EditorInspectorSection(componentDisplayName(component),state.inspectorSections.expanded(identity,component),
         { expanded -> state.endGesture();state.inspectorSections.setExpanded(identity,component,expanded) },actions=actions,
         headingModifier=sle.editor.ui.inspector.detailsComponentMenu(state,component,readOnly)) {
+        if (sle.editor.model.isEventArea(component) && "RigidBody" !in state.document.components) {
+            Text("Add a Rigid Body on this entity to receive zone events.", color = MaterialTheme.colors.error)
+        }
         if (component == "Tags") {
             TagMembership(state, tags, readOnly)
         } else {

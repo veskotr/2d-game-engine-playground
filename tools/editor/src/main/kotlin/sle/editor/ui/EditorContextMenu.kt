@@ -144,11 +144,18 @@ internal fun Modifier.editorContextMenu(
     }
 }
 
+internal fun componentDisplayName(type: String): String = when (type) {
+    "BoxZone" -> "Box Event Area"
+    "CircleZone" -> "Circle Event Area"
+    "StateMachine" -> "State Machine"
+    else -> type
+}
+
 private fun componentGroup(type: String): String = when {
     type == "Transform" -> "Transform"
     type == "Camera2D" || type.contains("Sprite") || type.contains("Animator") -> "Rendering"
     type.contains("Collider") || type.contains("RigidBody") -> "Physics"
-    type.contains("Zone") -> "Zones"
+    sle.editor.model.isEventArea(type) -> "Event Areas"
     type.contains("Script") || type.contains("StateMachine") -> "Scripting"
     type.contains("Audio") -> "Audio"
     else -> "Other"
@@ -160,7 +167,7 @@ internal fun addComponentEntries(state: EntityWorkspaceState): List<EditorMenuEn
     val groups = state.catalog.keys.filter { it !in state.document.components && it !in hidden }.sorted().groupBy(::componentGroup)
     return groups.map { (group, types) ->
         EditorMenuEntry(group, children = types.map { type ->
-            EditorMenuEntry(type) {
+            EditorMenuEntry(componentDisplayName(type)) {
                 try {
                     state.endGesture()
                     state.addComponent(type)
@@ -237,7 +244,7 @@ internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, on
                 EditorMenuEntry("As Child", state.selected != null) { attempt { state.addChild(position) } },
             )),
             *listOf("Sprite" to "SpriteRenderer", "Box Collider" to "BoxCollider", "Circle Collider" to "CircleCollider",
-                "Box Zone" to "BoxZone", "Circle Zone" to "CircleZone").map { (label,type) ->
+                "Box Event Area" to "BoxZone", "Circle Event Area" to "CircleZone").map { (label,type) ->
                 EditorMenuEntry(label, children=listOf(
                     EditorMenuEntry("At Scene Root") { attempt { state.addPreset(type,position=position) } },
                     EditorMenuEntry("As Child",state.selected!=null) { attempt { state.addPreset(type,true,position) } },

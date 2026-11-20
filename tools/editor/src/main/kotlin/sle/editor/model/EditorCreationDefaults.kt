@@ -11,3 +11,16 @@ internal fun editorComponentDefaults(type: String, defaults: JsonObject): JsonOb
         else -> defaults
     }
 }
+
+internal fun isEventArea(type: String) = type == "BoxZone" || type == "CircleZone"
+
+internal fun EntityDocument.addEditorComponent(type: String, catalog: Map<String, ComponentDefinition>): EntityDocument {
+    val added = addComponent(type, editorComponentDefaults(type, catalog.getValue(type).defaults))
+    if (!isEventArea(type)) return added
+    val zone = added.setValue(type, listOf("zoneId"), JsonPrimitive("$key-$type"))
+    val positioned = if ("Transform" in zone.components) zone
+        else zone.addComponent("Transform", catalog.getValue("Transform").defaults)
+    if ("RigidBody" in positioned.components) return positioned
+    val body = catalog.getValue("RigidBody").defaults
+    return positioned.addComponent("RigidBody", JsonObject(body + ("bodyType" to JsonPrimitive("Static"))))
+}

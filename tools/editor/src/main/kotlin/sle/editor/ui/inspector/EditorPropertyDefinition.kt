@@ -128,7 +128,7 @@ internal fun orderedFields(component: String, fields: Set<String>): List<String>
 /** Small fixed-shape objects (e.g. SpriteRenderer.region = {uv:{x,y,z,w}}) render as nested rows
  * instead of raw JSON. Free-form maps such as script variables stay JSON. */
 internal fun isStructuredGroup(field: String, value: JsonElement): Boolean {
-    if(field in setOf("variables","targetEntities","stateClipMap") || value !is JsonObject || value.isEmpty()) return false
+    if(field in setOf("variables","targetEntities","stateClipMap","boolParameters") || value !is JsonObject || value.isEmpty()) return false
     if(value.keys.all { it in setOf("x","y","z","w") }) return false
     return value.values.all { child -> when(child) {
         is JsonObject -> child.isNotEmpty() && child.keys.all { it in setOf("x","y","z","w") } && child.values.all { it is JsonPrimitive && !it.isString && it.doubleOrNull?.isFinite()==true }

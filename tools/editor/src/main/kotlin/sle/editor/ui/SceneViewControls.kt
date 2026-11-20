@@ -1,24 +1,29 @@
 package sle.editor.ui
 
-import sle.editor.ui.controls.*
-import sle.editor.ui.theme.*
-import sle.editor.model.ScenePlaybackState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.Composable
+import sle.editor.command.CommandContext
+import sle.editor.command.Keymap
+import sle.editor.command.PlayCommands
+import sle.editor.ui.controls.EditorButton
+import sle.editor.ui.theme.LocalEditorMetrics
 import sle.editor.viewport.Playback
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.*
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
-
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun SceneViewControls(state: ScenePlaybackState,enabled: Boolean,onPlay: ()->Unit,onStep: ()->Unit,onStop: ()->Unit) {
-    Row(horizontalArrangement=Arrangement.spacedBy(LocalEditorMetrics.current.gap/2)) {
-        val keys=sle.editor.command.standardKeymap
-        EditorButton(if(state.playback==Playback.Paused) "Resume" else "Play",onPlay,
-            enabled=enabled && state.playback!=Playback.Running,primary=true,help=keys.hint(sle.editor.command.PlayCommands.play.id))
-        EditorButton("Pause",{state.pause()},enabled=enabled && state.playback==Playback.Running,help=keys.hint(sle.editor.command.PlayCommands.pause.id))
-        EditorButton("Step",onStep,enabled=enabled && state.playback==Playback.Paused,help="Advance one simulation frame")
-        EditorButton("Stop",onStop,enabled=enabled && state.playback!=Playback.Stopped,help=keys.hint(sle.editor.command.PlayCommands.stop.id))
+internal fun SceneViewControls(context: () -> CommandContext, keymap: Keymap) {
+    val current = context()
+    Row(horizontalArrangement = Arrangement.spacedBy(LocalEditorMetrics.current.gap / 2)) {
+        for (command in listOf(PlayCommands.play, PlayCommands.pause, PlayCommands.step, PlayCommands.stop)) {
+            val label = if (command == PlayCommands.play && current.playback?.playback == Playback.Paused)
+                "Resume" else command.label
+            EditorButton(
+                label,
+                onClick = { context().let { if (command.enabled(it)) command.run(it) } },
+                enabled = command.enabled(current),
+                primary = command == PlayCommands.play,
+                help = if (command == PlayCommands.step) "Advance one simulation frame" else keymap.hint(command.id, label),
+            )
+        }
     }
 }

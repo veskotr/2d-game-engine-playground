@@ -847,14 +847,15 @@ private fun launchEditor(args: Array<String>) = application {
                         }
                     } else {
                         sle.editor.ui.controls.EditorToolbar {
-                            if(project.opened!=null && !entity) EditorButton("Run Project",runProject,enabled=!project.busy && scenePlayback.editing && !failed,
-                                help=sle.editor.command.standardKeymap.hint(sle.editor.command.PlayCommands.runProject.id),
-                                modifier=Modifier.onGloballyPositioned { if(documentSmoke || runtimeSmoke) assetBounds["RunProject"]=it.boundsInWindow() })
-                            if(mode==ViewportMode.Scene) SceneViewControls(scenePlayback,!failed,onPlay={
-                                sle.editor.command.PlayCommands.play.run(commandContext())
-                            },onStep={
-                                sle.editor.command.PlayCommands.step.run(commandContext())
-                            },onStop={scenePlayback.stop()})
+                            if (project.opened != null && !entity) {
+                                val command = sle.editor.command.PlayCommands.runProject
+                                EditorButton(command.label,
+                                    onClick = { liveCommandContext().let { if (command.enabled(it)) command.run(it) } },
+                                    enabled = command.enabled(commandContext()),
+                                    help = keymap.hint(command.id),
+                                    modifier = Modifier.onGloballyPositioned { if(documentSmoke || runtimeSmoke) assetBounds["RunProject"]=it.boundsInWindow() })
+                            }
+                            if (mode == ViewportMode.Scene) SceneViewControls({ liveCommandContext() }, keymap)
                             if(mode==ViewportMode.Sandbox) SandboxControls(playback,!failed) { playback=it }
                             if(!game) Row(horizontalArrangement=Arrangement.spacedBy(m.borderWidth)) {
                                 if((project.opened!=null && !entity) || mode==ViewportMode.Scene || mode==ViewportMode.Sandbox) sle.editor.ui.controls.EditorToolbarDivider()

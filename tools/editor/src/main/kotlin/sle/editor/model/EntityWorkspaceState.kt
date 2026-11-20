@@ -256,7 +256,7 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
     }
 
     fun addComponent(type: String) = change("Add $type") {
-        document = document.addComponent(type, editorComponentDefaults(type, catalog.getValue(type).defaults))
+        document = document.addEditorComponent(type, catalog)
         error = null
     }
 

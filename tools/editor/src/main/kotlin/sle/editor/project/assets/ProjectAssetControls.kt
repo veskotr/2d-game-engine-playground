@@ -21,6 +21,7 @@ internal data class ProjectAssetCommands(
     val createFolder: ()->Unit={},val rename: ()->Unit={},val move: ()->Unit={},
     val delete: ()->Unit={},val recover: ()->Unit={},
     val findReferences: (String) -> Unit = {},
+    val createStateMachine: ((String, (Path) -> Unit) -> Unit)? = null,
     val snapshot: AssetSnapshot? = null,
     val projectRoot: Path? = null,
     val assetRoot: Path? = null,
@@ -102,6 +103,21 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
     }
     return ProjectAssetCommands(
         projectRoot = opened.root, assetRoot = assetRoot,
+        createStateMachine = { relative, attach ->
+            run {
+                check(project.activationRevision == activation && current?.assets == assetRoot) {
+                    "The project changed."
+                }
+                require(relative.endsWith(".statemachine.json", ignoreCase = true)) {
+                    "Use a filename ending in .statemachine.json"
+                }
+                val path = withContext(Dispatchers.IO) {
+                    ProjectAssetOperations(opened).createFile(relative, starterStateMachine.encodeToByteArray())
+                }
+                if (project.activationRevision == activation && current?.assets == assetRoot) attach(path)
+                "Created $relative"
+            }
+        },
         importFiles={
             val chooser=EditorFileChooser(assetRoot.toFile()).apply {
                 dialogTitle="Import files or folders into ${browser?.folder?.ifEmpty { "Assets" } ?: "Assets"}"

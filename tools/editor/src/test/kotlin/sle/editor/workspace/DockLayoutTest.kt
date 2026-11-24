@@ -10,6 +10,20 @@ class DockLayoutTest {
         assertEquals(emptyList(), validateLayout(layout, ids))
         return layout
     }
+    @Test fun olderLayoutsKeepTheNewTilePaletteHiddenBesideAssets() {
+        val previous = panels.filter { it.id != p("tilePalette") }
+        val saved = WorkspaceLayoutCodec(PanelRegistry(previous)).encode(defaultDockLayout(previous))
+        val codec = WorkspaceLayoutCodec(PanelRegistry(panels))
+        val restored = checked(codec.decode(saved))
+        val assets = restored.tabs().single { p("assets") in it.panels }
+        assertEquals(assets.group, restored.hidden.getValue(p("tilePalette")).group)
+        val opened = checked(restorePanel(restored, p("tilePalette")))
+        assertTrue(p("tilePalette") in opened.tabs().single { it.group == assets.group }.panels)
+        val detached = checked(movePanel(opened, p("tilePalette"),
+            DockTarget.Detached(LogicalBounds(100f, 100f, 490f, 620f))))
+        assertEquals(detached, codec.decode(codec.encode(detached)))
+    }
+
     @Test fun transitionsKeepEveryPanelExactlyOnce() {
         var layout = checked(defaultDockLayout(panels))
         val group = layout.tabs().first().group

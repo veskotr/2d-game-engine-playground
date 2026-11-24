@@ -35,7 +35,7 @@ internal fun projectDistributionControls(project: ProjectWorkspaceState,notices:
             try {
                 val descriptor=withContext(Dispatchers.IO) {
                     ProjectDistribution.exportAutomatically(opened,runtime) { staged ->
-                        val prepared=PreparedProject.open(ProjectFiles.open(staged))
+                        val prepared=PreparedProject.open(ProjectFiles.open(staged), validateTileAssets = true)
                         // Release before the exporter removes staged derivative caches.
                         NativeEngine.releaseProject(prepared.handle)
                     }

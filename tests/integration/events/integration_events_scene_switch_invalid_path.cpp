@@ -29,7 +29,8 @@ int main() {
         return 1;
     }
 
-    auto processResult = runtime.getSceneManager().processPendingSwitch(runtime, runtime.getScene());
+    bool errorReported = false;
+    auto processResult = runtime.getSceneManager().processPendingSwitch(runtime, runtime.getScene(), errorReported);
     if (!processResult.ok()) {
         std::cerr << "Processing with no pending scene should be a no-op success\n";
         return 1;

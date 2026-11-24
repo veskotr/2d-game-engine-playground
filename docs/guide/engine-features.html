@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engine features | SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html">Quickstart</a></li>
+          <li><a href="editor.html">Editor workspace</a></li>
+          <li><a href="first-scene.html">First Room</a></li>
+          <li><a href="lua-gameplay.html">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html">Physics and UI</a></li>
+          <li><a href="run-and-export.html">Run and export</a></li>
+          <li><a href="engine-tour.html">Engine tour</a></li>
+          <li><a href="editor-tools.html">Editor tools</a></li>
+          <li><a href="project-assets.html">Project and assets</a></li>
+          <li><a href="tilemaps.html">Tilemaps</a></li>
+          <li><a href="engine-features.html" aria-current="page">Engine features</a></li>
+          <li><a href="reference.html">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Engine features</h1>
+        <p>Use these entry points alongside the <a href="engine-tour.html">engine tour</a> and <a href="reference.html">reference index</a>.</p>
+        <h2>Scenes and drawing</h2>
+        <h3 id="scene-switching">Scene switching</h3>
+        <p>Register scene names in the runtime configuration and call <code>Engine.switchScene("Room")</code> from Lua with a registered name. Use the <a href="../topics/Runtime.md">runtime guide</a> and <a href="../topics/Events.md">scene lifecycle events</a> to trace the deferred transition.</p>
+        <h3 id="chunk-activity">Chunk activity</h3>
+        <p>Configure a chunked scene and move its gameplay camera across a chunk boundary. The chunk activation controller updates active areas for participating systems. See <a href="../topics/Chunks.md">chunk setup</a>.</p>
+        <h3 id="render-commands">Render commands</h3>
+        <p>Add a Sprite Renderer to the <a href="first-scene.html#entity">First Room entity</a>. In C++, follow <code>RenderSystem</code> as it builds draw commands from scene data and submits them to the renderer. See <a href="../topics/Rendering.md">rendering</a>.</p>
+        <h3 id="sprite-batching">Sprite batching</h3>
+        <p>Place multiple sprites using a shared texture in camera view. The renderer batches compatible sprite commands while preserving ordering requirements. See the <a href="../modules/Renderer.md">Renderer module</a>.</p>
+        <h3 id="tile-rendering">Tile rendering</h3>
+        <p>Open the <a href="tilemaps.html#tilemap-room">Tilemap Room</a> and toggle a layer’s visibility before Play. The render system draws visible cells using their atlas regions, layer order, and camera bounds.</p>
+        <h3 id="gameplay-camera">Gameplay camera</h3>
+        <p>Create a scene camera and position it to frame the scene. Use <a href="first-scene.html#play">First Room Play</a> to check the game framing and the <a href="../topics/Scenes.md">scene schema</a> to configure its fields.</p>
+        <h3 id="camera-follow">Camera follow</h3>
+        <p>Make the primary camera a child of the player in Hierarchy and set the camera’s local offset. Move the player during Play. CameraSystem reads the camera’s world transform, so the camera follows its parent, including inherited rotation. See <a href="../topics/Scenes.md">scene camera fields</a>.</p>
+        <h3 id="prefab-expansion">Prefab expansion</h3>
+        <p>Add a linked template instance with a changed field, then load or play the scene. Prefab expansion resolves the source hierarchy and applies instance overrides. See <a href="../topics/Prefabs.md">prefab authoring and merge rules</a>.</p>
+        <h2>Gameplay and services</h2>
+        <h3 id="state-machines">State machines</h3>
+        <p>Add a State Machine and reference its definition. Configure states and transitions, then call <code>Engine.setStateMachineTrigger(entity, "start")</code> for a trigger named <code>start</code> in the definition. See the <a href="../topics/Scenes.md">scene schema</a> and <a href="../../assets/scripts/engine_api.lua">Lua API</a> for the component and callable functions.</p>
+        <h3 id="sprite-animation">Sprite animation</h3>
+        <p>Assign an Animator with a clip asset, then call <code>Engine.playAnimator(entity, assetPath)</code> during Play. Check the sprite’s frames advance at the configured rate. See the <a href="../topics/Scenes.md">scene authoring schema</a> and <a href="../../assets/scripts/engine_api.lua">Lua API</a>.</p>
+        <h3 id="audio-playback">Audio playback</h3>
+        <p>Import an audio asset and use <code>Engine.playSound(entity, assetPath, false)</code> from a behaviour to play a one-shot. Check the <a href="../../assets/scripts/engine_api.lua">Lua API</a> for playback and volume controls.</p>
+        <h3 id="eventbus">EventBus</h3>
+        <p>In C++, subscribe to a typed event on <code>EventBus</code>, publish it, and dispatch queued events. The <a href="../topics/Events.md">events guide</a> documents delivery and subscription lifetime and links the phase examples.</p>
+        <h3 id="resource-loading">Resource loading</h3>
+        <p>Author project asset references with stable UUIDs and let the project runtime resolve them. For C++ resource loading and cache access, see the <a href="../modules/Resources.md">Resources module</a>.</p>
+        <h3 id="xml-layout-parsing">XML layout parsing</h3>
+        <p>Register the <a href="../../assets/ui/fps_hud.xml">example HUD</a> as a UI layout. The runtime parses its XML into widgets. Follow <a href="physics-and-ui.html#xml-hud">First Room’s HUD setup</a> and the <a href="../topics/UI.md">XML UI guide</a>.</p>
+        <h3 id="ui-bindings">UI bindings</h3>
+        <p>Bind text or other supported widget fields to runtime values. Watch a value update in the <a href="physics-and-ui.html#xml-hud">HUD tutorial</a> and use the <a href="../topics/UI.md">UI guide</a> for binding syntax.</p>
+        <h3 id="game-package-loading">Game package loading</h3>
+        <p>Follow <a href="run-and-export.html#export-game">Export Game</a>, then run the packaged executable from a relocated folder. The loader mounts the package and resolves the startup project and resources. See <a href="../topics/GamePackages.md">game package format and validation</a>.</p>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="tilemaps.html">Previous: Tilemaps</a>
+        <a href="reference.html">Next: Reference</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

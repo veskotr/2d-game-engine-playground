@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quickstart · SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html" aria-current="page">Quickstart</a></li>
+          <li><a href="editor.html">Editor workspace</a></li>
+          <li><a href="first-scene.html">First Room</a></li>
+          <li><a href="lua-gameplay.html">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html">Physics and UI</a></li>
+          <li><a href="run-and-export.html">Run and export</a></li>
+          <li><a href="engine-tour.html">Engine tour</a></li>
+          <li><a href="editor-tools.html">Editor tools</a></li>
+          <li><a href="project-assets.html">Project and assets</a></li>
+          <li><a href="tilemaps.html">Tilemaps</a></li>
+          <li><a href="engine-features.html">Engine features</a></li>
+          <li><a href="reference.html">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Quickstart</h1>
+        <p>Launch the SLE Editor from a Windows checkout and run the NPC Zone demo in the standalone game window.</p>
+
+        <h2 id="prerequisites">Install the prerequisites</h2>
+        <p>Use Windows x64 with Visual Studio 2022 and its C++ workload, CMake 3.20 or newer, Python 3, and a 64-bit JDK 21. Use a graphics driver that supports OpenGL 4.3 or later. The first build and Gradle launch need network access to download dependencies.</p>
+        <p>Open Windows PowerShell at the repository root and install the Python package used for GLAD generation.</p>
+        <pre tabindex="0"><code>python -m pip install jinja2</code></pre>
+
+        <h2 id="build-editor">Build and launch the editor</h2>
+        <p>Set <code>JAVA_HOME</code> to your JDK installation. Build the native editor library and standalone launcher, then start the editor with the Gradle wrapper.</p>
+        <pre tabindex="0"><code>$env:JAVA_HOME = 'C:\path\to\jdk-21'
+cmake --preset debug -DSLE_BUILD_EDITOR=ON
+cmake --build build/debug --config Debug --target sle_editor_native engine_app --parallel
+Push-Location tools/editor
+.\gradlew.bat run
+Pop-Location</code></pre>
+        <p>The SLE Editor opens in a desktop window. Close it to return to the PowerShell prompt.</p>
+        <details>
+          <summary>Use the editor launch script</summary>
+          <p>From the repository root, the script finds JDK 21, builds the Debug native library, and launches the editor. To run the demo afterward, build the <code>engine_app</code> target as well.</p>
+          <pre tabindex="0"><code>.\tools\editor\run-editor.ps1
+cmake --build build/debug --config Debug --target engine_app</code></pre>
+        </details>
+        <p><a href="../../CONTRIBUTING.md">Contributor setup</a> · <a href="../../tools/editor/README.md#build-and-run-windows-x64">Editor build instructions</a></p>
+
+        <h2 id="run-demo">Run the bundled NPC Zone demo</h2>
+        <p>From the repository root, run the standalone launcher with the checked-in configuration.</p>
+        <pre tabindex="0"><code>.\build\debug\engine_app\Debug\engine_app.exe --config engine.json</code></pre>
+        <p>The <strong>SLE Engine App</strong> window loads <code>npc_zone_demo</code>. Move with WASD and approach the NPC to trigger the zone behavior. Close the window to exit.</p>
+        <p>Use <code>--frames 120</code> for a run that exits automatically, or run the executable with <code>--version</code> to print the engine version.</p>
+        <p><a href="../../engine.json">Demo configuration</a> · <a href="../../assets/scenes/npc_zone_demo.json">Demo scene</a></p>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="index.html">Previous: Home</a>
+        <a href="editor.html">Next: Editor workspace</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

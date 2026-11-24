@@ -1,0 +1,124 @@
+{
+  "format": "sle-project-scene",
+  "version": 1,
+  "assets": [],
+  "document": {
+    "key": "tilemap-room",
+    "name": "Tilemap room",
+    "entities": [
+      {
+        "key": "camera",
+        "name": "Game camera",
+        "components": {
+          "Transform": {
+            "position": [
+              0,
+              0
+            ]
+          },
+          "Camera2D": {
+            "viewSize": [
+              128,
+              72
+            ]
+          }
+        }
+      }
+    ],
+    "tileLayers": [
+      {
+        "id": "adf5ddf1-5348-565e-9e80-571126eb5ae1",
+        "name": "Terrain",
+        "tileset": "project-asset://5cc4c09a-5e9f-52ea-bfac-45d2a5d98f33",
+        "origin": [
+          -64,
+          -32
+        ],
+        "pixelsPerUnit": 1,
+        "drawOrder": 0,
+        "collisionEnabled": true,
+        "cells": [
+          {
+            "x": 0,
+            "y": 0,
+            "tile": "4b187ae5-87a3-52d4-9abd-dc9e1964ace8"
+          },
+          {
+            "x": 1,
+            "y": 0,
+            "tile": "4b187ae5-87a3-52d4-9abd-dc9e1964ace8"
+          },
+          {
+            "x": 2,
+            "y": 0,
+            "tile": "b978774f-7e75-5b6a-a1f2-ce1d08ca078d"
+          },
+          {
+            "x": 3,
+            "y": 0,
+            "tile": "4b187ae5-87a3-52d4-9abd-dc9e1964ace8"
+          },
+          {
+            "x": 4,
+            "y": 0,
+            "tile": "4b187ae5-87a3-52d4-9abd-dc9e1964ace8"
+          },
+          {
+            "x": 5,
+            "y": 0,
+            "tile": "4b187ae5-87a3-52d4-9abd-dc9e1964ace8"
+          },
+          {
+            "x": 6,
+            "y": 0,
+            "tile": "4b187ae5-87a3-52d4-9abd-dc9e1964ace8"
+          },
+          {
+            "x": 7,
+            "y": 0,
+            "tile": "4b187ae5-87a3-52d4-9abd-dc9e1964ace8"
+          },
+          {
+            "x": 2,
+            "y": 2,
+            "tile": "0e309b34-5754-59e8-ae43-aceaa595d3a5"
+          },
+          {
+            "x": 5,
+            "y": 2,
+            "tile": "0e309b34-5754-59e8-ae43-aceaa595d3a5"
+          }
+        ]
+      },
+      {
+        "id": "08e65a1b-f0b1-5062-b8d3-9ad13ad84837",
+        "name": "Decoration",
+        "tileset": "project-asset://5cc4c09a-5e9f-52ea-bfac-45d2a5d98f33",
+        "origin": [
+          -64,
+          -32
+        ],
+        "pixelsPerUnit": 1,
+        "drawOrder": 1,
+        "collisionEnabled": false,
+        "cells": [
+          {
+            "x": 1,
+            "y": 1,
+            "tile": "08e65a1b-f0b1-5062-b8d3-9ad13ad84837"
+          },
+          {
+            "x": 4,
+            "y": 2,
+            "tile": "08e65a1b-f0b1-5062-b8d3-9ad13ad84837"
+          },
+          {
+            "x": 6,
+            "y": 1,
+            "tile": "08e65a1b-f0b1-5062-b8d3-9ad13ad84837"
+          }
+        ]
+      }
+    ]
+  }
+}

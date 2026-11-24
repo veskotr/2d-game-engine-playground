@@ -29,6 +29,7 @@ fun standardPanels(): List<PanelDescriptor> = listOf(
     PanelDescriptor(PanelId("assets"), "Assets", PanelMinimum(360f, 180f)),
     PanelDescriptor(PanelId("console"), "Console", PanelMinimum(360f, 180f)),
     PanelDescriptor(PanelId("luaProfiler"), "Lua Profiler", PanelMinimum(360f, 200f)),
+    PanelDescriptor(PanelId("tilePalette"), "Tile Palette", PanelMinimum(360f, 180f), temporary = true),
     PanelDescriptor(PanelId("scene"), "Scene", PanelMinimum(320f, 200f)),
     PanelDescriptor(PanelId("game"), "Game", PanelMinimum(320f, 200f)),
     PanelDescriptor(PanelId("entity"), "Entity Template", PanelMinimum(320f, 240f), temporary = true),

@@ -302,6 +302,8 @@ internal class NativeViewportOwner(
     fun setContent(mode: ViewportMode, document: String?, playback: Playback, playRevision: Long? = null) {
         check(EventQueue.isDispatchThread())
         if (mode != desiredMode || playback!=desiredPlayback) { releaseSink(); finishGesture() }
+        if (desiredDocument != document && tools.active == sle.editor.viewport.tools.ViewportToolId.Tiles && toolHost.pressed)
+            toolHost.cancel()
         if (mode != ViewportMode.Scene || playback != Playback.Paused) clearLuaPause()
         desiredMode = mode
         desiredDocument = document
@@ -380,13 +382,19 @@ internal class NativeViewportOwner(
                         toolHost.cancel();gizmos?.cancel();draggedEntity=null;entityDragShown=false
                         entityDrop?.invoke(dragged,event.locationOnScreen)
                     } else {
-                        if(toolHost.pressed) toolHost.release(pointer(event)) else gizmos?.finish()
+                        if (toolHost.pressed) {
+                            if (editingAllowed()) {
+                                toolHost.camera = camera
+                                toolHost.release(pointer(event))
+                            } else toolHost.cancel()
+                        } else gizmos?.finish()
                         cancelEntityDrag()
                     }
                 }
                 if(event.button==MouseEvent.BUTTON2 || event.button==MouseEvent.BUTTON1) panAnchor=null
                 sendButton(event,false)
             }
+            override fun mouseExited(event: MouseEvent) { toolHost.pointerExited() }
             override fun mouseMoved(event: MouseEvent) {
                 // The presenter canvas shows the tool's cursor (e.g. over a Move arrow).
                 if(desiredMode==ViewportMode.Scene && editingAllowed()) {
@@ -402,7 +410,10 @@ internal class NativeViewportOwner(
                     camera?.let { pendingPan += Vec2(-(next.x-previous.x)*it.size.x/logicalWidth,(next.y-previous.y)*it.size.y/logicalHeight) }
                     panAnchor=next
                 } else if (editingAllowed()) {
-                    if(toolHost.pressed) toolHost.drag(pointer(event)) else gizmos?.move(event)
+                    if (toolHost.pressed) {
+                        toolHost.camera = camera
+                        toolHost.drag(pointer(event))
+                    } else gizmos?.move(event)
                     val dragged=draggedEntity
                     if(dragged!=null && entityDragMove!=null) {
                         // Presenters forward their own events: test against the visible source canvas.
@@ -706,6 +717,10 @@ internal class NativeViewportOwner(
                     toolHost.draw(object : sle.editor.viewport.tools.ToolOverlay {
                         override fun moveHandles(origin: Vec2, active: DragAxis?) =
                             overlay.moveHandles(origin,view,editorAxisColors.first,editorAxisColors.second,editorSelectionColor,active)
+                        override fun tileGhost(image: sle.editor.model.TileStampImage, stamps: List<Pair<Vec2, Vec2>>) =
+                            overlay.tileGhost(image, stamps, view)
+                        override fun tiles(grid: List<Vec2>, stamps: List<Pair<Vec2, Vec2>>, erase: Boolean) =
+                            overlay.tiles(grid, stamps, view, editorSelectionColor, editorAxisColors.first, erase)
                         override fun marquee(from: Vec2, to: Vec2) = overlay.marquee(from,to,view,editorSelectionColor)
                         override fun rotateRing(center: Vec2, radius: Double, active: Boolean, sweep: Pair<Double, Double>?) =
                             overlay.rotateRing(center,radius,view,editorAxisColors.first,editorAxisColors.second,editorSelectionColor,active,sweep)

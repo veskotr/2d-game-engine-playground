@@ -274,6 +274,31 @@ sle_add_integration_test(
 )
 
 sle_add_integration_test(
+    integration_tilemap_scene_path
+    systems/integration_tilemap_scene_path.cpp
+    systems
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_tilemap_collision_path
+    systems/integration_tilemap_collision_path.cpp
+    "physics;systems"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+sle_add_integration_test(
+    integration_tilemap_render_path
+    renderer/integration_tilemap_render_path.cpp
+    "renderer;systems;windowed"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(integration_tilemap_render_path PROPERTIES SKIP_RETURN_CODE 125)
+
+sle_add_integration_test(
     integration_tiled_scene_loader_path
     systems/integration_tiled_scene_loader_path.cpp
     systems
@@ -606,6 +631,7 @@ sle_add_integration_test(
     systems/integration_game_package_path.cpp
     systems
     LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 foreach(mode IN ITEMS discovery launch)
     add_test(NAME integration_package_${mode}_path

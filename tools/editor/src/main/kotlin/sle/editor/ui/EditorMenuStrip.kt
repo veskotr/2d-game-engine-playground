@@ -141,7 +141,7 @@ internal fun editorApplicationMenus(
             EditorMenuEntry("Density",children=sle.editor.ui.theme.EditorDensity.entries.map { density -> EditorMenuEntry(density.name) { onDensity(density) } }),
             EditorMenuEntry("UI Scale",children=listOf(0.75f,0.85f,1f).map { scale -> EditorMenuEntry("${(scale*100).toInt()}%") { onScale(scale) } }),
         ) + assetEntries,
-        "Tools" to sle.editor.command.ToolCommands.tools.map(::entry) + listOf(
+        "Tools" to (sle.editor.command.ToolCommands.tools + sle.editor.command.ToolCommands.tiles).map(::entry) + listOf(
             EditorMenuEntry.Separator,
             sle.editor.command.ToolCommands.toggleSnap.menuEntry(ctx,keymap,sle.editor.command.ToolCommands.toggleSnapLabel(ctx)),
             entry(sle.editor.command.ToolCommands.configureSnap),

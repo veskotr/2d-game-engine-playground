@@ -17,7 +17,8 @@ internal enum class ViewportToolId(val label: String, val keyCode: Int) {
     Select("Select", KeyEvent.VK_Q),
     Move("Move", KeyEvent.VK_W),
     Rotate("Rotate", KeyEvent.VK_E),
-    Scale("Scale", KeyEvent.VK_R);
+    Scale("Scale", KeyEvent.VK_R),
+    Tiles("Tiles", KeyEvent.VK_T);
     val chord get() = KeyChord.plain(keyCode)
 }
 
@@ -36,6 +37,8 @@ internal class ViewportToolState(initial: ViewportToolId = ViewportToolId.Select
         internal set
     /** Rotate and Scale pivot; like the active tool, per-user editor state and never an undo step. */
     var pivot by mutableStateOf(PivotMode.Pivot)
+    val tilePainting = TilePaintingState { onTileChange() }
+    internal var onTileChange: () -> Unit = {}
     internal var onSwitch: () -> Unit = {}
     fun activate(id: ViewportToolId) {
         if(id == active) return
@@ -61,6 +64,8 @@ internal data class ToolHintContext(val snap: SnapSettings, val selectionCount: 
 
 /** Editor drawing a tool may add after the engine frame (implemented by the GL overlay). */
 internal interface ToolOverlay {
+    fun tileGhost(image: sle.editor.model.TileStampImage, stamps: List<Pair<Vec2, Vec2>>) {}
+    fun tiles(grid: List<Vec2>, stamps: List<Pair<Vec2, Vec2>>, erase: Boolean) {}
     fun moveHandles(origin: Vec2, active: DragAxis?)
     fun marquee(from: Vec2, to: Vec2)
     /** Rotate ring around [center]; while dragging, spokes at the [sweep] start and current screen angles. */

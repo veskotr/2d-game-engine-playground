@@ -27,6 +27,7 @@ import androidx.compose.ui.window.rememberDialogState
 
 private fun ViewportToolId.glyph() = when(this) {
     ViewportToolId.Select -> EditorGlyph.ToolSelect; ViewportToolId.Move -> EditorGlyph.ToolMove
+    ViewportToolId.Tiles -> error("Tiles uses a labeled button")
     ViewportToolId.Rotate -> EditorGlyph.ToolRotate; ViewportToolId.Scale -> EditorGlyph.ToolScale
 }
 private fun PivotMode.glyph() = if(this == PivotMode.Pivot) EditorGlyph.PivotActive else EditorGlyph.PivotCenter
@@ -44,7 +45,7 @@ internal fun ViewportToolControls(tools: ViewportToolState?, snap: SnapService, 
     val m = LocalEditorMetrics.current
     Row(horizontalArrangement = Arrangement.spacedBy(m.borderWidth), verticalAlignment = Alignment.CenterVertically) {
         if(tools != null) {
-            ViewportToolId.entries.forEach { id ->
+            ViewportToolId.entries.filter { it != ViewportToolId.Tiles }.forEach { id ->
                 EditorIconToggle(id.label, id.glyph(), tools.active == id, { tools.activate(id) },
                     Modifier.onGloballyPositioned { onToolBounds(id, it.boundsInWindow()) },
                     help = standardKeymap.hint(ToolCommands.command(id).id, "${id.label} tool"))

@@ -63,7 +63,8 @@ int main()
             const auto request = runtime.requestSceneSwitch(failure.name);
             if (!request.ok())
                 return request;
-            return runtime.getSceneManager().processPendingSwitch(runtime, scene);
+            bool errorReported = false;
+            return runtime.getSceneManager().processPendingSwitch(runtime, scene, errorReported);
         }();
         if (result.ok() || result.error().find(failure.path) == std::string::npos)
         {
@@ -96,7 +97,8 @@ int main()
             passed = false;
         }
         // A rejected pending switch must be consumed, not retried forever.
-        if (!runtime.getSceneManager().processPendingSwitch(runtime, scene).ok())
+        bool errorReported = false;
+        if (!runtime.getSceneManager().processPendingSwitch(runtime, scene, errorReported).ok())
             passed = false;
     }
     if (!passed)

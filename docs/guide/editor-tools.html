@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Editor tools | SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html">Quickstart</a></li>
+          <li><a href="editor.html">Editor workspace</a></li>
+          <li><a href="first-scene.html">First Room</a></li>
+          <li><a href="lua-gameplay.html">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html">Physics and UI</a></li>
+          <li><a href="run-and-export.html">Run and export</a></li>
+          <li><a href="engine-tour.html">Engine tour</a></li>
+          <li><a href="editor-tools.html" aria-current="page">Editor tools</a></li>
+          <li><a href="project-assets.html">Project and assets</a></li>
+          <li><a href="tilemaps.html">Tilemaps</a></li>
+          <li><a href="engine-features.html">Engine features</a></li>
+          <li><a href="reference.html">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Editor tools</h1>
+        <p>Use these commands in the Scene workspace. The keyboard shortcuts below are the defaults; focus the Scene or Hierarchy for viewport and selection shortcuts.</p>
+        <h2>Workspace and windows</h2>
+        <h3 id="console">Console</h3>
+        <p>Show Console from Windows to read engine and script messages while editing or playing. Use it to diagnose a failed scene load or a Lua error.</p>
+        <h3 id="lua-profiler">Lua Profiler</h3>
+        <p>Show Lua Profiler from Windows during scripted playback to inspect the cost of Lua execution. Run the scene long enough to collect samples.</p>
+        <h3 id="entity-template">Entity Template</h3>
+        <p>Open an entity template from Assets or use View → Entity Template Workspace. The workspace gives the template its own preview and document history.</p>
+        <h3 id="entity-template-workspace">Entity Template Workspace</h3>
+        <p>Use View → Entity Template Workspace while editing to switch from scene authoring to the template workspace.</p>
+        <h3 id="show-focus">Show / Focus</h3>
+        <p>In Windows, choose a panel and use Show or Focus to make it visible and activate its tab or host.</p>
+        <h3 id="minimize">Minimize</h3>
+        <p>Choose Minimize on a hosted panel to remove it from the active layout while keeping it available through Show / Focus.</p>
+        <h3 id="hide">Hide</h3>
+        <p>Choose Hide on a visible panel to remove it from view. Use Show to bring it back.</p>
+        <h3 id="detach">Detach</h3>
+        <p>Choose Detach on an eligible docked panel to move it to a floating window.</p>
+        <h3 id="move-to">Move to</h3>
+        <p>Choose Move to on a panel and select an available destination to place it in another host.</p>
+        <h3 id="as-tab">As tab</h3>
+        <p>Choose As tab and a destination group to place the panel alongside its tabs.</p>
+        <h3 id="detach-group">Detach group</h3>
+        <p>Choose Detach group to float the whole tab group together.</p>
+        <h3 id="move-group-to">Move group to</h3>
+        <p>Choose Move group to when moving a tab group together to another host.</p>
+        <h3 id="focus-host">Focus Host</h3>
+        <p>Choose Focus Host to bring the window containing a panel to the foreground.</p>
+        <h3 id="restore-default-layout">Restore Default Layout</h3>
+        <p>Use Windows → Restore Default Layout to rebuild the standard editor arrangement. See <a href="../topics/EditorWorkspace.md">workspace layout</a>.</p>
+        <h3 id="saved-layout">Saved layout</h3>
+        <p>Arrange the workspace during editing. The editor persists the per-user panel arrangement for later launches.</p>
+        <h3 id="display-recovery">Display recovery</h3>
+        <p>After unplugging a display, reopen the editor to recover floating windows onto available displays. Use Restore Default Layout if you want the original arrangement.</p>
+        <h2>Menus and preferences</h2>
+        <h3 id="file">File</h3>
+        <p>Use File to create, open, save, package, or export documents and projects. For the required document context, see <a href="project-assets.html">Project and assets</a>.</p>
+        <h3 id="edit">Edit</h3>
+        <p>Use Edit for the active document’s undo history and entity selection actions. Select an entity before invoking selection-specific commands.</p>
+        <h3 id="create">Create</h3>
+        <p>Use Create or the Scene context menu to add entities, sprites, cameras, event areas, components, or imported templates. Choose an editable scene first.</p>
+        <h3 id="view">View</h3>
+        <p>Use View to switch between Scene, Game and the Entity Template Workspace, fit the viewport or change appearance.</p>
+        <h3 id="tools">Tools</h3>
+        <p>Use Tools to activate Scene tools, adjust snapping and pivot, or activate the Tiles tool. Use the Tile Palette to choose a paint mode.</p>
+        <h3 id="help">Help</h3>
+        <p>Use Help for Keyboard Shortcuts… and About SLE Editor….</p>
+        <h3 id="appearance">Appearance</h3>
+        <p>Choose View → Appearance to set the editor palette.</p>
+        <h3 id="dark-appearance">Dark</h3>
+        <p>Choose View → Appearance → Dark for dark surfaces.</p>
+        <h3 id="light-appearance">Light</h3>
+        <p>Choose View → Appearance → Light for light surfaces.</p>
+        <h3 id="density">Density</h3>
+        <p>Choose View → Density to control spacing in the editor.</p>
+        <h3 id="compact-density">Compact</h3>
+        <p>Choose View → Density → Compact to reduce spacing.</p>
+        <h3 id="comfortable-density">Comfortable</h3>
+        <p>Choose View → Density → Comfortable for more spacing.</p>
+        <h3 id="ui-scale">UI Scale</h3>
+        <p>Choose View → UI Scale and select 75%, 85%, or 100% to resize the editor controls.</p>
+        <h3 id="about-sle-editor">About SLE Editor…</h3>
+        <p>Choose Help → About SLE Editor… for the application and renderer description. Check the main window title for build versions.</p>
+        <h3 id="keyboard-shortcuts">Keyboard Shortcuts…</h3>
+        <p>Choose Help → Keyboard Shortcuts… to see the registered default bindings and their scopes.</p>
+        <h2>Selection and transforms</h2>
+        <h3 id="select-tool">Select Tool</h3>
+        <p>Choose Select Tool or press <kbd>Q</kbd>. Click an entity in Scene to select it for inspection.</p>
+        <h3 id="move-tool">Move Tool</h3>
+        <p>Choose Move Tool or press <kbd>W</kbd>. Select an entity, then drag the move handle for translation.</p>
+        <h3 id="rotate-tool">Rotate Tool</h3>
+        <p>Choose Rotate Tool or press <kbd>E</kbd>. Drag the rotation handle around the active pivot or selection center.</p>
+        <h3 id="scale-tool">Scale Tool</h3>
+        <p>Choose Scale Tool or press <kbd>R</kbd>. Drag a scale handle on the selection to resize its transform.</p>
+        <h3 id="frame-selected">Frame Selected</h3>
+        <p>Choose Frame Selected or press <kbd>F</kbd> with entities selected to center and fit them in Scene. View → Fit frames the scene.</p>
+        <h3 id="snapping">Snapping</h3>
+        <p>Use the Scene toolbar snap control or Tools → Turn Snapping On/Off to switch transform snapping.</p>
+        <h3 id="configure-snap">Configure Snap…</h3>
+        <p>Use Tools → Configure Snap… to set grid origin and spacing, rotation increments and scale increments. Turn on snapping to apply these settings while manipulating entities. Hold Ctrl during a viewport transform to temporarily invert snapping.</p>
+        <h3 id="pivot-center">Pivot/Center</h3>
+        <p>Use the Scene toolbar pivot control or the corresponding Tools action to switch Rotate and Scale between the active entity’s pivot and the center of the selection.</p>
+        <h3 id="multi-select">Multi-select</h3>
+        <p>In Scene, Shift-click or Ctrl-click to toggle entities in the selection, or drag empty space to select a group. You can also select multiple entities in Hierarchy. Transform tools act on the selection, and Details exposes shared editable values when applicable. See <a href="../topics/SceneEditor.md">scene editing</a>.</p>
+        <h3 id="select-all">Select All</h3>
+        <p>Use Edit → Select All or <kbd>Ctrl+A</kbd> in Scene or Hierarchy to select every entity in the scene document.</p>
+        <h3 id="delete">Delete</h3>
+        <p>Select entities in an editable scene and use Edit → Delete, <kbd>Delete</kbd> or <kbd>Backspace</kbd> to remove the selected subtrees.</p>
+        <h3 id="duplicate">Duplicate</h3>
+        <p>Select entities in an editable scene and use Edit → Duplicate or <kbd>Ctrl+D</kbd> to copy the selected subtrees and select the copies.</p>
+        <h3 id="undo">Undo</h3>
+        <p>Use Edit → Undo or <kbd>Ctrl+Z</kbd> in an editable document to reverse the latest history entry. During an active edit gesture this cancels the gesture first.</p>
+        <h3 id="redo">Redo</h3>
+        <p>Use Edit → Redo, <kbd>Ctrl+Y</kbd> or <kbd>Ctrl+Shift+Z</kbd> to reapply the next entry in the active document’s history.</p>
+        <h3 id="edit-entity">Edit Entity</h3>
+        <p>Select one entity in an editable scene and use Edit → Edit Entity to open it for template authoring.</p>
+        <h3 id="apply-changes-to-entity-template">Apply Changes to Entity Template</h3>
+        <p>Select an eligible linked instance in an editable scene and use Edit → Apply Changes to Entity Template. The action writes changes back to the linked template. See <a href="project-assets.html#entity-template-overrides">instance overrides</a>.</p>
+        <h3 id="entity-hierarchy">Entity hierarchy</h3>
+        <p>In Hierarchy, drag an entity to a compatible parent or use the context actions to organize the tree. Descendants follow the parent’s transform. See <a href="../topics/SceneEditor.md">scene hierarchy</a>.</p>
+        <h3 id="import">Import</h3>
+        <p>Use Create → Import in an editable scene to bring in a scene or entity template through the document import options. To add texture and script files, use <a href="project-assets.html#asset-filtering">Assets</a>.</p>
+        <h2>Details and playback</h2>
+        <h3 id="add-component">Add Component</h3>
+        <p>Select an editable entity and use Add Component in Details or the Create menu. Choose a supported type to add its default fields.</p>
+        <h3 id="property-drawers">Property drawers</h3>
+        <p>Select an entity and edit its component fields in Details. The <a href="../topics/EditorPropertySchema.md">property schema</a> defines field types, ranges, defaults, and actions.</p>
+        <h3 id="reset-property">Reset Property</h3>
+        <p>Right-click an editable property and choose Reset Property when offered to restore its schema default.</p>
+        <h3 id="copy-property">Copy Property</h3>
+        <p>Right-click a property and choose Copy Property to copy its value for another compatible field.</p>
+        <h3 id="paste-property">Paste Property</h3>
+        <p>Right-click a compatible writable field and choose Paste Property to apply the copied value.</p>
+        <h3 id="reset-component">Reset Component</h3>
+        <p>Use the component context menu in Details to restore supported fields to their defaults.</p>
+        <h3 id="copy-component">Copy Component</h3>
+        <p>Use Copy Component on a component header to copy its values.</p>
+        <h3 id="paste-component">Paste Component</h3>
+        <p>Use Paste Component on a compatible editable component to apply the copied fields.</p>
+        <h3 id="use-image-size">Use image size</h3>
+        <p>Use the Sprite Renderer size action in Details with an image assigned to set the sprite size from the image or region.</p>
+        <h3 id="create-definition">Create Definition…</h3>
+        <p>Use Create Definition… where offered by the State Machine drawer to create a definition for the component. See <a href="engine-features.html#state-machines">state machines</a>.</p>
+        <h3 id="run-lua">Run Lua…</h3>
+        <p>In Scene with a scene document open, use View → Run Lua… to open the Lua console. Run a trusted snippet and check its result or error output.</p>
+        <h3 id="pause">Pause</h3>
+        <p>During Play, click Pause or press <kbd>F6</kbd> to freeze advancement. Use Play (<kbd>F5</kbd>) to resume.</p>
+        <h3 id="step">Step</h3>
+        <p>While paused, click Step to request one simulation step and stay paused.</p>
+        <h3 id="live-inspector">Live Inspector</h3>
+        <p>Select an entity while playing to inspect its live state in Details. Use Pause and Step to inspect values between updates.</p>
+        <figure>
+          <img src="images/live-debugging.png" alt="Player selected in Live Hierarchy while Game runs, with script, sprite, and transform values in Live Details.">
+          <figcaption>Select Player in Live Hierarchy to see its runtime position and the loaded movement script.</figcaption>
+        </figure>
+
+        <h3 id="reload-script">Reload Script</h3>
+        <p>In live Details, choose Reload Script on a reloadable Lua behaviour to explicitly load the edited script. Check Console for compile or lifecycle errors.</p>
+        <h3 id="keep-changes">Keep Changes</h3>
+        <p>Under Transform in live Details, compare the authored and runtime values. Use Keep Changes when the preview is available to carry the eligible runtime transform changes into the authored document. Save the authored scene to persist them.</p>
+        <h3 id="open-in-ide">Open in IDE</h3>
+        <p>On a Lua behaviour with a resolvable script in live Details, use Open in IDE to open its source in the configured editor.</p>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="engine-tour.html">Previous: Engine tour</a>
+        <a href="project-assets.html">Next: Project and assets</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engine tour | SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html">Quickstart</a></li>
+          <li><a href="editor.html">Editor workspace</a></li>
+          <li><a href="first-scene.html">First Room</a></li>
+          <li><a href="lua-gameplay.html">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html">Physics and UI</a></li>
+          <li><a href="run-and-export.html">Run and export</a></li>
+          <li><a href="engine-tour.html" aria-current="page">Engine tour</a></li>
+          <li><a href="editor-tools.html">Editor tools</a></li>
+          <li><a href="project-assets.html">Project and assets</a></li>
+          <li><a href="tilemaps.html">Tilemaps</a></li>
+          <li><a href="engine-features.html">Engine features</a></li>
+          <li><a href="reference.html">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Follow Player through the engine</h1>
+        <p>Use the saved <a href="run-and-export.html">First Room project</a> and press <kbd>D</kbd> in Play to connect the code below to three visible results. Player moves, Wall stops the body, and the checkpoint changes the HUD.</p>
+
+        <h2 id="scene-loading">Load the saved scene</h2>
+        <p>On a folder-project launch, <code>Runtime::startProject</code> registers the project's scene documents and loads the startup scene selected by its descriptor. Project asset resolution maps UUID references to files such as the Player texture and movement script. Follow <a href="../../EngineModules/Systems/src/ProjectRuntime.cpp">ProjectRuntime</a> and <a href="../../EngineModules/Systems/src/Runtime.cpp">Runtime</a>.</p>
+        <p><code>SceneLoader</code> expands prefabs, creates entities, reads their component definitions through registered codecs, and resolves hierarchy links. In First Room, Player's saved definition becomes a runtime entity with a Transform, SpriteRenderer, Script, RigidBody, and BoxCollider. The camera is its own entity. See <a href="../../EngineModules/Systems/src/SceneLoader.cpp">SceneLoader</a> and <a href="../topics/Scenes.md">scene identity and formats</a>.</p>
+
+        <h2 id="ecs-registry">Read Player in ECS</h2>
+        <p>Player's entity ID identifies it within the active registry. The registry holds its component data, while Scene tracks parent and child relationships. Keep authored scene keys for document references and query live IDs against the current registry. See the <a href="../modules/Scene.md">Scene module</a> and <a href="../topics/ECS.md">ECS guide</a>.</p>
+        <p id="component-views">Use <code>Registry::view</code> to query combinations of components the system needs, such as transforms and sprites. Use the registry's component access helpers for a specific live entity and reacquire component pointers after structural changes. See <a href="../../EngineModules/Scene/include/sle/scene/Registry.hpp">Registry</a> and <a href="../../EngineModules/Systems/src/RenderSystem.cpp">RenderSystem</a>.</p>
+
+        <h2 id="transform-propagation">Resolve Player's world pose</h2>
+        <p>The authored Transform stores a local pose. Player is a root, so its parent pose is the identity. For a child, the system composes its local pose with the parent's world pose. <code>TransformSystem</code> visits parents before children, refreshes cached world transforms when a local or parent pose is dirty, and clears local dirty flags. Use Transform setters when changing a local pose so the next update picks it up. A parent without its own local Transform passes the inherited pose through. See <a href="../../EngineModules/Systems/src/TransformSystem.cpp">TransformSystem</a> and the <a href="../CONSTRAINTS.md">engine constraints</a>.</p>
+
+        <h2 id="runtime-frame-order">Trace one running frame</h2>
+        <p>The two runtime methods to follow are <code>advanceSimulation</code> and <code>advanceAndRender</code>. The standalone loop processes pending scene switches and polls window events before advancing and presents after rendering. Editor Play advances the same simulation and can draw a separate view of the resulting state. See <a href="../../EngineModules/Systems/src/Runtime.cpp">Runtime</a> and the <a href="../topics/Runtime.md">runtime guide</a>.</p>
+        <ol>
+          <li>Sample input actions and flush queued scene and global events. A checkpoint contact queued during an earlier physics step can reach Player's Lua subscription here.</li>
+          <li>Update chunk activity, animation, and audio requests. Run Lua behaviours, then update state machines. Player's movement behaviour reads <code>MoveLeft</code> and <code>MoveRight</code>, requests a world-space body velocity through <code>Engine.Physics.setVelocity</code>, and publishes its checkpoint state with <code>Engine.setUIBinding</code>. See the <a href="../modules/Scripting.md">Scripting module</a> and <a href="../../assets/scripts/engine_api.lua">generated Lua API</a>.</li>
+          <li>Synchronize authored poses to physics, step Box2D using its fixed-step accumulator, and write simulated poses back into local transforms. Wall blocks Player. Checkpoint is a sensor and queues overlap events for a subsequent queue flush. See <a href="../../EngineModules/Systems/src/PhysicsSystem.cpp">PhysicsSystem</a>, the <a href="../modules/Physics.md">Physics module</a>, and the <a href="../modules/Events.md">Events module</a>.</li>
+          <li>Resolve final world transforms and update the gameplay camera. Putting this after physics lets rendering use Player's resolved position from the current frame.</li>
+          <li>Submit scene draw commands through RenderSystem and process the XML HUD through UISystem. The HUD reads the <code>roomStatus</code> binding. Renderer owns command sorting, batching, and drawing. See the <a href="../modules/Renderer.md">Renderer module</a> and the <a href="../modules/UI.md">UI module</a>.</li>
+        </ol>
+
+        <h2 id="c-module-boundaries">Find the owning module</h2>
+        <p>Systems coordinates the frame through <code>sle::engine</code>, the CMake alias for <code>sle_engine</code>. Keep components data-centric, query the scene in systems, and expose Lua functionality through bindings and the runtime bridge. The modules form a dependency graph. Check direct dependencies in the target definitions before adding a cross-module call. See the <a href="../topics/Architecture.md">architecture guide</a>, <a href="../modules/Systems.md">Systems module</a>, and <a href="../../EngineModules/Systems/CMakeLists.txt">Systems CMake target</a>.</p>
+
+        <h2 id="examples">Run a smaller example</h2>
+        <ul>
+          <li id="sandbox"><a href="../../examples/sandbox/CMakeLists.txt">Sandbox</a> builds as <code>example_sandbox</code> for exploring engine setup and rendering.</li>
+          <li id="phase-1-eventbus"><a href="../../examples/phase1_eventbus/CMakeLists.txt">Phase 1 EventBus</a> builds as <code>example_phase1_eventbus</code> for C++ event dispatch.</li>
+          <li id="phase-2-lua-events"><a href="../../examples/phase2_lua_events/CMakeLists.txt">Phase 2 Lua Events</a> builds as <code>example_phase2_lua_events</code> for Lua event handling.</li>
+          <li id="phase-3-advanced-events"><a href="../../examples/phase3_advanced_events/CMakeLists.txt">Phase 3 Advanced Events</a> builds as <code>example_phase3_advanced_events</code> for handler priority, cancellation, and subscription filters.</li>
+        </ul>
+        <p>Build examples in the Debug tree and run from the repository root after the <a href="quickstart.html">quickstart setup</a>.</p>
+
+        <h2 id="validation">Validate changes</h2>
+        <p id="smoke-tests">For boot and shutdown checks, build the Debug tree and run the CTest <code>smoke</code> label.</p>
+        <pre tabindex="0"><code>cmake --build build/debug --config Debug --parallel
+ctest --test-dir build/debug -C Debug -L smoke --output-on-failure</code></pre>
+        <p id="integration-tests">For a subsystem change, rebuild the affected target and run just its test. The reference lists checks for <a href="reference.html#focused-validation">scene loading, transforms and physics, events, Lua, and UI</a>. See the <a href="../topics/Testing.md">testing guide</a> for labels and windowed checks.</p>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="run-and-export.html">Previous: Run and export</a>
+        <a href="editor-tools.html">Next: Editor tools</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

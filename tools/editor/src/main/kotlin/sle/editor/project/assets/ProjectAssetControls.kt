@@ -26,7 +26,6 @@ internal data class ProjectAssetCommands(
     val projectRoot: Path? = null,
     val assetRoot: Path? = null,
     val editRegions: (String, (List<SpriteRegion>) -> List<SpriteRegion>) -> Unit = { _, _ -> },
-    val sliceTexture: (String, String) -> Unit = { _, _ -> },
     val setTextureFilter: (String, AssetTextureFilter?) -> Unit = { _, _ -> },
 )
 internal val LocalProjectAssets=staticCompositionLocalOf<ProjectAssetCommands?> { null }
@@ -202,21 +201,6 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
                 withContext(Dispatchers.IO) { AssetIdentity.editRegions(opened.root, assetRoot, path, edit) }
                 if (current == opened) onTextureFilterChanged()
                 "Sprite regions saved"
-            }
-        },
-        sliceTexture = { path, dimensions ->
-            run {
-                withContext(Dispatchers.IO) {
-                    val (width, height) = parseRegionIntegers(dimensions, 2)
-                    val (imageWidth, imageHeight) = spriteImageSize(assetPath(opened.root, assetRoot, path))
-                    AssetIdentity.editRegions(opened.root, assetRoot, path) { existing ->
-                        val cells = sliceGrid(imageWidth, imageHeight, width, height)
-                        val rectangles = existing.map { listOf(it.x, it.y, it.width, it.height) }.toSet()
-                        existing + cells.filter { listOf(it.x, it.y, it.width, it.height) !in rectangles }
-                    }
-                }
-                if (current == opened) onTextureFilterChanged()
-                "Sprite grid saved"
             }
         },
         setTextureFilter = { path, filter ->

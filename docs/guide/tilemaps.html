@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tilemaps | SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html">Quickstart</a></li>
+          <li><a href="editor.html">Editor workspace</a></li>
+          <li><a href="first-scene.html">First Room</a></li>
+          <li><a href="lua-gameplay.html">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html">Physics and UI</a></li>
+          <li><a href="run-and-export.html">Run and export</a></li>
+          <li><a href="engine-tour.html">Engine tour</a></li>
+          <li><a href="editor-tools.html">Editor tools</a></li>
+          <li><a href="project-assets.html">Project and assets</a></li>
+          <li><a href="tilemaps.html" aria-current="page">Tilemaps</a></li>
+          <li><a href="engine-features.html">Engine features</a></li>
+          <li><a href="reference.html">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Tilemaps</h1>
+        <p>Use native tile layers for editable project tilemaps. The <a href="../../examples/tilemap_room/README.md">Tilemap Room walkthrough</a> provides the image, tileset, scene and project used below.</p>
+        <h2>Open or build a room</h2>
+        <h3 id="tilemap-room">Tilemap Room</h3>
+        <p>Open <code>examples/tilemap_room/Room.sleproject</code>, then <strong>Room.scene.json</strong> from Assets. The room has solid, sloped and perforated terrain and a separate decoration layer. Use Play to see the startup camera’s view.</p>
+        <h3 id="add-grid-regions">Add grid regions</h3>
+        <p>Import <code>Room.png</code>, set Texture filter to Nearest and open the spritesheet dialog. In Grid mode enter cell size 16 × 16, margins 0 × 0 and spacing 0 × 0. Add grid regions creates Slice 1–4, in order Solid, Slope, Perforated and Decoration.</p>
+        <h3 id="save-region">Save region</h3>
+        <p>For a single custom slice, select its pixel bounds in the spritesheet dialog and use Save region. Use the saved region ID to reference it from a sprite or tileset entry.</p>
+        <h3 id="tile-layer-loading">Tile layer loading</h3>
+        <p>For a fresh project, copy <a href="../../examples/tilemap_room/Assets/Room.tileset.json">Room.tileset.json</a> into Assets. Set <code>spritesheet</code> to <code>project-asset://</code> plus the imported image UUID and replace each <code>region</code> with the corresponding slice UUID. Keep tile IDs stable and refresh Assets. The <a href="../topics/Scenes.md#native-project-tile-layers">native scene schema</a> explains layer order, chunks and cells.</p>
+        <h3 id="tile-palette">Tile Palette</h3>
+        <p>In an editable project scene, click <strong>Tile Palette</strong> in the Scene toolbar. Choose a tileset and a tile in the Tile Palette. The palette also controls layer selection, paint mode and clipboard operations.</p>
+        <figure>
+          <img src="images/tiles-and-collision.png" alt="The Tile Palette below Scene shows Room.tileset.json, the current layer, paint modes, and four tile thumbnails.">
+          <figcaption>Tilemap Room’s Tile Palette shows the layer controls and choices for Solid, Slope, Perforated, and Decoration.</figcaption>
+        </figure>
+
+        <h3 id="tiles-tool">Tiles Tool</h3>
+        <p>Use Tools → Tiles Tool or press <kbd>T</kbd> with Scene or Hierarchy focused in an editable project scene. Click <strong>Tile Palette</strong> in the Scene toolbar to access the palette and layers.</p>
+        <h3 id="tile-layers">Tile layers</h3>
+        <p>Choose the imported tileset and click Add Tile Layer. Paint terrain on one layer and add a second layer for decoration with Collision cleared. Use the visibility and lock controls to hide or protect a layer, and use Move Up or Move Down to change draw order.</p>
+        <h2>Paint and edit</h2>
+        <h3 id="tile-brush">Tile Brush</h3>
+        <p>With the Tiles tool active and Scene focused, press <kbd>1</kbd> or choose Brush. Click or drag on an editable layer with a tile or stamp selected.</p>
+        <h3 id="tile-erase">Tile Erase</h3>
+        <p>Press <kbd>2</kbd> or choose Erase. Drag across cells on the active editable layer to clear them.</p>
+        <h3 id="tile-rectangle">Tile Rectangle</h3>
+        <p>Press <kbd>3</kbd> or choose Rectangle. Drag across a rectangle to paint it with the selected tile.</p>
+        <h3 id="tile-eyedropper">Tile Eyedropper</h3>
+        <p>Press <kbd>4</kbd> or choose Eyedropper. Click a painted cell to pick its tile from the active layer.</p>
+        <h3 id="tile-fill">Tile Fill</h3>
+        <p>Press <kbd>5</kbd> or choose Fill. Click a cell to replace connected matching cells within the active selection or layer bounds. Select a finite area before filling empty cells.</p>
+        <h3 id="tile-select">Tile Select</h3>
+        <p>Press <kbd>6</kbd> or choose Select. Drag a rectangle to select cells on the active layer. Drag from inside the selection to move its tiles.</p>
+        <h3 id="copy-tiles">Copy Tiles</h3>
+        <p>With a selection on the active layer, click Copy in the palette or use <kbd>Ctrl+C</kbd> in the focused Scene viewport to capture the selected pattern for pasting or stamping.</p>
+        <h3 id="paste-tiles">Paste Tiles</h3>
+        <p>With a copied pattern and a compatible, visible, unlocked layer, click Paste in the palette or use <kbd>Ctrl+V</kbd> in Scene. Point at the destination cell before pasting. If the cursor has no cell, paste uses the active selection’s minimum cell.</p>
+        <h3 id="search-tiles">Search tiles</h3>
+        <p>Enter part of a tile name in the Tile Palette to narrow the tiles shown for the current layer.</p>
+        <h3 id="build-stamp">Build Stamp</h3>
+        <p>Enable Build Stamp and click up to eight palette tiles in left-to-right order. Brush paints the resulting row as a pattern.</p>
+        <h3 id="use-copied-stamp">Use Copied Stamp</h3>
+        <p>Copy a selection with painted cells and click Use Copied Stamp on a layer using the same tileset. Brush paints the copied pattern.</p>
+        <h3 id="clear-selection">Clear Selection</h3>
+        <p>Click Clear Selection in the palette to dismiss the active layer’s cell selection.</p>
+        <h3 id="tile-save-and-export">Save, reopen, and export a tile scene</h3>
+        <p>Undo and redo a stroke, save the scene and reopen it to check the cells and layers. Set the startup scene and frame the terrain with its gameplay camera. Use Play to test it, then <a href="run-and-export.html#export-game">export the project</a>. Move the entire delivery folder and launch it from a different working directory.</p>
+        <h2>Collision authoring and runtime</h2>
+        <h3 id="tile-collision">Tile Collision…</h3>
+        <p>Select the tileset in Assets and choose Tile Collision…. Pick the tile to edit. Changes are staged in the dialog until Apply.</p>
+        <figure>
+          <img src="images/tile-collision-preview.png" alt="The Tile Collision dialog shows the Slope tile with a straight triangular collider over its stepped pixels.">
+          <figcaption>Select Slope to compare its triangular collider with the stepped tile artwork.</figcaption>
+        </figure>
+
+        <h3 id="none">None</h3>
+        <p>Choose None for Decoration so that this tile contributes no fixtures.</p>
+        <h3 id="full-cell">Full Cell</h3>
+        <p>Choose Full Cell for Solid to fill the tile’s full cell with collision.</p>
+        <h3 id="generate-from-alpha">Generate from Alpha</h3>
+        <p>Select Perforated, choose Generate from Alpha, set threshold 128 and simplification 0, and inspect the opening in the preview. For Slope, compare the generated stepped outline with the example’s smooth triangular collider.</p>
+        <h3 id="preview-vertices">Preview vertices</h3>
+        <p>Inspect Preview vertices and adjust the staged shape before applying. Keep the intended opening or slope visible in the preview.</p>
+        <h3 id="apply">Apply</h3>
+        <p>Click Apply after checking the preview. The staged geometry is saved to the tileset asset.</p>
+        <h3 id="discard-preview">Discard preview</h3>
+        <p>Use Discard preview to clear the uncommitted vertex preview.</p>
+        <h3 id="collision-undo">Collision Undo</h3>
+        <p>Use Undo inside Tile Collision… to reverse a staged collision edit. Scene strokes have their own undo history.</p>
+        <h3 id="collision-redo">Collision Redo</h3>
+        <p>Use Redo inside Tile Collision… to restore a staged collision edit after Undo.</p>
+        <h3 id="tile-collision-generation">Tile collision generation</h3>
+        <p>Enable Collision on the terrain tile layer. At runtime the collision system generates static fixtures for active terrain chunks, merging full-cell runs into rectangles. Add a dynamic body above the floor or slope and use Play to observe it land. Check a perforation with a body small enough to fit. Enable the runtime fixture overlay from Lua with <code>Engine.Physics.setDebugEnabled(true)</code> to see the generated outlines.</p>
+        <h3 id="tiled-map-loading">Tiled map loading</h3>
+        <p>For authored Tiled data, use the scene’s <code>tiledMap</code> configuration. The <a href="../topics/Chunks.md">chunks guide</a> describes the runtime Tiled and chunk workflow. Use the native Tile Palette for the project layer workflow described above.</p>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="project-assets.html">Previous: Project and assets</a>
+        <a href="engine-features.html">Next: Engine features</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

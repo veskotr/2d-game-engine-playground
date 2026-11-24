@@ -230,12 +230,19 @@ art-style sampler or the legacy loader default. Older SLE versions with strict s
 
 ### Named sprite regions
 
-Select a registered image in **Assets → Details** and choose **Slice grid…**.
-Enter the cell width and height in pixels. Slicing adds complete cells in
-left-to-right, top-to-bottom order. Repeated slicing preserves the IDs and names
-of existing rectangles. Select a region to rename it, edit its rectangle, or
-delete it. The editor reads image dimensions through ImageIO, which supports
-common formats such as PNG and JPEG.
+Select a registered image in **Assets → Details** and choose **Open spritesheet…**.
+In **Grid** mode, enter the cell width and height, horizontal and vertical margins,
+and horizontal and vertical spacing in pixels. Each margin applies to both sides
+of its axis. Zoom and scroll the checkerboard preview, then choose **Add grid
+regions**. Slicing adds complete cells in left-to-right, top-to-bottom order and
+skips fully transparent cells by default. Repeated slicing keeps existing regions
+and adds new rectangles, preserving the IDs and names that sprites reference.
+
+In **Manual rectangle** mode, select **New region** or an existing region. Drag
+over the image to set the bounds or enter the pixel coordinates directly. Enter
+a name and choose **Save region**. Use **Delete region…** in the asset details
+to remove a region. The editor uses ImageIO for slicing common formats such as
+PNG and JPEG.
 
 Assign the texture to a scene sprite and choose a **Sprite region** in the
 texture drawer. The sprite stores a texture-scoped `regionId`. The sidecar
@@ -388,6 +395,8 @@ filesystem-authoritative. Runnable folder export is documented below and tracked
 
 ## Export a runnable game
 
+Follow the [tilemap room walkthrough](../../examples/tilemap_room/README.md) to import a PNG, paint a room and export it.
+
 Build a prepared Windows x64 Release runtime once, using the existing Windows
 CMake build tree:
 
@@ -446,6 +455,8 @@ A unique sibling staging folder receives the copy, native project validation and
 SHA-256 inventory checks before a no-overwrite publish. Missing/invalid metadata,
 unresolved UUIDs, source/runtime changes during export, damaged bundle files,
 links, case-insensitive name collisions and occupied destinations are rejected.
+For tile layers, export validates the tileset, its spritesheet image and region
+sidecar, and the tile IDs used by the scene.
 The exporter never assigns source UUIDs; Refresh Assets first if metadata is
 missing. Source `.sle` caches/editor state/recovery trash are excluded and retained
 in place. Native validation's staged entity template caches are removed before publishing.

@@ -33,9 +33,9 @@ std::shared_ptr<sle::renderer::Texture> checkSampler(sle::Runtime& runtime, GLin
     check(minification == expected && magnification == expected, "project sprite sampler mismatch");
     return sprite->region.texture;
 }
-void checkRegion(sle::Runtime& runtime, const glm::vec4& expected) {
+void checkRegion(sle::Runtime& runtime, const glm::vec4& expected, const char* key = "sprite") {
     const auto& scene = runtime.getScene();
-    const auto* sprite = scene.getRegistry().getComponent<sle::components::SpriteRenderer>(scene.findEntityByKey("sprite"));
+    const auto* sprite = scene.getRegistry().getComponent<sle::components::SpriteRenderer>(scene.findEntityByKey(key));
     check(sprite && sprite->region.uv == expected, "project sprite region UV mismatch");
 }
 void checkCollisionPair(sle::Runtime& runtime, bool blocked) {
@@ -145,7 +145,9 @@ end })";meta(root/"Assets/Scripts/main.lua",s);
         write(root/"Assets/Textures/sprite.png.slemeta", textureMetadata);
         auto startup = scene("first", Json::array({
             {{"key","first-actor"},{"components",{{"Tags",{{"ids",{"actor-tag"}}}},{"Script",{{"scriptAsset","project-asset://"+s}}}}}},
-            {{"key","sprite"},{"components",{{"Transform",{{"scale",{4,4}}}},{"SpriteRenderer",{{"texture",textureRef},{"regionId",regionId}}}}}}
+            {{"key","sprite"},{"components",{{"Transform",{{"scale",{4,4}}}},{"SpriteRenderer",{{"texture",textureRef},{"regionId",regionId}}}}}},
+            {{"key","legacy-sprite"},{"components",{{"SpriteRenderer",{
+                {"texture",textureRef},{"region",{{"uv",{0.25,0.5,0.75,1.0}}}}}}}}}
         }));
         write(root/"Assets/Scenes/a.scene.json", startup);
         meta(root/"Assets/Scenes/a.scene.json", a);
@@ -201,6 +203,7 @@ end })";meta(root/"Assets/Scripts/main.lua",s);
             check(firstPreview.ok(), firstPreview.error());
             const auto nearest = checkSampler(preview, GL_NEAREST);
             checkRegion(preview, {0, 0.5f, 0.5f, 1});
+            checkRegion(preview, {0.25f, 0.5f, 0.75f, 1.0f}, "legacy-sprite");
             auto& region = textureMetadata["texture"]["regions"][0];
             region["name"] = "Renamed";
             region["x"] = 368;
@@ -367,6 +370,7 @@ end })";meta(root/"Assets/Scripts/main.lua",s);
             checkCollisionPair(runtime, true);
             const auto nearest = checkSampler(runtime, GL_NEAREST);
             checkRegion(runtime, {0, 0.5f, 0.5f, 1});
+            checkRegion(runtime, {0.25f, 0.5f, 0.75f, 1.0f}, "legacy-sprite");
             sle::ScriptApiImpl api(runtime);
             const auto sprite = api.findEntityByKey("sprite");
             check(api.setSpriteTexture(sprite, textureRef), "script sprite texture assignment failed");

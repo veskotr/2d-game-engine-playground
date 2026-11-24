@@ -166,6 +166,7 @@ namespace sle::entity
         roots.clear();
         registry.parentMap.clear();
         childrenMap.clear();
+        tileLayers.clear();
 
         // Scene teardown should fully reset per-scene event state.
         // Clearing queued events prevents stale deferred events from reaching
@@ -197,6 +198,7 @@ namespace sle::entity
         using std::swap;
         swap(registry, staged.registry);
         swap(roots, staged.roots);
+        swap(tileLayers, staged.tileLayers);
         swap(childrenMap, staged.childrenMap);
         swap(keyedEntities, staged.keyedEntities);
         swap(entityKeys, staged.entityKeys);

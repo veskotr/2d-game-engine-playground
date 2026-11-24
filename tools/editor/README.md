@@ -1,5 +1,7 @@
 # SLE Editor
 
+Follow the [tilemap room walkthrough](../../examples/tilemap_room/README.md) to import a PNG, paint a room and export it.
+
 Kotlin/JVM Compose Desktop authoring tool using SLE's native renderer and runtime.
 
 Terminology: the editor calls prefabs **Entity Templates** and the Inspector the **Details**

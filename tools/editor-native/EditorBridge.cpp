@@ -738,8 +738,11 @@ jbyteArray prepare(JNIEnv* env,jbyteArray source,const Open& open) {
     return result;
 }
 }
-extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_prepareProject(JNIEnv* env,jobject,jbyteArray source) {
-    return prepare(env,source,[](const std::filesystem::path& path) { return sle::ProjectRuntime::open(path); });
+extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_prepareProject(
+    JNIEnv* env,jobject,jbyteArray source,jboolean validateTileAssets) {
+    return prepare(env,source,[validateTileAssets](const std::filesystem::path& path) {
+        return sle::ProjectRuntime::open(path, validateTileAssets == JNI_TRUE);
+    });
 }
 // A built game's config.json and its .slepkg packages, mounted exactly as engine_app does.
 extern "C" JNIEXPORT jbyteArray JNICALL Java_sle_editor_bridge_NativeEngine_prepareGame(JNIEnv* env,jobject,jbyteArray source) {

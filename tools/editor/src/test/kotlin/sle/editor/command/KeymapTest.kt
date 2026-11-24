@@ -95,10 +95,13 @@ class KeymapTest {
 
     @Test fun helpIsGeneratedFromTheRegistryGroupedByScope() {
         val sections = keyboardShortcutSections()
-        assertEquals(listOf("Global", "Document", "Hierarchy and Scene view"), sections.map { it.title })
+        assertEquals(listOf("Global", "Document", "Hierarchy and Scene view", "Scene view"), sections.map { it.title })
         val rows = sections.flatMap { it.rows }.associate { it.label to it.chords.map(KeyChord::display) }
         assertEquals(listOf("Ctrl+Y", "Ctrl+Shift+Z"), rows["Redo"])
         assertEquals(listOf("Delete", "Backspace"), rows["Delete"])
+        assertEquals(listOf("5"), rows["Tile Fill"])
+        assertEquals(listOf("Ctrl+C"), rows["Copy Tiles"])
+        assertEquals(listOf("Ctrl+V"), rows["Paste Tiles"])
         // Unbound commands are not listed.
         assertNull(rows["Apply Changes to Entity Template"])
         val html = keyboardShortcutsHtml()

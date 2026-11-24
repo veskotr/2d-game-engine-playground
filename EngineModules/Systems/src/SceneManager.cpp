@@ -41,7 +41,7 @@ bool SceneManager::hasScene(const std::string& sceneName) const
 sle::core::Result<bool> SceneManager::loadScene(
     const std::string& sceneName,
     Runtime& runtime,
-    sle::entity::Scene& scene, bool emitLifecycleEvents, bool* errorReported)
+    sle::entity::Scene& scene, bool emitLifecycleEvents, bool* errorReported, bool preserveTerrain)
 {
     if (errorReported) *errorReported = false;
     auto it = sceneBuilders.find(sceneName);
@@ -59,9 +59,13 @@ sle::core::Result<bool> SceneManager::loadScene(
             const auto textureFilter = [&runtime](const std::string& texture) {
                 return runtime.spriteTextureFilter(texture);
             };
+            const bool editorDocument = path == "editor.scene.json";
+            const auto tileAsset = [&runtime, editorDocument](const std::string& reference) {
+                return runtime.resolveTileAsset(reference, editorDocument);
+            };
             const auto result = it->second.jsonData
-                ? SceneLoader::loadData(*it->second.jsonData, *staged, path, textureFilter)
-                : SceneLoader::load(path, *staged, textureFilter);
+                ? SceneLoader::loadData(*it->second.jsonData, *staged, path, textureFilter, tileAsset, editorDocument)
+                : SceneLoader::load(path, *staged, textureFilter, tileAsset);
             if (!result.ok())
                 return sle::core::Result<bool>::error(
                     "Failed to load scene '" + sceneName + "' from '" + path + "': " + result.error());
@@ -87,6 +91,7 @@ sle::core::Result<bool> SceneManager::loadScene(
         runtime.getGlobalBus().queue(unloadEvent);
     }
 
+    if (!preserveTerrain && runtime.tileCollisionSystem) runtime.tileCollisionSystem->clear();
     ++sceneInstance;
     authoredEntityKeys = std::move(stagedKeys);
     if (staged)

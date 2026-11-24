@@ -56,7 +56,8 @@ int main() {
         return 1;
     }
 
-    auto processB = runtime.getSceneManager().processPendingSwitch(runtime, runtime.getScene());
+    bool errorReported = false;
+    auto processB = runtime.getSceneManager().processPendingSwitch(runtime, runtime.getScene(), errorReported);
     if (!processB.ok()) {
         std::cerr << "Failed processing pending scene switch: " << processB.error() << "\n";
         return 1;

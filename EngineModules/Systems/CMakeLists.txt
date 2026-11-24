@@ -22,6 +22,8 @@ add_library(sle_engine STATIC
     src/PrefabPackage.cpp
     src/SceneLoader.cpp
     src/TiledMapLoader.cpp
+    src/TileLayerLoader.cpp
+    src/TileCollisionSystem.cpp
     src/CameraSystem.cpp
     src/Runtime.cpp
     src/AnimationSystem.cpp

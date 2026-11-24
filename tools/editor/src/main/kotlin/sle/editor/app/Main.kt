@@ -111,6 +111,7 @@ private fun launchEditor(args: Array<String>) = application {
     val runtimeSmoke="--project-runtime-smoke" in args || distributionSmoke
     val documentSmoke="--project-documents-smoke" in args
     val assetSmoke="--asset-browser-smoke" in args
+    val tileSmoke="--tile-painting-smoke" in args
     val projectSmoke="--project-smoke" in args
     val sandboxSmoke="--smoke-test" in args
     val authoringUiSmoke="--authoring-ui-smoke" in args
@@ -122,7 +123,7 @@ private fun launchEditor(args: Array<String>) = application {
     val appearanceSmoke="--editor-appearance-smoke" in args
     val walkSmoke="--l1-walk-smoke" in args
     val previewSmoke=authoringUiSmoke || switchingSmoke
-    val testing=layoutPhase || dockingSmoke || sandboxSmoke || previewSmoke || gizmoSmoke || sceneSmoke || cameraSmoke || menuSmoke || projectSmoke || assetSmoke || documentSmoke || runtimeSmoke || appearanceSmoke || walkSmoke
+    val testing=layoutPhase || dockingSmoke || sandboxSmoke || previewSmoke || gizmoSmoke || sceneSmoke || cameraSmoke || menuSmoke || projectSmoke || assetSmoke || documentSmoke || runtimeSmoke || appearanceSmoke || walkSmoke || tileSmoke
     val windowState=rememberWindowState(width=1280.dp,height=900.dp)
     val authoring=remember {
         runCatching { EntityWorkspaceState(readComponentCatalog()).apply {
@@ -290,7 +291,7 @@ private fun launchEditor(args: Array<String>) = application {
         }
     }
     val watchdog=remember {
-        if (testing) Timer(if(documentSmoke || walkSmoke) 150_000 else if(distributionSmoke || dockingSmoke || appearanceSmoke) 90_000 else 30_000) {
+        if (testing) Timer(if(documentSmoke || walkSmoke) 150_000 else if(distributionSmoke || dockingSmoke || appearanceSmoke || assetSmoke || tileSmoke) 90_000 else 30_000) {
             System.err.println("EDITOR_SMOKE_FAIL: viewport timed out")
             exitProcess(1)
         }.apply { isRepeats=false; start() } else null
@@ -358,6 +359,28 @@ private fun launchEditor(args: Array<String>) = application {
                         assetBounds,treeNodeBounds,scene.getOrThrow(),authoring.getOrThrow(),workspace)
                     watchdog?.stop();exitApplication()
                 } catch(failure: Throwable) { canvas?.stopRendering();failure.printStackTrace();exitProcess(1) }
+            }
+            if (tileSmoke) {
+                try {
+                    window.isAlwaysOnTop = true
+                    window.toFront()
+                    while (readyFrames < 5 || projectActions == null) delay(30)
+                    sle.editor.smoke.runTilePaintingSmoke(projectActions!!.openPath, project, scene.getOrThrow(),
+                        { canvas }, workspace.tools, scenePlayback) {
+                        repeat(100) { if ("Tile Palette" !in shellBounds) delay(30) }
+                        val point = shellBounds.getValue("Tile Palette").center
+                        val origin = window.contentPane.locationOnScreen
+                        val robot = java.awt.Robot()
+                        robot.mouseMove(origin.x + point.x.toInt(), origin.y + point.y.toInt())
+                        robot.mousePress(java.awt.event.InputEvent.BUTTON1_DOWN_MASK)
+                        robot.mouseRelease(java.awt.event.InputEvent.BUTTON1_DOWN_MASK)
+                        val panel = PanelId("tilePalette")
+                        repeat(100) { if (manager.layout.tabs().none { it.active == panel }) delay(30) }
+                        check(manager.layout.tabs().any { it.active == panel }) { "Tile Palette button did not open its dock panel" }
+                    }
+                    watchdog?.stop()
+                    exitApplication()
+                } catch (failure: Throwable) { canvas?.stopRendering(); failure.printStackTrace(); exitProcess(1) }
             }
             if(assetSmoke) {
                 try {
@@ -528,6 +551,12 @@ private fun launchEditor(args: Array<String>) = application {
         }
         EditorTheme(appearance) {
             val assets=rememberAssetBrowser(project.opened,window)
+            val tileProject = project.opened
+            val tileScene = scene.getOrNull()
+            val tileOptions = tileProject?.let { sle.editor.ui.rememberTilePaletteOptions(it, assets?.snapshot) }
+            if (tileProject != null && tileScene != null) {
+                sle.editor.ui.SyncTilePainting(tileScene, tileProject, assets?.snapshot, tileOptions, workspace.tools)
+            }
             SideEffect { if(assetSmoke || documentSmoke || runtimeSmoke || appearanceSmoke) observedAssets=assets }
             val recentDirectory=remember { if(testing) java.nio.file.Files.createTempDirectory("sle-smoke-recents") else null }
             val projectScripts = rememberProjectLuaScripts(project.opened, project.activationRevision, recentDirectory) {
@@ -576,6 +605,10 @@ private fun launchEditor(args: Array<String>) = application {
             val runProject=sle.editor.project.projectRunAction(project,scenePlayback) { canvas?.finishGesture();editingSceneKey=null;showScene(true) }
             SideEffect {
                 val opened = project.opened
+                if (opened == null && workspace.tools.active == sle.editor.viewport.tools.ViewportToolId.Tiles) {
+                    workspace.tools.activate(sle.editor.viewport.tools.ViewportToolId.Select)
+                    workspace.tools.tilePainting.configure(null, null)
+                }
                 engineSession.owner.setEditorAssetRoot(opened?.let { it.root.resolve(it.document.assetRoot) },
                     opened?.document?.settings ?: sle.editor.project.ProjectSettings())
             }
@@ -846,7 +879,8 @@ private fun launchEditor(args: Array<String>) = application {
                             EditorButton(if(game) "Show Game" else "Show Scene",{showScene(game)})
                         }
                     } else {
-                        sle.editor.ui.controls.EditorToolbar {
+                        // The heavyweight viewport covers Compose popups that extend below the toolbar.
+                        sle.editor.ui.controls.EditorToolbar(tooltipsAbove = true) {
                             if (project.opened != null && !entity) {
                                 val command = sle.editor.command.PlayCommands.runProject
                                 EditorButton(command.label,
@@ -870,6 +904,25 @@ private fun launchEditor(args: Array<String>) = application {
                                 sle.editor.ui.controls.EditorToolbarDivider()
                                 sle.editor.ui.ViewportToolControls(if(!entity && mode==ViewportMode.Scene) workspace.tools else null,workspace.snap,
                                     onConfigure={ snapDialog=true },onToolBounds={ id,bounds -> if(sceneSmoke) shellBounds["Tool"+id.name]=bounds })
+                            }
+                            if (!entity && !game && mode == ViewportMode.Scene) {
+                                val opened = project.opened
+                                val state = scene.getOrNull()
+                                if (opened != null && state != null) {
+                                    val command = sle.editor.command.ToolCommands.tiles
+                                    EditorButton("Tile Palette", {
+                                        liveCommandContext().let { if (command.enabled(it)) command.run(it) }
+                                        manager.showPanel(PanelId("tilePalette"))
+                                    }, enabled = command.enabled(commandContext()) && !project.busy,
+                                        help = keymap.hint(command.id, "Open the tile palette"),
+                                        modifier = Modifier.onGloballyPositioned { if (tileSmoke) shellBounds["Tile Palette"] = it.boundsInWindow() },
+                                        primary = workspace.tools.active == sle.editor.viewport.tools.ViewportToolId.Tiles)
+                                    val activeLayer = workspace.tools.tilePainting.layerId?.let(state::tileLayer)
+                                    if (workspace.tools.active == sle.editor.viewport.tools.ViewportToolId.Tiles) {
+                                        if (activeLayer?.locked == true) EditorLabel("${activeLayer.name} is locked")
+                                        else if (activeLayer?.visible == false) EditorLabel("${activeLayer.name} is hidden")
+                                    }
+                                }
                             }
                             if(!game && scenePlayback.editing) inspector?.let {
                                 sle.editor.ui.controls.EditorToolbarDivider()
@@ -915,7 +968,13 @@ private fun launchEditor(args: Array<String>) = application {
                             sle.editor.ui.EditorMenuEntry("Export Game…",project.opened!=null && !project.busy,action=distribution.exportGame)),
                         projectAssets=assetCommands,projectDocuments=documents,
                         assetEntries=assetBrowserMenu(assets,assetBrowserVisible) { if(assetBrowserVisible) manager.hidePanel(PanelId("assets")) else manager.showPanel(PanelId("assets")) },
-                    ) + windowsMenu(manager) { workspace.prefabSession }.let { (label, entries) ->
+                    ) + windowsMenu(manager) { panel ->
+                        when (panel.value) {
+                            "entity" -> workspace.prefabSession
+                            "tilePalette" -> tileProject != null && tileScene != null
+                            else -> false
+                        }
+                    }.let { (label, entries) ->
                         label to (entries + scriptPanels.map { panel ->
                             sle.editor.ui.EditorMenuEntry(panel.label) {
                                 if (currentScripts === projectScripts && currentScripts.trusted == true) {
@@ -976,9 +1035,25 @@ private fun launchEditor(args: Array<String>) = application {
                             else AssetBrowserPanel(assets,project.opened?.document?.assetRoot ?: "Assets",Modifier.fillMaxSize(),commands=assetCommands,onOpen={ relative -> project.opened?.let { documents?.openPath?.invoke(it.root.resolve(it.document.assetRoot).resolve(relative)) } },
                                 dragPath={ relative -> project.opened?.let { it.root.resolve(it.document.assetRoot).resolve(relative) } },onBounds={id,bounds -> if(assetSmoke || documentSmoke || runtimeSmoke) assetBounds[id]=bounds},
                                 onOpenScript={ relative, id -> openScriptSource { scriptSources.openAsset(relative, id) } },
+                                tileLayerScales = { id ->
+                                    scene.getOrNull()?.tileLayerDocuments().orEmpty()
+                                        .filter { it.tileset == "project-asset://$id" }.map { it.pixelsPerUnit }
+                                },
                                 entityDrop=if(scene.getOrNull()?.projectCreatePrefab==null) null else { relative,payload ->
                                     project.opened?.let { dropEntity(it.root.resolve(it.document.assetRoot).resolve(relative),payload) }
                                 })
+                        },
+                        PanelId("tilePalette") to {
+                            when {
+                                tileProject == null || tileScene == null ->
+                                    EditorEmptyState("No project scene", "Open a project scene to paint tiles.")
+                                !scenePlayback.editing || mode != ViewportMode.Scene || project.busy ->
+                                    EditorEmptyState("Tile painting unavailable", "Switch to an editable Scene view to paint tiles.")
+                                else -> sle.editor.ui.TilePaintingControls(tileScene, tileProject, assets?.snapshot,
+                                    tileOptions, workspace.tools, activate = {
+                                        workspace.tools.activate(sle.editor.viewport.tools.ViewportToolId.Tiles)
+                                    })
+                            }
                         },
                         PanelId("console") to {
                             val consoleOwner = workspace.engineSession.owner
@@ -1015,6 +1090,8 @@ private fun launchEditor(args: Array<String>) = application {
                             scenePlayback.playback==Playback.Paused && engineSession.owner.luaPauseMessage!=null ->
                                 "Paused on Lua error • ${engineSession.owner.luaPauseMessage}"
                             !scenePlayback.editing -> "Play mode: scene edits are disabled; "+sle.editor.command.standardKeymap.hint(sle.editor.command.PlayCommands.stop.id,"stop")+" to edit"
+                            workspace.tools.active == sle.editor.viewport.tools.ViewportToolId.Tiles ->
+                                workspace.tools.gestureHint ?: workspace.tools.tilePainting.mode.help
                             else -> workspace.tools.gestureHint ?: sle.editor.viewport.tools.toolHint(workspace.tools.active,
                                 sle.editor.viewport.tools.ToolHintContext(workspace.snap.settings,sceneState?.selection?.size ?: 0,workspace.tools.pivot))
                         },

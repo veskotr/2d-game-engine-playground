@@ -25,9 +25,18 @@ internal suspend fun runAssetBrowserSmoke(
 ) {
     val robot=Robot().apply { autoDelay=10 }
     suspend fun await(message: String,condition: ()->Boolean) {
-        repeat(220) { if(condition()) { delay(80);return };delay(25) };error("$message; asset operation: ${assetCommands()?.message}; browser errors: ${browser()?.snapshot?.errors}")
+        repeat(220) { if(condition()) { delay(80);return };delay(25) }
+        Window.getWindows().filterIsInstance<JDialog>().firstOrNull {
+            it.isShowing && it.title.startsWith("Spritesheet — ")
+        }?.let {
+            val report = Path.of(System.getProperty("sle.smokeReport")).resolveSibling("spritesheet-smoke-failure.png")
+            ImageIO.write(robot.createScreenCapture(it.bounds), "png", report.toFile())
+        }
+        error("$message; asset operation: ${assetCommands()?.message}; browser errors: ${browser()?.snapshot?.errors}")
     }
     fun has(path: String)=browser()?.snapshot?.entries?.any { it.path==path }==true
+    fun spritesheet() = Window.getWindows().filterIsInstance<JDialog>()
+        .single { it.isShowing && it.title.startsWith("Spritesheet — ") }
     suspend fun click(id: String,double: Boolean=false) {
         if(id.startsWith("AssetFolder:") && id !in bounds) {
             await("Missing folder tree") { "AssetFolders" in bounds }
@@ -46,7 +55,20 @@ internal suspend fun runAssetBrowserSmoke(
             robot.mouseMove(o.x+center.x.toInt(),o.y+center.y.toInt())
             robot.mouseWheel(if(row.bottom>container.bottom) 1 else -1);delay(120)
         }
-        val at=bounds.getValue(id).center;val origin=window.contentPane.locationOnScreen
+        if (id == "AssetOpenSpritesheet") {
+            val details = bounds.getValue("AssetDetails")
+            repeat(12) {
+                val button = bounds.getValue(id)
+                if (button.height >= 20f && button.top >= details.top && button.bottom <= details.bottom) return@repeat
+                val origin = window.contentPane.locationOnScreen
+                robot.mouseMove(origin.x + details.center.x.toInt(), origin.y + details.center.y.toInt())
+                robot.mouseWheel(if (button.height > 0 && button.top <= details.top) -1 else 1)
+                delay(100)
+            }
+        }
+        val at=bounds.getValue(id).center
+        val host = if (id.startsWith("Spritesheet")) spritesheet() else window
+        val origin = (host as RootPaneContainer).contentPane.locationOnScreen
         robot.mouseMove(origin.x+at.x.toInt(),origin.y+at.y.toInt())
         repeat(if(double) 2 else 1) {
             robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);delay(60)
@@ -222,18 +244,52 @@ internal suspend fun runAssetBrowserSmoke(
         }
     }.apply { isDaemon=true;start() }
     val texturePath = "Textures/tile2.png"
-    answerPrompts("368, 368"); click("AssetSliceGrid")
-    await("Grid slicing did not publish four regions") {
+    fun key(code: Int) { robot.keyPress(code); robot.keyRelease(code) }
+    suspend fun enterField(id: String, text: String) {
+        click(id)
+        key(KeyEvent.VK_END)
+        repeat(16) { key(KeyEvent.VK_BACK_SPACE) }
+        for (char in text) key(KeyEvent.getExtendedKeyCodeForChar(char.code))
+    }
+    suspend fun choose(id: String, steps: Int) {
+        click(id)
+        repeat(steps) { key(KeyEvent.VK_DOWN); delay(60) }
+        key(KeyEvent.VK_ENTER)
+    }
+    click("AssetOpenSpritesheet")
+    enterField("SpritesheetCell", "366, 364")
+    enterField("SpritesheetMargin", "1, 2")
+    enterField("SpritesheetSpacing", "1, 2")
+    click("SpritesheetAdd")
+    await("Grid slicing did not publish four padded regions") {
         assetCommands()?.busy == false && initial.snapshot?.spriteRegions?.get(texturePath)?.size == 4
     }
-    val regionId = initial.snapshot!!.spriteRegions.getValue(texturePath).first().id
+    click("SpritesheetClose")
+    val firstRegion = initial.snapshot!!.spriteRegions.getValue(texturePath).first()
+    check(firstRegion.x == 1 && firstRegion.y == 2 && firstRegion.width == 366 && firstRegion.height == 364)
+    val regionId = firstRegion.id
     scene.entities.single().setSpriteRegion(regionId)
     val documentWithRegion = scene.serialize()
-    answerPrompts("Top left", "0, 0, 367, 368"); click("AssetEditRegion")
+    click("AssetOpenSpritesheet")
+    choose("SpritesheetMode", 2)
+    choose("SpritesheetRegion", 2)
+    enterField("SpritesheetName", "idle")
+    val preview = bounds.getValue("SpritesheetCanvas")
+    val origin = spritesheet().contentPane.locationOnScreen
+    val dragX = origin.x + preview.left.toInt() + 30
+    val dragY = origin.y + preview.top.toInt() + 30
+    robot.mouseMove(dragX, dragY)
+    robot.mousePress(InputEvent.BUTTON1_DOWN_MASK)
+    robot.mouseMove(dragX + 80, dragY + 65)
+    delay(80)
+    robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK)
+    click("SpritesheetSave")
     await("Region edit did not preserve the selected ID") {
         val region = initial.snapshot?.spriteRegions?.get(texturePath)?.firstOrNull()
-        assetCommands()?.busy == false && region?.id == regionId && region.name == "Top left" && region.width == 367
+        assetCommands()?.busy == false && region?.id == regionId && region.name == "idle" && region.width in 30..150 && region.height in 25..130
     }
+    val editedRegion = initial.snapshot!!.spriteRegions.getValue(texturePath).first()
+    click("SpritesheetClose")
     check(scene.dirty && scene.serialize() == documentWithRegion) { "Region edit altered the scene draft" }
     withContext(Dispatchers.IO) {
         val documents = ProjectDocuments(first)
@@ -339,7 +395,7 @@ internal suspend fun runAssetBrowserSmoke(
         !project.busy && has("unknown.custom") &&
             browser()?.snapshot?.textureFilters?.get(texturePath) == AssetTextureFilter.Nearest &&
             browser()?.snapshot?.spriteRegions?.get(texturePath)?.firstOrNull()?.let {
-                it.id == regionId && it.name == "Top left" && it.width == 367
+                it == editedRegion
             } == true
     }
     println("ASSET_BROWSER_SMOKE_PASS disk-discovery/unknown-files/tree/breadcrumb/double-click/external-move/delete/refresh/show-hide/background-gameplay/project-switch/close/reopen file=${first.file}")

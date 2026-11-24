@@ -4,6 +4,42 @@ import java.nio.file.*
 import kotlin.test.*
 
 class AssetIdentityTest {
+    @Test fun paddedGridSkipsPartialAndTransparentCellsAndPersistsEditedIds() {
+        val project = Files.createTempDirectory("sle-padded-sheet-")
+        val assets = Files.createDirectory(project.resolve("Assets"))
+        val texture = assets.resolve("sheet.png")
+        val image = java.awt.image.BufferedImage(17, 20, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+        image.setRGB(2, 3, 0x01000000)
+        image.setRGB(7, 10, -1)
+        image.setRGB(12, 3, -1) // The next column falls inside the right margin.
+        javax.imageio.ImageIO.write(image, "png", texture.toFile())
+
+        val grid = SpriteGrid(4, 5, 2, 3, 1, 2)
+        val cells = grid.rectangles(image)
+        assertEquals(listOf(2 to 3, 7 to 10), cells.map { it.x to it.y })
+        assertEquals(listOf(2 to 3, 7 to 3, 2 to 10, 7 to 10),
+            grid.copy(skipTransparent = false).rectangles(image).map { it.x to it.y })
+
+        val textureId = AssetIdentity.ensure(texture)
+        AssetIdentity.editRegions(project, assets, "sheet.png") { appendGridRegions(it, cells) }
+        val meta = AssetIdentity.sidecar(texture)
+        val assigned = AssetIdentity.readMetadata(meta).regions.first().id
+        AssetIdentity.editRegions(project, assets, "sheet.png") { regions ->
+            regions.map { if (it.id == assigned) it.copy(name = "Idle", width = 3) else it }
+        }
+        AssetIdentity.editRegions(project, assets, "sheet.png") { appendGridRegions(it, cells) }
+        assertFailsWith<IllegalArgumentException> {
+            AssetIdentity.editRegions(project, assets, "sheet.png") { regions ->
+                regions.map { if (it.id == assigned) it.copy(width = 17) else it }
+            }
+        }
+        val reopened = AssetIdentity.readMetadata(meta)
+        assertEquals(textureId, reopened.id)
+        assertEquals("Idle", reopened.regions.single { it.id == assigned }.name)
+        assertEquals(3, reopened.regions.single { it.id == assigned }.width)
+        assertEquals(3, reopened.regions.size)
+    }
+
     @Test fun regionEditsPreserveIdentityAndFilter() {
         val project = Files.createTempDirectory("sle-regions-")
         val assets = Files.createDirectory(project.resolve("Assets"))
@@ -12,7 +48,8 @@ class AssetIdentityTest {
         val id = AssetIdentity.ensure(texture)
         val meta = AssetIdentity.sidecar(texture)
         AssetIdentity.writeFilter(project, assets, "sprite.png", AssetTextureFilter.Nearest)
-        val regions = sliceGrid(17, 16, 8, 8)
+        val regions = appendGridRegions(emptyList(), SpriteGrid(8, 8, skipTransparent = false)
+            .rectangles(javax.imageio.ImageIO.read(texture.toFile())))
         assertEquals(listOf(0 to 0, 8 to 0, 0 to 8, 8 to 8), regions.map { it.x to it.y })
         AssetIdentity.editRegions(project, assets, "sprite.png") { regions }
         val renamed = regions.first().copy(name = "Idle", width = 7)

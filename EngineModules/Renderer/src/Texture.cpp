@@ -77,7 +77,7 @@ bool Texture::loadFromFiles(const std::string& imagePath)
 
 bool Texture::loadFromFiles(const std::string& imagePath, const TextureLoadOptions& options)
 {
-    stbi_set_flip_vertically_on_load(true);
+    stbi_set_flip_vertically_on_load_thread(true);
     unsigned char* data = stbi_load(imagePath.c_str(), &width, &height, &channels, 4);
 
     if (!data)

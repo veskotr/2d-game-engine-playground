@@ -1,4 +1,5 @@
 #pragma once
+#include <sle/engine/TileCollisionSystem.hpp>
 #include <sle/core/EngineConfig.hpp>
 #include <sle/core/Timer.hpp>
 #include <sle/events/EventBus.hpp>
@@ -95,6 +96,7 @@ public:
     bool registerSceneFromData(const std::string& sceneName, const nlohmann::json& data, const std::string& sourcePath);
     sle::core::Result<bool> startProject(const ProjectRuntime& project);
     std::string resolveProjectAsset(const std::string& value) const;
+    std::string resolveTileAsset(const std::string& value, bool editorDocument) const;
     nlohmann::json resolveProjectComponents(const nlohmann::json& value) const;
     bool hasScene(const std::string& sceneName) const;
     sle::core::Result<bool> loadScene(const std::string& sceneName);
@@ -128,6 +130,7 @@ public:
     sle::events::EventBus& getGlobalBus() { return globalBus_; }
 
 private:
+    friend class SceneManager;
     struct FrameTimings {
         double transform, script, physics, renderSubmit, renderFlush;
     };
@@ -176,6 +179,7 @@ private:
     sle::renderer::Renderer renderer;
     sle::entity::Scene scene;
     std::unique_ptr<sle::physics::PhysicsWorld> physicsWorld;
+    std::unique_ptr<TileCollisionSystem> tileCollisionSystem;
     sle::events::EventBus globalBus_;  // Engine-wide event bus for lifecycle events
     TransformSystem transformSystem;
     AnimationSystem animationSystem;
@@ -189,6 +193,7 @@ private:
     ScriptApiImpl scriptApi;
     sle::scripting::ScriptEngine scriptEngine;
     std::shared_ptr<sle::renderer::Shader> defaultQuadShader;
+    std::unique_ptr<renderer::Texture> missingTileTexture;
     std::shared_ptr<sle::renderer::Shader> defaultDebugShader;
     sle::core::Camera2D camera{static_cast<float>(config.width), static_cast<float>(config.height)};
     sle::core::Timer timer;

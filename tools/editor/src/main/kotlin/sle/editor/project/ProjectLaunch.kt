@@ -12,10 +12,13 @@ internal data class PreparedProject(
 ) {
     fun release() { CompletableFuture.runAsync { NativeEngine.releaseProject(handle) } }
     companion object {
-        fun open(project: OpenedProject): PreparedProject {
+        fun open(project: OpenedProject, validateTileAssets: Boolean = false): PreparedProject {
             // A changed descriptor requires reopen, just as settings Save does.
             require(ProjectFiles.open(project.file).document==project.document) { "Project settings changed on disk; reopen before Run Project" }
-            val json=Json.parseToJsonElement(NativeEngine.prepareProject(project.file.toString().toByteArray(Charsets.UTF_8)).toString(Charsets.UTF_8)).jsonObject
+            val path = project.file.toString().toByteArray(Charsets.UTF_8)
+            val json = Json.parseToJsonElement(
+                NativeEngine.prepareProject(path, validateTileAssets).toString(Charsets.UTF_8)
+            ).jsonObject
             return PreparedProject(json.getValue("handle").jsonPrimitive.long,json.getValue("source").jsonPrimitive.content,
                 ProjectGameSettings(json.getValue("title").jsonPrimitive.content,json.getValue("width").jsonPrimitive.int,
                     json.getValue("height").jsonPrimitive.int,json.getValue("vsync").jsonPrimitive.boolean,

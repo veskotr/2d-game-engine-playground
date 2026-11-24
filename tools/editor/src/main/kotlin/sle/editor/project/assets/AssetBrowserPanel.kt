@@ -46,6 +46,7 @@ internal fun AssetBrowserPanel(
     /** Scene entity dropped on an asset-relative folder ("" is the root); null disables folder targets. */
     entityDrop: ((String,EntityDragPayload)->Unit)? = null,
     onOpenScript: ((String, String?) -> Unit)? = null,
+    tileLayerScales: (String) -> List<Double> = { emptyList() },
 ) {
     val folderTargets=entityDrop!=null && commands?.busy!=true
     @Composable fun Modifier.folderTarget(folder: String)=entityDropTarget(folderTargets) { entityDrop?.invoke(folder,it) }
@@ -68,7 +69,7 @@ internal fun AssetBrowserPanel(
     } }
     var showDetails by remember { mutableStateOf(false) }
     @Composable fun details(modifier: Modifier) {
-        Column(modifier.drawBehind { drawRect(border,size=androidx.compose.ui.geometry.Size(metrics.borderWidth.toPx(),size.height)) }.padding(metrics.panelPadding).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(metrics.gap)) {
+        Column(modifier.then(measured("AssetDetails")).drawBehind { drawRect(border,size=androidx.compose.ui.geometry.Size(metrics.borderWidth.toPx(),size.height)) }.padding(metrics.panelPadding).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(metrics.gap)) {
             val selected=state.selected?.let(entryMap::get)
             if(selected!=null) {
                 if (commands != null && snapshot?.idsByPath?.containsKey(selected.path) == true) {
@@ -95,6 +96,16 @@ internal fun AssetBrowserPanel(
                             commands.setTextureFilter(selected.path, AssetTextureFilter.entries.find { it.label == label })
                         }, modifier = measured("AssetTextureFilter"), enabled = !commands.busy)
                     SpriteRegionControls(selected.path, snapshot.spriteRegions[selected.path].orEmpty(), commands, ::measured)
+                }
+                if (commands != null && selected.kind == AssetKind.File && selected.path.endsWith(".tileset.json", true)) {
+                    var collisionOpen by remember(commands.projectRoot, selected.path) { mutableStateOf(false) }
+                    EditorButton("Tile Collision…", { collisionOpen = true }, enabled = !commands.busy)
+                    val id = snapshot?.idsByPath?.get(selected.path)
+                    if (collisionOpen) TilesetCollisionDialog(selected.path, commands,
+                        id?.let(tileLayerScales).orEmpty()) {
+                        collisionOpen = false
+                        state.refresh()
+                    }
                 }
                 if(commands!=null && selected.kind!=AssetKind.Link) {
                     EditorButton("Reveal in Explorer",onClick=commands.reveal,enabled=!commands.busy,style=EditorButtonStyle.Ghost)

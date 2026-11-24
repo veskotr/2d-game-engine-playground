@@ -14,6 +14,10 @@ import java.awt.event.KeyEvent
  */
 internal class ToolHost(val state: ViewportToolState, val snap: SnapService) {
     var scene: SceneWorkspaceState? = null
+        set(value) {
+            if (field !== value) finish()
+            field = value
+        }
     var camera: PreviewCamera? = null
     /** Handles of the scene's active entity; the owner rebuilds them after [selectionChanged]. */
     var gizmos: () -> ViewportGizmos? = { null }
@@ -23,13 +27,17 @@ internal class ToolHost(val state: ViewportToolState, val snap: SnapService) {
         when(id) {
             ViewportToolId.Select -> SelectTool(); ViewportToolId.Move -> MoveTool()
             ViewportToolId.Rotate -> RotateTool(); ViewportToolId.Scale -> ScaleTool()
+            ViewportToolId.Tiles -> TileTool()
         }
     }
     val tool: ViewportTool get() = tools.getValue(state.active)
     private var gesture: ViewportTool? = null
     /** A press was routed to a tool and its release has not arrived. */
     val pressed get() = gesture != null
-    init { state.onSwitch = { finish() } }
+    init {
+        state.onSwitch = { finish() }
+        state.onTileChange = { if (state.active == ViewportToolId.Tiles) cancel() }
+    }
 
     fun press(pointer: ToolPointer): ToolPress {
         finish()
@@ -46,14 +54,14 @@ internal class ToolHost(val state: ViewportToolState, val snap: SnapService) {
     }
     /** Commits the gesture in progress: a tool switch, focus loss, a mode change or a new press. */
     fun finish() {
-        val current = gesture ?: return
+        val current = gesture ?: tool.takeIf { it.id == ViewportToolId.Tiles } ?: return
         gesture = null
         current.finish(this)
         updateHint()
     }
     /** Abandons the gesture in progress; the scene returns to its state at the press. */
     fun cancel() {
-        val current = gesture ?: return
+        val current = gesture ?: tool.takeIf { it.id == ViewportToolId.Tiles } ?: return
         gesture = null
         current.cancel(this)
         updateHint()
@@ -63,6 +71,7 @@ internal class ToolHost(val state: ViewportToolState, val snap: SnapService) {
         if(event.keyCode == KeyEvent.VK_ESCAPE && gesture != null) { cancel();return true }
         return tool.key(this, event)
     }
+    fun pointerExited() { (tool as? TileTool)?.clearHover() }
     fun cursor(point: Vec2): Int = tool.cursor(this, point)
     fun handles(): List<ToolHandle> = tool.handles(this)
     fun draw(overlay: ToolOverlay) = tool.draw(this, overlay)

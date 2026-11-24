@@ -182,7 +182,8 @@ private fun SpriteRegionPicker(state: EntityWorkspaceState, path: String, readOn
         listOf(manual) + labels.keys,
         onSelect = { state.setSpriteRegion(labels[it]?.id) }, enabled = !readOnly)
     if (current != null && selected == null)
-        EditorLabel("The sprite uses the full texture.", color = LocalEditorColors.current.error)
+        EditorLabel("Region $current is unavailable in $path. The sprite uses the full texture.",
+            color = LocalEditorColors.current.error)
 }
 
 /** Thumbnail and pixel size of the sprite texture, with a one-click "use image size". */

@@ -1,0 +1,18 @@
+{
+  "format": "sle-project",
+  "version": 1,
+  "id": "8aaa6c23-a634-5f00-b4d8-211718f5e663",
+  "name": "Tilemap room",
+  "assetRoot": "Assets",
+  "startupScene": "d20973b0-a991-5be1-b73d-9e9271f962b7",
+  "game": {
+    "window": {
+      "title": "Tilemap room",
+      "width": 768,
+      "height": 432,
+      "vsync": true,
+      "mode": "Windowed"
+    },
+    "targetFPS": 60
+  }
+}

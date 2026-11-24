@@ -1,8 +1,10 @@
 package sle.editor.smoke
 
 import kotlinx.coroutines.*
+import sle.editor.bridge.NativeEngine
 import sle.editor.model.*
 import sle.editor.project.*
+import sle.editor.project.assets.AssetIdentity
 import sle.editor.viewport.EngineCanvas
 import java.awt.*
 import java.awt.event.InputEvent
@@ -22,7 +24,7 @@ internal suspend fun runProjectDistributionSmoke(window: JFrame,canvas: ()->Engi
     }
     val reports=Path.of(System.getProperty("sle.smokeReport")).parent
     val target=opened.root.resolve("Exports").resolve(opened.root.fileName)
-    val runtime=Path.of("build/debug/runtime/Release").toAbsolutePath()
+    val runtime=Path.of("build/release/runtime/Release").toAbsolutePath()
     scene.addEntity();scene.selected!!.rename("Keep unsaved export draft")
     val draft=scene.serialize();val context=canvas().contextIdentity()
     val robot=Robot().apply { autoDelay=15 }
@@ -87,5 +89,44 @@ internal suspend fun runProjectDistributionSmoke(window: JFrame,canvas: ()->Engi
         check(result.first==0 && result.second.contains("scene: second-scene") && !result.second.contains("[ERROR]")) { result.toString() }
     } finally { withContext(Dispatchers.IO) { Files.write(sourceScript,original) } }
     check(scene.serialize()==draft && scene.dirty && canvas().contextIdentity()==context)
+    withContext(Dispatchers.IO) {
+        val sample = Path.of("examples/tilemap_room").toAbsolutePath()
+        val source = Files.createTempDirectory(reports, "tilemap-room-")
+        Files.walk(sample).use { paths ->
+            paths.forEach { path ->
+                val destination = source.resolve(sample.relativize(path))
+                if (Files.isDirectory(path)) Files.createDirectories(destination)
+                else Files.copy(path, destination)
+            }
+        }
+        val room = ProjectFiles.open(source.resolve("Room.sleproject"))
+        val validate: (Path) -> Unit = { staged ->
+            val prepared = PreparedProject.open(ProjectFiles.open(staged), validateTileAssets = true)
+            NativeEngine.releaseProject(prepared.handle)
+        }
+        val delivery = ProjectDistribution.exportAutomatically(room, runtime, validate).parent.parent
+        val moved = Files.move(delivery, source.resolve("Moved Room"))
+        val image = room.assets.resolve("Room.png")
+        val sidecar = AssetIdentity.sidecar(image)
+        val missingId = AssetIdentity.readMetadata(sidecar).id
+        Files.move(image, source.resolve(image.fileName))
+        Files.move(sidecar, source.resolve(sidecar.fileName))
+
+        val log = source.resolve("relocated-room.log")
+        val process = ProcessBuilder(moved.resolve("engine_app.exe").toString(), "--frames", "8")
+            .directory(reports.toFile()).redirectErrorStream(true).redirectOutput(log.toFile()).start()
+        if (!process.waitFor(30, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            error("Relocated tilemap room timed out")
+        }
+        val output = Files.readString(log)
+        check(process.exitValue() == 0 &&
+            "Completed 8 frames; scene: ${room.document.startupScene}" in output && "[ERROR]" !in output) { output }
+
+        val rejected = runCatching { ProjectDistribution.exportAutomatically(room, runtime, validate) }
+            .exceptionOrNull()
+        check(rejected?.message?.contains(missingId) == true) { "Expected missing spritesheet diagnostic: $rejected" }
+        check(!Files.exists(delivery)) { "Export published a room with a missing spritesheet" }
+    }
     println("PROJECT_DISTRIBUTION_SMOKE_PASS menu/automatic-output/saved-sources/dirty-draft/previous-export-preservation/relocation/no-config-launch/unrelated-cwd/deferred-scene/Lua-module/source-independence delivery=$relocated")
 }

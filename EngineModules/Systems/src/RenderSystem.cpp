@@ -1,5 +1,7 @@
+#include "CameraViewBounds.hpp"
 #include <sle/engine/RenderSystem.hpp>
 #include <sle/scene/ChunkActivity.hpp>
+#include <sle/physics/PhysicsWorld.hpp>
 #include <sle/scene/Scene.hpp>
 #include <sle/scene/components/WorldTransformComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
@@ -15,6 +17,7 @@
 
 #include <algorithm> // std::max
 #include <cmath>
+#include <limits>
 
 namespace sle {
 
@@ -35,22 +38,8 @@ glm::mat4 buildModelMatrix(const components::WorldTransformComponent& world)
     return m;
 }
 
-bool isSpriteVisible(
-    const components::WorldTransformComponent& world,
-    const core::Camera2D& camera)
+bool isSpriteVisible(const components::WorldTransformComponent& world, const ViewBounds& view)
 {
-    const glm::vec2 viewport = camera.getViewportSize();
-    if (viewport.x <= 0.0f || viewport.y <= 0.0f)
-        return true;
-
-    const glm::vec2 cameraPos = camera.getPosition();
-    const glm::vec2 extent = viewport * std::max(camera.getZoom(), 0.0001f);
-    const float rc=std::cos(camera.getRotation()), rs=std::sin(camera.getRotation());
-    const glm::vec2 ex{rc*extent.x,rs*extent.x}, ey{-rs*extent.y,rc*extent.y};
-    const auto minimum=glm::min(glm::min(cameraPos,cameraPos+ex),glm::min(cameraPos+ey,cameraPos+ex+ey));
-    const auto maximum=glm::max(glm::max(cameraPos,cameraPos+ex),glm::max(cameraPos+ey,cameraPos+ex+ey));
-    const float viewLeft=minimum.x, viewRight=maximum.x, viewBottom=minimum.y, viewTop=maximum.y;
-
     const float sx = std::abs(world.scale.x);
     const float sy = std::abs(world.scale.y);
     const float c = std::abs(std::cos(world.rotation));
@@ -59,18 +48,8 @@ bool isSpriteVisible(
     const float halfWidth = 0.5f * (c * sx + s * sy);
     const float halfHeight = 0.5f * (s * sx + c * sy);
 
-    const float spriteLeft = world.position.x - halfWidth;
-    const float spriteRight = world.position.x + halfWidth;
-    const float spriteBottom = world.position.y - halfHeight;
-    const float spriteTop = world.position.y + halfHeight;
-
-    if (spriteRight < viewLeft || spriteLeft > viewRight)
-        return false;
-
-    if (spriteTop < viewBottom || spriteBottom > viewTop)
-        return false;
-
-    return true;
+    const glm::vec2 half{halfWidth, halfHeight};
+    return view.intersects(world.position - half, world.position + half);
 }
 
 glm::vec2 transformLocalPoint(const components::WorldTransformComponent& world, const glm::vec2& local)
@@ -139,8 +118,33 @@ void submitCircleOutline(
 
 void RenderSystem::update(Context& ctx)
 {
+    const auto view = viewBounds(ctx.camera);
+    for (const auto& layer : ctx.scene.getTileLayers()) {
+        if (!layer.visible) continue;
+        for (const auto& [coordinate, chunk] : layer.chunks) {
+            if (!view.intersects(chunk.lowerLeft, chunk.upperRight)) continue;
+            for (const auto& cell : chunk.cells) {
+                if (!view.intersects(cell.lowerLeft, cell.lowerLeft + cell.size)) continue;
+                const auto texture = cell.missing ? missingTileTextureID :
+                    (cell.region.texture ? cell.region.texture->getID() : 0);
+                if (!texture) continue;
+                renderer::QuadCommand cmd;
+                components::WorldTransformComponent world;
+                world.position = cell.lowerLeft + cell.size * 0.5f;
+                world.scale = cell.size;
+                cmd.modelMatrix = buildModelMatrix(world);
+                cmd.color = glm::vec4(1);
+                cmd.uvRect = cell.region.uv;
+                cmd.texture_id = texture;
+                cmd.shader_id = defaultShaderID;
+                cmd.layer = layer.drawOrder;
+                ctx.renderer.submit(cmd);
+            }
+        }
+    }
+
     ctx.registry.view<components::WorldTransformComponent, components::SpriteRenderer>(
-        [this, &renderer = ctx.renderer, &camera = ctx.camera, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::SpriteRenderer& sprite)
+        [this, &renderer = ctx.renderer, &view, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::SpriteRenderer& sprite)
         {
             if (!sprite.visible || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Rendering))
                 return;
@@ -148,7 +152,7 @@ void RenderSystem::update(Context& ctx)
             auto visualWorld = world;
             visualWorld.position = transformLocalPoint(world, sprite.offset);
             visualWorld.scale *= sprite.size;
-            if (!isSpriteVisible(visualWorld, camera))
+            if (!isSpriteVisible(visualWorld, view))
                 return;
 
             renderer::QuadCommand cmd;
@@ -163,6 +167,12 @@ void RenderSystem::update(Context& ctx)
 
     if (!physicsDebugEnabled)
         return;
+
+    if (ctx.physicsWorld) {
+        ctx.physicsWorld->visitTerrainEdges([&](glm::vec2 a, glm::vec2 b) {
+            ctx.renderer.submit(renderer::LineCommand{a, b, {0.20f, 0.85f, 1.00f, 1.0f}, 1.5f, 0.0f, 100000});
+        });
+    }
 
     ctx.registry.view<components::WorldTransformComponent, components::BoxColliderComponent>(
         [&renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::BoxColliderComponent& box)

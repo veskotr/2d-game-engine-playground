@@ -7,6 +7,7 @@
 #include <sle/scene/components/CircleZoneComponent.hpp>
 #include <array>
 #include <memory>
+#include <span>
 #include <unordered_map>
 #include <functional>
 #include <cstdint>
@@ -14,6 +15,7 @@
 // Forward declarations
 class b2World;
 class b2Body;
+class b2Fixture;
 class b2ContactFilter;
 
 namespace sle::events {
@@ -62,6 +64,9 @@ public:
     float physicsToWorldLength(float physicsValue) const;
     glm::vec2 worldToPhysicsVec2(const glm::vec2& worldValue) const;
     glm::vec2 physicsToWorldVec2(const glm::vec2& physicsValue) const;
+
+    // Validate a convex, counterclockwise fixture specified in engine world units.
+    static bool isConvexPolygonGeometryValid(std::span<const glm::vec2> vertices);
 
     // ============ Body Management ============
 
@@ -126,6 +131,10 @@ public:
     // Create a box collider fixture on a body
     uintptr_t createBoxFixture(uint32_t bodyId, const sle::components::BoxColliderComponent& collider);
 
+    bool createTerrainFixture(uint32_t bodyId, std::span<const glm::vec2> vertices);
+    static bool isTerrainFixture(const b2Fixture& fixture);
+    void visitTerrainEdges(const std::function<void(glm::vec2, glm::vec2)>& visitor) const;
+
     // Create a circle collider fixture on a body
     uintptr_t createCircleFixture(uint32_t bodyId, const sle::components::CircleColliderComponent& collider, const glm::vec2& ancestorScale = {1.0f, 1.0f});
 
@@ -163,7 +172,7 @@ private:
 
     // How many world units correspond to one Box2D meter.
     // 50 is a good default for pixel-art style worlds.
-    float pixelsPerMeter_ = 50.0f;
+    static constexpr float pixelsPerMeter_ = 50.0f;
 
     friend class ContactListener;
 };

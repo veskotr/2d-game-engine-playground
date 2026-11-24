@@ -89,6 +89,7 @@ internal class EngineCanvas(
         val mouse=object : MouseAdapter() {
             override fun mousePressed(e: MouseEvent) { requestFocusInWindow();if(activate()) owner.mouseListeners.forEach { it.mousePressed(e) } }
             override fun mouseReleased(e: MouseEvent) { if(activate()) owner.mouseListeners.forEach { it.mouseReleased(e) } else { finishGesture();engine.releaseInput() } }
+            override fun mouseExited(e: MouseEvent) { owner.mouseListeners.forEach { it.mouseExited(e) } }
             override fun mouseMoved(e: MouseEvent) { if(activate()) owner.mouseMotionListeners.forEach { it.mouseMoved(e) } }
             override fun mouseDragged(e: MouseEvent) { if(activate()) owner.mouseMotionListeners.forEach { it.mouseDragged(e) } }
             override fun mouseWheelMoved(e: MouseWheelEvent) { if(activate()) owner.mouseWheelListeners.forEach { it.mouseWheelMoved(e) } }

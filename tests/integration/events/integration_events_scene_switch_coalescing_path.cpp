@@ -59,7 +59,8 @@ int main() {
         return 1;
     }
 
-    auto processSwitch = runtime.getSceneManager().processPendingSwitch(runtime, runtime.getScene());
+    bool errorReported = false;
+    auto processSwitch = runtime.getSceneManager().processPendingSwitch(runtime, runtime.getScene(), errorReported);
     if (!processSwitch.ok()) {
         std::cerr << "Failed processing pending switch\n";
         return 1;
@@ -82,7 +83,8 @@ int main() {
         return 1;
     }
 
-    auto secondProcess = runtime.getSceneManager().processPendingSwitch(runtime, runtime.getScene());
+    bool secondErrorReported = false;
+    auto secondProcess = runtime.getSceneManager().processPendingSwitch(runtime, runtime.getScene(), secondErrorReported);
     if (!secondProcess.ok()) {
         std::cerr << "Second processPendingSwitch should be no-op success\n";
         return 1;

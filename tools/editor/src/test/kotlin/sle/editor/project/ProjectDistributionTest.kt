@@ -4,7 +4,8 @@ import kotlinx.serialization.json.*
 import sle.editor.project.assets.AssetIdentity
 import sle.editor.project.assets.AssetThumbnailCache
 import sle.editor.project.assets.AssetTextureFilter
-import sle.editor.project.assets.sliceGrid
+import sle.editor.project.assets.SpriteGrid
+import sle.editor.project.assets.appendGridRegions
 import java.util.zip.ZipFile
 import java.nio.file.*
 import kotlin.test.*
@@ -13,10 +14,14 @@ class ProjectDistributionTest {
     @Test fun builtGameKeepsTextureFilterRegionsAndIdentity() {
         val project = project()
         val image = Files.createFile(project.assets.resolve("Textures/sprite.png"))
-        javax.imageio.ImageIO.write(java.awt.image.BufferedImage(8, 8, 2), "png", image.toFile())
+        val pixels = java.awt.image.BufferedImage(12, 15, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+        pixels.setRGB(2, 3, -1)
+        javax.imageio.ImageIO.write(pixels, "png", image.toFile())
         val id = AssetIdentity.ensure(image)
-        val region = sliceGrid(8, 8, 8, 8).single()
-        AssetIdentity.editRegions(project.root, project.assets, "Textures/sprite.png") { listOf(region) }
+        AssetIdentity.editRegions(project.root, project.assets, "Textures/sprite.png") {
+            appendGridRegions(it, SpriteGrid(8, 8, 2, 3).rectangles(pixels))
+        }
+        val region = AssetIdentity.readMetadata(AssetIdentity.sidecar(image)).regions.single()
         AssetIdentity.writeFilter(project.root, project.assets, "Textures/sprite.png", AssetTextureFilter.Nearest)
         val documents = ProjectDocuments(project)
         val path = project.assets.resolve("Scenes/region.scene.json")
@@ -35,7 +40,9 @@ class ProjectDistributionTest {
             }
         }
         documents.save(path, ProjectDocumentKind.Scene, source.toString(), emptyMap(), null) {}
-        val reopened = Json.parseToJsonElement(documents.open(path).source).jsonObject
+        val renamed = region.copy(name = "Idle", width = 7)
+        AssetIdentity.editRegions(project.root, project.assets, "Textures/sprite.png") { listOf(renamed) }
+        val reopened = Json.parseToJsonElement(ProjectDocuments(project).open(path).source).jsonObject
         val sprite = reopened.getValue("entities").jsonArray.single().jsonObject.getValue("components")
             .jsonObject.getValue("SpriteRenderer").jsonObject
         assertEquals(JsonPrimitive(region.id), sprite["regionId"])
@@ -51,7 +58,7 @@ class ProjectDistributionTest {
             assertEquals(JsonPrimitive(id), metadata["id"])
             val texture = metadata.getValue("texture").jsonObject
             assertEquals(JsonPrimitive("nearest"), texture["filter"])
-            assertEquals(region.encode(), texture.getValue("regions").jsonArray.single())
+            assertEquals(renamed.encode(), texture.getValue("regions").jsonArray.single())
         }
     }
 

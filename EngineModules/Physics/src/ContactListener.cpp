@@ -1,4 +1,5 @@
 #include <sle/physics/ContactListener.hpp>
+#include <sle/physics/PhysicsWorld.hpp>
 #include <sle/events/EventBus.hpp>
 #include <sle/events/CollisionEvents.hpp>
 #include <sle/events/ZoneEvents.hpp>
@@ -14,7 +15,8 @@ ContactListener::ContactListener(sle::events::EventBus* eventBus, std::unordered
 
 void ContactListener::BeginContact(b2Contact* contact)
 {
-    if (!eventBus_ || !contact)
+    if (!eventBus_ || !contact || PhysicsWorld::isTerrainFixture(*contact->GetFixtureA()) ||
+        PhysicsWorld::isTerrainFixture(*contact->GetFixtureB()))
         return;
 
     if (isSensorContact(contact))
@@ -68,7 +70,8 @@ void ContactListener::BeginContact(b2Contact* contact)
 
 void ContactListener::EndContact(b2Contact* contact)
 {
-    if (!eventBus_ || !contact)
+    if (!eventBus_ || !contact || PhysicsWorld::isTerrainFixture(*contact->GetFixtureA()) ||
+        PhysicsWorld::isTerrainFixture(*contact->GetFixtureB()))
         return;
 
     if (isSensorContact(contact))

@@ -121,6 +121,7 @@ private fun pivotHint(ctx: ToolHintContext) =
 
 /** The status-bar hint of a tool while no gesture runs. Rotation steps are shown in degrees. */
 internal fun toolHint(id: ViewportToolId, ctx: ToolHintContext) = when(id) {
+    ViewportToolId.Tiles -> "Tiles · Choose a layer and paint mode"
     ViewportToolId.Select -> "Select: click picks; Shift/Ctrl+click adds or removes; drag empty space to box-select; drag a selection to move it; ${snapHint(ctx)}"
     ViewportToolId.Move -> "Move: drag an arrow for one axis or the square to move freely; Shift locks the main axis; ${snapHint(ctx)}"
     ViewportToolId.Rotate -> "Rotate: drag the ring to turn the selection ${pivotHint(ctx)}; " +

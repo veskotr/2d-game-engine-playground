@@ -6,6 +6,7 @@
 #include <sle/engine/TiledMapLoader.hpp>
 #include <sle/core/Log.hpp>
 #include "SpriteTexture.hpp"
+#include "TileLayerLoader.hpp"
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
 #include "ComponentRegistry.hpp"
@@ -21,7 +22,7 @@
 
 namespace sle {
 sle::core::Result<bool> SceneLoader::load(const std::string& jsonPath, sle::entity::Scene& scene,
-    const TextureFilterLookup& textureFilter)
+    const TextureFilterLookup& textureFilter, const AssetLookup& assetLookup, bool allowMissingTiles)
 {
     using Json = nlohmann::json;
     using Result = sle::core::Result<bool>;
@@ -30,7 +31,7 @@ sle::core::Result<bool> SceneLoader::load(const std::string& jsonPath, sle::enti
     if (extension == ".slescene") {
         const auto package = PrefabPackage::readScene(jsonPath);
         if (!package.ok()) return Result::error(package.error());
-        return loadData(package.value(), scene, jsonPath, textureFilter);
+        return loadData(package.value(), scene, jsonPath, textureFilter, assetLookup, allowMissingTiles);
     }
     std::ifstream file(jsonPath);
     if (!file.is_open()) return Result::error("Failed to open scene JSON file: " + jsonPath);
@@ -40,11 +41,11 @@ sle::core::Result<bool> SceneLoader::load(const std::string& jsonPath, sle::enti
     catch (const std::exception& ex) {
         return Result::error("Malformed scene JSON in '" + jsonPath + "': " + ex.what());
     }
-    return loadData(root, scene, jsonPath, textureFilter);
+    return loadData(root, scene, jsonPath, textureFilter, assetLookup, allowMissingTiles);
 }
 
 sle::core::Result<bool> SceneLoader::loadData(const nlohmann::json& data, sle::entity::Scene& scene, const std::string& jsonPath,
-    const TextureFilterLookup& textureFilter)
+    const TextureFilterLookup& textureFilter, const AssetLookup& assetLookup, bool allowMissingTiles)
 {
     using Json = nlohmann::json;
     using Result = sle::core::Result<bool>;
@@ -55,11 +56,15 @@ sle::core::Result<bool> SceneLoader::loadData(const nlohmann::json& data, sle::e
     const bool hasTiledMap = root.contains("tiledMap") && root["tiledMap"].is_string();
     const bool hasEntities = root.contains("entities") && root["entities"].is_array();
     const bool hasSceneComponents = root.contains("components");
-    if (!hasTiledMap && !hasEntities && !hasSceneComponents)
-        return Result::error("Scene JSON must contain a 'tiledMap' string and/or an 'entities' array: " + jsonPath);
+    const bool hasTileLayers = root.contains("tileLayers");
+    if (!hasTiledMap && !hasEntities && !hasSceneComponents && !hasTileLayers)
+        return Result::error("Scene JSON must contain tiledMap, entities, components or tileLayers: " + jsonPath);
 
     try
     {
+        std::vector<entity::TileLayer> tileLayers;
+        if (hasTileLayers)
+            tileLayers = detail::loadTileLayers(root["tileLayers"], assetLookup, textureFilter, allowMissingTiles, true);
         if (hasSceneComponents) {
             if (!root["components"].is_object()) return Result::error("Scene '"+jsonPath+"': components must be an object");
             scene.ensureSceneEntity();
@@ -148,7 +153,9 @@ sle::core::Result<bool> SceneLoader::loadData(const nlohmann::json& data, sle::e
                 }
             }
         }
-        return references.resolveLinks();
+        const auto linked = references.resolveLinks();
+        if (linked.ok() && hasTileLayers) scene.getTileLayers() = std::move(tileLayers);
+        return linked;
     }
     catch (const std::exception& ex) {
         return Result::error("Failed to load scene '" + jsonPath + "': " + ex.what());

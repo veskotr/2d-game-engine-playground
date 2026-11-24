@@ -12,6 +12,89 @@ contain `entities`, a `tiledMap` path relative to the scene file, top-level
 `components`, and/or `prefabs`. Each
 entity has a `components` object; the existing component field names are unchanged.
 
+## Native project tile layers
+
+The [tilemap room walkthrough](../../examples/tilemap_room/README.md) covers
+PNG import, slicing, collision authoring, painting and export.
+
+A project scene can include a top-level `tileLayers` array alongside `entities`.
+A layer has a lowercase UUID `id`, `name`, one `tileset` UUID reference, a
+unique nonnegative `drawOrder` and a `cells` array. Each cell has signed integer
+`x` and `y` coordinates and a tile UUID in `tile`. Empty cells are omitted.
+The editor's native scene validator sorts layers by draw order and cells by Y
+then X. The loader groups occupied cells into 32×32 chunks using floor division.
+
+`origin` defaults to `[0, 0]` in world units. `pixelsPerUnit` defaults to 1 and
+converts both the grid spacing and the sprite rectangle size. Each rectangle is
+anchored at the cell's lower-left corner. Draw order uses the existing sprite
+sorting layers. `visible` defaults to true. `locked` defaults to false and
+`collisionEnabled` defaults to true. The editor uses the lock flag to prevent painting and erasing.
+
+A registered `*.tileset.json` asset uses `format: "sle-tileset"` and `version: 1`.
+It declares positive integer `tileWidth` and `tileHeight` in pixels and a
+`spritesheet` project asset reference of the form `project-asset://<uuid>`. This
+UUID identifies the image and its spritesheet sidecar. Each entry in `tiles`
+declares a stable UUID `id`, a display `name`, and a `region` UUID from the
+sidecar. Use the same `project-asset://<uuid>` form for the layer's `tileset`
+reference.
+
+In the Asset Browser, select a tileset and open **Tile Collision…** in its
+details. Choose a tile to preview, and toggle the tiles you want in the batch.
+**None**, **Full Cell**, **Generate from Alpha**, and **Preview vertices**
+stage changes in the dialog. **Apply** saves all staged tiles as one edit.
+Use **Undo** and **Redo** in the dialog to restore the saved values.
+
+Alpha generation includes pixels at the threshold, which defaults to 128.
+Zero simplification follows pixel boundaries. Positive tolerance can simplify
+a single outline to a convex slope when all shortcuts fit within the tolerance.
+Masks with holes or separate islands retain their exact coverage. Set
+**Pixels per world unit** to match the target layer to preview dimensions
+and validate fixture size at that scale. To edit vertices, enter one
+counterclockwise polygon per line as space-separated `x,y` pairs.
+
+An optional tile `collision` object stores `mode` as `none`, `fullCell` or
+`custom` and a `pieces` array. The array is empty for None and Full Cell.
+Custom pieces use arrays of 3 to 8 vertex pairs in lower-left tile-local
+pixels. Tiles without a collision object default to None.
+
+During Play, collision-enabled layers attach static Box2D fixtures around the
+game camera, with one chunk of padding on each side. Full Cell uses the layer's
+grid dimensions and merges adjacent cells within each chunk. Custom pieces use
+the same origin and pixel scale as the rendered tile. Layer visibility affects
+drawing independently of collision. The physics debug overlay outlines the
+active native fixtures. Terrain contacts affect simulation and carry no entity
+IDs for Lua collision or zone events.
+
+Open **Tile Palette** from the Scene viewport or the **Windows** menu. Add a
+layer from a registered tileset, then search its named thumbnails. Use the
+palette to rename, reorder, show, hide, lock, or change collision on a layer.
+Press **T** with the Scene viewport focused to activate tile painting.
+
+The viewport keys **1–6** select Brush, Erase, Rectangle, Eyedropper, Fill, and
+Select. Brush and Erase follow fast strokes across grid cells. Rectangle fills
+the dragged area, and Eyedropper picks an existing tile. For a stamp, enable
+**Build Stamp** and choose tiles in left-to-right order. **Use Copied Stamp**
+keeps the layout of a selection, including gaps.
+
+Select a rectangle to bound a four-way fill of empty space. A fill of existing
+tiles follows connected cells with the same tile ID. Drag inside a selection
+to move the painted cells. **Ctrl+C** copies the selection, and **Ctrl+V**
+pastes at the last pointed cell or the selection's lower-left corner. Gaps in
+a stamp or pasted selection leave the destination intact.
+
+The grid, selection or fill bounds, and translucent stamp show where edits
+will land. Release the pointer to commit one undoable edit. Escape, focus loss,
+changing tools, and switching documents cancel pending edits. Save the map as a
+project scene to keep the layers and stable tile IDs.
+
+Missing dependencies and cells
+appear as magenta placeholders with diagnostics in the log. Standalone project
+loading and game package validation report missing tilesets, images, tiles and
+regions as errors. Use Export Game to package these project assets together.
+
+See the [two-layer test project](../../tests/data/tilemap/Tiles.sleproject) for
+a working example with a foreground tile at a negative coordinate.
+
 ## Identity and hierarchy
 
 Use an optional nonempty, case-sensitive `key` to reference an entity. Keys are

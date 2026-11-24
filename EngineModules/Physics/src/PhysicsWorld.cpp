@@ -78,6 +78,15 @@ bool validPolygon(const b2Vec2* vertices, int count)
 }
 }
 
+bool PhysicsWorld::isConvexPolygonGeometryValid(std::span<const glm::vec2> vertices)
+{
+    if (vertices.size() < 3 || vertices.size() > b2_maxPolygonVertices) return false;
+    b2Vec2 native[b2_maxPolygonVertices];
+    for (std::size_t i = 0; i < vertices.size(); ++i)
+        native[i].Set(vertices[i].x / pixelsPerMeter_, vertices[i].y / pixelsPerMeter_);
+    return validPolygon(native, static_cast<int>(vertices.size()));
+}
+
 bool PhysicsWorld::isBoxGeometryValid(const glm::vec2& size, const glm::vec2& offset) const
 {
     if (!finiteVector(size) || !finiteVector(offset) || size.x <= 0.1f || size.y <= 0.1f) return false;
@@ -438,6 +447,45 @@ uintptr_t PhysicsWorld::createBoxFixture(uint32_t bodyId, const sle::components:
     // Create and return fixture
     b2Fixture* fixture = body->CreateFixture(&fixtureDef);
     return reinterpret_cast<uintptr_t>(fixture);
+}
+
+bool PhysicsWorld::createTerrainFixture(uint32_t bodyId, std::span<const glm::vec2> vertices)
+{
+    auto* body = getBodyPtr(bodyId);
+    if (!body || world_->IsLocked() || !isConvexPolygonGeometryValid(vertices)) return false;
+    b2Vec2 native[b2_maxPolygonVertices];
+    for (std::size_t i = 0; i < vertices.size(); ++i) {
+        const auto vertex = worldToPhysicsVec2(vertices[i]);
+        native[i].Set(vertex.x, vertex.y);
+    }
+    b2PolygonShape shape;
+    shape.Set(native, static_cast<int>(vertices.size()));
+    b2FixtureDef fixture;
+    fixture.shape = &shape;
+    fixture.userData.pointer = 1;
+    body->CreateFixture(&fixture);
+    return true;
+}
+
+bool PhysicsWorld::isTerrainFixture(const b2Fixture& fixture)
+{
+    // Box2D exposes user data only through a mutable accessor.
+    return const_cast<b2Fixture&>(fixture).GetUserData().pointer == 1;
+}
+
+void PhysicsWorld::visitTerrainEdges(const std::function<void(glm::vec2, glm::vec2)>& visitor) const
+{
+    for (const auto* body = world_->GetBodyList(); body; body = body->GetNext()) {
+        for (const auto* fixture = body->GetFixtureList(); fixture; fixture = fixture->GetNext()) {
+            if (!isTerrainFixture(*fixture)) continue;
+            const auto* polygon = static_cast<const b2PolygonShape*>(fixture->GetShape());
+            for (int i = 0; i < polygon->m_count; ++i) {
+                const auto a = body->GetWorldPoint(polygon->m_vertices[i]);
+                const auto b = body->GetWorldPoint(polygon->m_vertices[(i + 1) % polygon->m_count]);
+                visitor(physicsToWorldVec2({a.x, a.y}), physicsToWorldVec2({b.x, b.y}));
+            }
+        }
+    }
 }
 
 uintptr_t PhysicsWorld::createCircleFixture(uint32_t bodyId, const sle::components::CircleColliderComponent& collider, const glm::vec2& ancestorScale)

@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference | SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="search.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html">Quickstart</a></li>
+          <li><a href="editor.html">Editor workspace</a></li>
+          <li><a href="first-scene.html">First Room</a></li>
+          <li><a href="lua-gameplay.html">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html">Physics and UI</a></li>
+          <li><a href="run-and-export.html">Run and export</a></li>
+          <li><a href="engine-tour.html">Engine tour</a></li>
+          <li><a href="editor-tools.html">Editor tools</a></li>
+          <li><a href="project-assets.html">Project and assets</a></li>
+          <li><a href="tilemaps.html">Tilemaps</a></li>
+          <li><a href="engine-features.html">Engine features</a></li>
+          <li><a href="reference.html" aria-current="page">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Guide reference</h1>
+        <h2 id="editor-and-project">Editor and project</h2>
+        <ul>
+          <li><a href="quickstart.html">Build and launch the editor or bundled demo</a></li>
+          <li><a href="editor.html">Find the editor views and start a project</a></li>
+          <li><a href="first-scene.html">Author a scene with a sprite and gameplay camera</a></li>
+          <li><a href="run-and-export.html">Play, run, and export a saved project</a></li>
+          <li><a href="../topics/Projects.md">Project and asset formats</a></li>
+        </ul>
+
+        <h2 id="runtime-and-gameplay">Runtime and gameplay</h2>
+        <ul>
+          <li><a href="lua-gameplay.html">Input actions and Lua behaviour</a></li>
+          <li><a href="physics-and-ui.html">Bodies, colliders, trigger events, and XML HUD</a></li>
+          <li><a href="engine-tour.html#scene-loading">Scene loading, ECS, and transforms</a></li>
+          <li><a href="engine-tour.html#runtime-frame-order">Runtime frame order</a></li>
+          <li><a href="../../assets/scripts/engine_api.lua">Generated Lua API</a></li>
+          <li><a href="../README_DOCUMENTATION.md">Engineering documentation and module index</a></li>
+        </ul>
+
+        <h2 id="feature-index">Feature index</h2>
+        <div class="reference-filters" hidden>
+          <label for="feature-query">Search features</label>
+          <input id="feature-query" type="search" autocomplete="off">
+          <label for="feature-category">Category</label>
+          <select id="feature-category">
+            <option value="">All categories</option>
+            <option value="editor">Editor tools and workspace</option>
+            <option value="project">Project and assets</option>
+            <option value="tilemaps">Tilemaps</option>
+            <option value="engine">Engine and gameplay</option>
+            <option value="development">Build and validation</option>
+          </select>
+          <button type="button" id="clear-feature-query">Clear search</button>
+        </div>
+        <p id="feature-count" role="status"></p>
+        <p id="feature-empty" hidden>No matching features. Try another term or category.</p>
+        <section data-feature-category="editor">
+          <h3>Editor tools and workspace</h3>
+          <ul>
+          <li data-keywords="Registered panel "><a href="editor.html#hierarchy">Hierarchy</a> <span>· Workspace</span></li>
+          <li data-keywords="Registered panel "><a href="editor.html#details">Details</a> <span>· Workspace</span></li>
+          <li data-keywords="Registered panel "><a href="editor.html#assets">Assets</a> <span>· Workspace</span></li>
+          <li data-keywords="Registered panel "><a href="editor-tools.html#console">Console</a> <span>· Workspace</span></li>
+          <li data-keywords="Registered panel "><a href="editor-tools.html#lua-profiler">Lua Profiler</a> <span>· Workspace</span></li>
+          <li data-keywords="Registered panel "><a href="editor.html#scene">Scene</a> <span>· Workspace</span></li>
+          <li data-keywords="Registered panel "><a href="editor.html#game">Game</a> <span>· Workspace</span></li>
+          <li data-keywords="Opened on demand "><a href="editor-tools.html#entity-template">Entity Template</a> <span>· Workspace</span></li>
+          <li data-keywords="Panel or host dependent "><a href="editor-tools.html#show-focus">Show / Focus</a> <span>· Windows menu</span></li>
+          <li data-keywords="Panel or host dependent "><a href="editor-tools.html#minimize">Minimize</a> <span>· Windows menu</span></li>
+          <li data-keywords="Panel or host dependent "><a href="editor-tools.html#hide">Hide</a> <span>· Windows menu</span></li>
+          <li data-keywords="Panel or host dependent "><a href="editor-tools.html#detach">Detach</a> <span>· Windows menu</span></li>
+          <li data-keywords="Panel or host dependent "><a href="editor-tools.html#move-to">Move to</a> <span>· Windows menu</span></li>
+          <li data-keywords="Panel or host dependent "><a href="editor-tools.html#as-tab">As tab</a> <span>· Windows menu</span></li>
+          <li data-keywords="Panel or host dependent "><a href="editor-tools.html#detach-group">Detach group</a> <span>· Windows menu</span></li>
+          <li data-keywords="Panel or host dependent "><a href="editor-tools.html#move-group-to">Move group to</a> <span>· Windows menu</span></li>
+          <li data-keywords="Panel or host dependent "><a href="editor-tools.html#focus-host">Focus Host</a> <span>· Windows menu</span></li>
+          <li data-keywords="Panel or host dependent "><a href="editor-tools.html#restore-default-layout">Restore Default Layout</a> <span>· Windows menu</span></li>
+          <li data-keywords="Persisted per user "><a href="editor-tools.html#saved-layout">Saved layout</a> <span>· Workspace</span></li>
+          <li data-keywords="Display topology recovery "><a href="editor-tools.html#display-recovery">Display recovery</a> <span>· Workspace</span></li>
+          <li data-keywords="Editor shell "><a href="editor-tools.html#file">File</a> <span>· Menu bar</span></li>
+          <li data-keywords="Editor shell "><a href="editor-tools.html#edit">Edit</a> <span>· Menu bar</span></li>
+          <li data-keywords="Editor shell "><a href="editor-tools.html#create">Create</a> <span>· Menu bar</span></li>
+          <li data-keywords="Editor shell "><a href="editor-tools.html#view">View</a> <span>· Menu bar</span></li>
+          <li data-keywords="Editor shell "><a href="editor-tools.html#tools">Tools</a> <span>· Menu bar</span></li>
+          <li data-keywords="Editor shell "><a href="editor-tools.html#help">Help</a> <span>· Menu bar</span></li>
+          <li data-keywords="Editor shell "><a href="editor-tools.html#appearance">Appearance</a> <span>· Menu bar</span></li>
+          <li data-keywords="Editor shell "><a href="editor-tools.html#density">Density</a> <span>· Menu bar</span></li>
+          <li data-keywords="Editor shell "><a href="editor-tools.html#ui-scale">UI Scale</a> <span>· Menu bar</span></li>
+          <li data-keywords="Editor shell "><a href="editor-tools.html#about-sle-editor">About SLE Editor…</a> <span>· Menu bar</span></li>
+          <li data-keywords="Editor shell "><a href="editor-tools.html#entity-template-workspace">Entity Template Workspace</a> <span>· Menu bar</span></li>
+          <li data-keywords="Selection, history, or editable document context Ctrl+Z Control Z"><a href="editor-tools.html#undo">Undo</a> <span>· Edit and context menu</span></li>
+          <li data-keywords="Selection, history, or editable document context Ctrl+Y Ctrl+Shift+Z"><a href="editor-tools.html#redo">Redo</a> <span>· Edit and context menu</span></li>
+          <li data-keywords="Selection, history, or editable document context Ctrl+A"><a href="editor-tools.html#select-all">Select All</a> <span>· Edit and context menu</span></li>
+          <li data-keywords="Selection, history, or editable document context Delete Backspace"><a href="editor-tools.html#delete">Delete</a> <span>· Edit and context menu</span></li>
+          <li data-keywords="Selection, history, or editable document context Ctrl+D"><a href="editor-tools.html#duplicate">Duplicate</a> <span>· Edit and context menu</span></li>
+          <li data-keywords="Selection, history, or editable document context "><a href="editor-tools.html#edit-entity">Edit Entity</a> <span>· Edit and context menu</span></li>
+          <li data-keywords="Selection, history, or editable document context "><a href="editor-tools.html#apply-changes-to-entity-template">Apply Changes to Entity Template</a> <span>· Edit and context menu</span></li>
+          <li data-keywords="Command-specific context "><a href="editor.html#scene">Fit</a> <span>· View and Help</span></li>
+          <li data-keywords="Command-specific context "><a href="editor-tools.html#keyboard-shortcuts">Keyboard Shortcuts…</a> <span>· View and Help</span></li>
+          <li data-keywords="Command-specific context "><a href="editor-tools.html#run-lua">Run Lua…</a> <span>· View and Help</span></li>
+          <li data-keywords="Edit, Play or Pause state F5"><a href="first-scene.html#play">Play</a> <span>· Playback toolbar</span></li>
+          <li data-keywords="Edit, Play or Pause state F6"><a href="editor-tools.html#pause">Pause</a> <span>· Playback toolbar</span></li>
+          <li data-keywords="Edit, Play or Pause state "><a href="editor-tools.html#step">Step</a> <span>· Playback toolbar</span></li>
+          <li data-keywords="Edit, Play or Pause state Shift+F5"><a href="first-scene.html#play">Stop</a> <span>· Playback toolbar</span></li>
+          <li data-keywords="Edit, Play or Pause state Ctrl+F5"><a href="first-scene.html#scene-recovery">Run Project</a> <span>· Playback toolbar</span></li>
+          <li data-keywords="Scene workspace F"><a href="editor-tools.html#frame-selected">Frame Selected</a> <span>· Tools and Scene toolbar</span></li>
+          <li data-keywords="Scene workspace "><a href="editor-tools.html#snapping">Snapping</a> <span>· Tools and Scene toolbar</span></li>
+          <li data-keywords="Scene workspace "><a href="editor-tools.html#configure-snap">Configure Snap…</a> <span>· Tools and Scene toolbar</span></li>
+          <li data-keywords="Scene workspace "><a href="editor-tools.html#pivot-center">Pivot/Center</a> <span>· Tools and Scene toolbar</span></li>
+          <li data-keywords="Editable Scene Q"><a href="editor-tools.html#select-tool">Select Tool</a> <span>· Tools / Scene toolbar</span></li>
+          <li data-keywords="Editable Scene W"><a href="editor-tools.html#move-tool">Move Tool</a> <span>· Tools / Scene toolbar</span></li>
+          <li data-keywords="Editable Scene E"><a href="editor-tools.html#rotate-tool">Rotate Tool</a> <span>· Tools / Scene toolbar</span></li>
+          <li data-keywords="Editable Scene R"><a href="editor-tools.html#scale-tool">Scale Tool</a> <span>· Tools / Scene toolbar</span></li>
+          <li data-keywords="Scene editing "><a href="editor-tools.html#multi-select">Multi-select</a> <span>· Scene viewport</span></li>
+          <li data-keywords="Scene editing "><a href="editor.html#scene">Scene camera navigation</a> <span>· Scene viewport</span></li>
+          <li data-keywords="Live runtime selection "><a href="editor-tools.html#live-inspector">Live Inspector</a> <span>· Details during Play</span></li>
+          <li data-keywords="Live runtime selection "><a href="editor-tools.html#reload-script">Reload Script</a> <span>· Details during Play</span></li>
+          <li data-keywords="Live runtime selection "><a href="editor-tools.html#keep-changes">Keep Changes</a> <span>· Details during Play</span></li>
+          <li data-keywords="Live runtime selection "><a href="editor-tools.html#open-in-ide">Open in IDE</a> <span>· Details during Play</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="physics-and-ui.html#box-collider">Box Collider</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="physics-and-ui.html#circle-collider">Circle Collider</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="physics-and-ui.html#box-event-area">Box Event Area</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="physics-and-ui.html#circle-event-area">Circle Event Area</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="editor-tools.html#add-component">Add Component</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="editor-tools.html#import">Import</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="editor-tools.html#entity-hierarchy">Entity hierarchy</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Property or component context "><a href="editor-tools.html#reset-property">Reset Property</a> <span>· Details context menus</span></li>
+          <li data-keywords="Property or component context "><a href="editor-tools.html#copy-property">Copy Property</a> <span>· Details context menus</span></li>
+          <li data-keywords="Property or component context "><a href="editor-tools.html#paste-property">Paste Property</a> <span>· Details context menus</span></li>
+          <li data-keywords="Property or component context "><a href="editor-tools.html#reset-component">Reset Component</a> <span>· Details context menus</span></li>
+          <li data-keywords="Property or component context "><a href="editor-tools.html#copy-component">Copy Component</a> <span>· Details context menus</span></li>
+          <li data-keywords="Property or component context "><a href="editor-tools.html#paste-component">Paste Component</a> <span>· Details context menus</span></li>
+          <li data-keywords="Selected entity or asset "><a href="editor-tools.html#property-drawers">Property drawers</a> <span>· Details</span></li>
+          <li data-keywords="Selected entity or asset "><a href="editor-tools.html#use-image-size">Use image size</a> <span>· Details</span></li>
+          <li data-keywords="Selected entity or asset "><a href="editor-tools.html#create-definition">Create Definition…</a> <span>· Details</span></li>
+          <li data-keywords="Open project "><a href="lua-gameplay.html#keyboard-input">Input Actions</a> <span>· Project Settings</span></li>
+          <li data-keywords="Workspace actions "><a href="editor.html#windows">Windows</a> <span>· Menu bar</span></li>
+          <li data-keywords="Editor appearance "><a href="editor-tools.html#dark-appearance">Dark</a> <span>· View → Appearance</span></li>
+          <li data-keywords="Editor appearance "><a href="editor-tools.html#light-appearance">Light</a> <span>· View → Appearance</span></li>
+          <li data-keywords="Editor appearance "><a href="editor-tools.html#compact-density">Compact</a> <span>· View → Density</span></li>
+          <li data-keywords="Editor appearance "><a href="editor-tools.html#comfortable-density">Comfortable</a> <span>· View → Density</span></li>
+          </ul>
+        </section>
+        <section data-feature-category="project">
+          <h3>Project and assets</h3>
+          <ul>
+          <li data-keywords="Project or editable document context "><a href="first-scene.html#create-project">New Project…</a> <span>· File</span></li>
+          <li data-keywords="Project or editable document context "><a href="first-scene.html#create-project">New Scene</a> <span>· File</span></li>
+          <li data-keywords="Project or editable document context "><a href="project-assets.html#new-entity-template">New Entity Template</a> <span>· File</span></li>
+          <li data-keywords="Project or editable document context "><a href="first-scene.html#play">Open Project…</a> <span>· File</span></li>
+          <li data-keywords="Project or editable document context "><a href="project-assets.html#open-scene">Open Scene…</a> <span>· File</span></li>
+          <li data-keywords="Project or editable document context "><a href="project-assets.html#open-entity-template">Open Entity Template…</a> <span>· File</span></li>
+          <li data-keywords="Project or editable document context Ctrl+S"><a href="first-scene.html#save-scene">Save</a> <span>· File</span></li>
+          <li data-keywords="Project or editable document context "><a href="project-assets.html#save-as">Save As…</a> <span>· File</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="first-scene.html#entity">Entity</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="first-scene.html#sprite">Sprite</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="first-scene.html#camera">Camera</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="first-scene.html#at-scene-root">At Scene Root</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Editable scene or selected entity "><a href="first-scene.html#as-child">As Child</a> <span>· Create and scene context menu</span></li>
+          <li data-keywords="Open project, editable for changes "><a href="project-assets.html#open-recent">Open Recent</a> <span>· File and Project Settings</span></li>
+          <li data-keywords="Open project, editable for changes "><a href="project-assets.html#close-project">Close Project</a> <span>· File and Project Settings</span></li>
+          <li data-keywords="Open project, editable for changes "><a href="first-scene.html#startup-scene">Project Settings…</a> <span>· File and Project Settings</span></li>
+          <li data-keywords="Open project, editable for changes "><a href="first-scene.html#startup-scene">Startup Scene</a> <span>· File and Project Settings</span></li>
+          <li data-keywords="Open project, editable for changes "><a href="project-assets.html#game-window">Game window</a> <span>· File and Project Settings</span></li>
+          <li data-keywords="Open project, editable for changes "><a href="project-assets.html#project-script-trust">Project script trust</a> <span>· File and Project Settings</span></li>
+          <li data-keywords="Open project, editable for changes "><a href="project-assets.html#art-style">Art Style</a> <span>· File and Project Settings</span></li>
+          <li data-keywords="Open project "><a href="project-assets.html#sorting-layers">Sorting Layers</a> <span>· Project Settings</span></li>
+          <li data-keywords="Open project "><a href="project-assets.html#collision-layers">Collision Layers</a> <span>· Project Settings</span></li>
+          <li data-keywords="Open project "><a href="project-assets.html#tags">Tags</a> <span>· Project Settings</span></li>
+          <li data-keywords="Open folder project "><a href="first-scene.html#scene-recovery">Scene recovery</a> <span>· Project startup</span></li>
+          <li data-keywords="Open project "><a href="first-scene.html#import-sprite">Import…</a> <span>· Assets</span></li>
+          <li data-keywords="Project UUID assets "><a href="first-scene.html#import-sprite">Asset UUID identity</a> <span>· Asset sidecar</span></li>
+          <li data-keywords="Open project "><a href="project-assets.html#asset-filtering">Texture filter</a> <span>· Assets</span></li>
+          <li data-keywords="Open project "><a href="project-assets.html#asset-context-actions">Asset context actions</a> <span>· Assets</span></li>
+          <li data-keywords="Project texture "><a href="project-assets.html#open-spritesheet">Open spritesheet…</a> <span>· Sprite Renderer Details</span></li>
+          <li data-keywords="Project texture "><a href="project-assets.html#delete-region">Delete region…</a> <span>· Sprite Renderer Details</span></li>
+          <li data-keywords="Prefab instances "><a href="project-assets.html#entity-template-overrides">Entity template overrides</a> <span>· Scene authoring</span></li>
+          <li data-keywords="Editable scene or entity template portable package"><a href="first-scene.html#scene-formats">Export Package…</a> <span>· File</span></li>
+          <li data-keywords="Portable files portable package"><a href="first-scene.html#scene-formats">.slescene</a> <span>· Package import/export</span></li>
+          <li data-keywords="Portable files "><a href="project-assets.html#sleprefab">.sleprefab</a> <span>· Package import/export</span></li>
+          <li data-keywords="Saved project and runtime bundle "><a href="run-and-export.html#export-game">Export Game…</a> <span>· File</span></li>
+          <li data-keywords="Folder project "><a href="run-and-export.html#project-launch">Project launch</a> <span>· Project runtime</span></li>
+          <li data-keywords="Folder project "><a href="run-and-export.html#project-resources">Project resources</a> <span>· Project runtime</span></li>
+          <li data-keywords="Open project "><a href="project-assets.html#show-hide-asset-browser">Show / Hide Asset Browser</a> <span>· View menu</span></li>
+          <li data-keywords="Open project "><a href="project-assets.html#refresh-assets">Refresh Assets</a> <span>· View menu</span></li>
+          <li data-keywords="Folder-project argument "><a href="run-and-export.html#launcher-project-flag">--project</a> <span>· Standalone launcher</span></li>
+          <li data-keywords="open project asset folder"><a href="project-assets.html#new-folder">New Folder…</a> <span>· Assets panel</span></li>
+          <li data-keywords="open project asset folder"><a href="project-assets.html#recover-deleted">Recover Deleted…</a> <span>· Assets panel</span></li>
+          <li data-keywords="open project asset folder"><a href="project-assets.html#find-references">Find References…</a> <span>· Assets panel</span></li>
+          <li data-keywords="open project asset folder"><a href="project-assets.html#rename-asset">Rename…</a> <span>· Assets panel</span></li>
+          <li data-keywords="open project asset folder"><a href="project-assets.html#move-asset">Move…</a> <span>· Assets panel</span></li>
+          <li data-keywords="open project asset folder"><a href="project-assets.html#delete-asset">Delete…</a> <span>· Assets panel</span></li>
+          <li data-keywords="open project asset folder"><a href="project-assets.html#reveal-in-explorer">Reveal in Explorer</a> <span>· Assets panel</span></li>
+          <li data-keywords="open project asset folder"><a href="project-assets.html#open-externally">Open Externally</a> <span>· Assets panel</span></li>
+          <li data-keywords="open project asset folder"><a href="project-assets.html#assign-new-uuid">Assign New UUID…</a> <span>· Assets panel</span></li>
+          <li data-keywords="open project asset folder"><a href="project-assets.html#asset-open-in-ide">Open in IDE</a> <span>· Assets panel</span></li>
+          </ul>
+        </section>
+        <section data-feature-category="tilemaps">
+          <h3>Tilemaps</h3>
+          <ul>
+          <li data-keywords="Open project and scene, opened on demand Scene toolbar tile editor"><a href="tilemaps.html#tile-palette">Tile Palette</a> <span>· Workspace</span></li>
+          <li data-keywords="Active tiles tool Ctrl+C"><a href="tilemaps.html#copy-tiles">Copy Tiles</a> <span>· Tools and Scene toolbar</span></li>
+          <li data-keywords="Active tiles tool Ctrl+V"><a href="tilemaps.html#paste-tiles">Paste Tiles</a> <span>· Tools and Scene toolbar</span></li>
+          <li data-keywords="Editable Scene T"><a href="tilemaps.html#tiles-tool">Tiles Tool</a> <span>· Tools / Scene toolbar</span></li>
+          <li data-keywords="Active tile layer 1"><a href="tilemaps.html#tile-brush">Tile Brush</a> <span>· Tile Palette / Tools</span></li>
+          <li data-keywords="Active tile layer 2"><a href="tilemaps.html#tile-erase">Tile Erase</a> <span>· Tile Palette / Tools</span></li>
+          <li data-keywords="Active tile layer 3"><a href="tilemaps.html#tile-rectangle">Tile Rectangle</a> <span>· Tile Palette / Tools</span></li>
+          <li data-keywords="Active tile layer 4"><a href="tilemaps.html#tile-eyedropper">Tile Eyedropper</a> <span>· Tile Palette / Tools</span></li>
+          <li data-keywords="Active tile layer 5"><a href="tilemaps.html#tile-fill">Tile Fill</a> <span>· Tile Palette / Tools</span></li>
+          <li data-keywords="Active tile layer 6"><a href="tilemaps.html#tile-select">Tile Select</a> <span>· Tile Palette / Tools</span></li>
+          <li data-keywords="Editable project scene "><a href="tilemaps.html#tile-layers">Tile layers</a> <span>· Tile Palette</span></li>
+          <li data-keywords="Project tileset "><a href="tilemaps.html#none">None</a> <span>· Tile Collision…</span></li>
+          <li data-keywords="Project tileset "><a href="tilemaps.html#full-cell">Full Cell</a> <span>· Tile Collision…</span></li>
+          <li data-keywords="Project tileset "><a href="tilemaps.html#generate-from-alpha">Generate from Alpha</a> <span>· Tile Collision…</span></li>
+          <li data-keywords="Project tileset "><a href="tilemaps.html#preview-vertices">Preview vertices</a> <span>· Tile Collision…</span></li>
+          <li data-keywords="Project tileset "><a href="tilemaps.html#apply">Apply</a> <span>· Tile Collision…</span></li>
+          <li data-keywords="Project tileset "><a href="tilemaps.html#discard-preview">Discard preview</a> <span>· Tile Collision…</span></li>
+          <li data-keywords="Project tileset "><a href="tilemaps.html#collision-undo">Collision Undo</a> <span>· Tile Collision…</span></li>
+          <li data-keywords="Project tileset "><a href="tilemaps.html#collision-redo">Collision Redo</a> <span>· Tile Collision…</span></li>
+          <li data-keywords="Project texture "><a href="tilemaps.html#add-grid-regions">Add grid regions</a> <span>· Spritesheet dialog</span></li>
+          <li data-keywords="Project texture "><a href="tilemaps.html#save-region">Save region</a> <span>· Spritesheet dialog</span></li>
+          <li data-keywords="Scene rendering "><a href="engine-features.html#tile-rendering">Tile rendering</a> <span>· Render system</span></li>
+          <li data-keywords="Scene tile layer data "><a href="tilemaps.html#tile-layer-loading">Tile layer loading</a> <span>· Scene loader</span></li>
+          <li data-keywords="Tile layers with collision Box2D fixtures terrain"><a href="tilemaps.html#tile-collision-generation">Tile collision generation</a> <span>· Tile collision system</span></li>
+          <li data-keywords="Runtime scene data "><a href="tilemaps.html#tiled-map-loading">Tiled map loading</a> <span>· Tiled map loader</span></li>
+          <li data-keywords="Source fixture "><a href="tilemaps.html#tilemap-room">Tilemap Room</a> <span>· Tilemap room example</span></li>
+          <li data-keywords="Tileset image "><a href="tilemaps.html#tile-collision">Tile Collision…</a> <span>· Assets panel</span></li>
+          <li data-keywords="tile layer painting pattern project"><a href="tilemaps.html#search-tiles">Search tiles</a> <span>· Tile authoring</span></li>
+          <li data-keywords="tile layer painting pattern project"><a href="tilemaps.html#build-stamp">Build Stamp</a> <span>· Tile authoring</span></li>
+          <li data-keywords="tile layer painting pattern project"><a href="tilemaps.html#use-copied-stamp">Use Copied Stamp</a> <span>· Tile authoring</span></li>
+          <li data-keywords="tile layer painting pattern project"><a href="tilemaps.html#clear-selection">Clear Selection</a> <span>· Tile authoring</span></li>
+          <li data-keywords="tile layer painting pattern project"><a href="tilemaps.html#tile-save-and-export">Save, reopen, and export a tile scene</a> <span>· Tile authoring</span></li>
+          </ul>
+        </section>
+        <section data-feature-category="engine">
+          <h3>Engine and gameplay</h3>
+          <ul>
+          <li data-keywords="C++ API "><a href="engine-tour.html#ecs-registry">ECS registry</a> <span>· Scene module</span></li>
+          <li data-keywords="C++ API "><a href="engine-tour.html#component-views">Component views</a> <span>· Scene module</span></li>
+          <li data-keywords="Runtime systems "><a href="engine-tour.html#transform-propagation">Transform propagation</a> <span>· Transform system</span></li>
+          <li data-keywords="Registered files "><a href="engine-tour.html#scene-loading">Scene loading</a> <span>· Scene loader</span></li>
+          <li data-keywords="Runtime Engine.switchScene change scene"><a href="engine-features.html#scene-switching">Scene switching</a> <span>· Scene manager</span></li>
+          <li data-keywords="Chunked scenes "><a href="engine-features.html#chunk-activity">Chunk activity</a> <span>· Chunk activation controller</span></li>
+          <li data-keywords="Scene rendering "><a href="engine-features.html#render-commands">Render commands</a> <span>· Render system</span></li>
+          <li data-keywords="Scene rendering "><a href="engine-features.html#sprite-batching">Sprite batching</a> <span>· Render system</span></li>
+          <li data-keywords="Runtime "><a href="engine-features.html#gameplay-camera">Gameplay camera</a> <span>· Camera system</span></li>
+          <li data-keywords="Runtime "><a href="engine-features.html#camera-follow">Camera follow</a> <span>· Camera system</span></li>
+          <li data-keywords="Physics components "><a href="physics-and-ui.html#rigid-bodies">Rigid bodies</a> <span>· Physics system</span></li>
+          <li data-keywords="Physics components "><a href="physics-and-ui.html#collider-contacts">Collider contacts</a> <span>· Physics system</span></li>
+          <li data-keywords="Lua gameplay "><a href="lua-gameplay.html#gameplay-components">Gameplay components</a> <span>· Lua runtime API</span></li>
+          <li data-keywords="Runtime "><a href="lua-gameplay.html#lua-bindings">Lua bindings</a> <span>· Runtime Lua bridge</span></li>
+          <li data-keywords="Runtime "><a href="lua-gameplay.html#run-lua-scripts">Run Lua scripts</a> <span>· Runtime Lua bridge</span></li>
+          <li data-keywords="Scripted entities "><a href="lua-gameplay.html#lua-behaviour-lifecycle">Lua behaviour lifecycle</a> <span>· Script system</span></li>
+          <li data-keywords="State machine definition "><a href="engine-features.html#state-machines">State machines</a> <span>· State machine system</span></li>
+          <li data-keywords="Animator component Animator"><a href="engine-features.html#sprite-animation">Sprite animation</a> <span>· Animation system</span></li>
+          <li data-keywords="Audio assets "><a href="engine-features.html#audio-playback">Audio playback</a> <span>· Audio system</span></li>
+          <li data-keywords="Runtime XML UI "><a href="physics-and-ui.html#xml-hud">XML HUD</a> <span>· HUD asset</span></li>
+          <li data-keywords="Lua callbacks "><a href="physics-and-ui.html#event-subscriptions">Event subscriptions</a> <span>· NPC Zone demo</span></li>
+          <li data-keywords="Lua callbacks "><a href="physics-and-ui.html#zone-events">Zone events</a> <span>· NPC Zone demo</span></li>
+          <li data-keywords="Packaged runtime "><a href="engine-features.html#game-package-loading">Game package loading</a> <span>· Game package</span></li>
+          <li data-keywords="Scene authoring and loading "><a href="engine-features.html#prefab-expansion">Prefab expansion</a> <span>· Prefab loader</span></li>
+          <li data-keywords="Per frame "><a href="engine-tour.html#runtime-frame-order">Runtime frame order</a> <span>· Runtime</span></li>
+          <li data-keywords="C++ subscription and dispatch "><a href="engine-features.html#eventbus">EventBus</a> <span>· Events module</span></li>
+          <li data-keywords="Runtime window "><a href="lua-gameplay.html#keyboard-input">Keyboard input</a> <span>· Platform input</span></li>
+          <li data-keywords="Engine assets "><a href="engine-features.html#resource-loading">Resource loading</a> <span>· Resources module</span></li>
+          <li data-keywords="Runtime UI "><a href="engine-features.html#xml-layout-parsing">XML layout parsing</a> <span>· UI module</span></li>
+          <li data-keywords="Runtime UI "><a href="engine-features.html#ui-bindings">UI bindings</a> <span>· UI module</span></li>
+          </ul>
+        </section>
+        <section data-feature-category="development">
+          <h3>Build and validation</h3>
+          <ul>
+          <li data-keywords="C++ modules "><a href="engine-tour.html#c-module-boundaries">C++ module boundaries</a> <span>· CMake</span></li>
+          <li data-keywords="CMake targets "><a href="engine-tour.html#sandbox">Sandbox</a> <span>· Examples</span></li>
+          <li data-keywords="CMake targets "><a href="engine-tour.html#phase-1-eventbus">Phase 1 EventBus</a> <span>· Examples</span></li>
+          <li data-keywords="CMake targets "><a href="engine-tour.html#phase-2-lua-events">Phase 2 Lua Events</a> <span>· Examples</span></li>
+          <li data-keywords="CMake targets "><a href="engine-tour.html#phase-3-advanced-events">Phase 3 Advanced Events</a> <span>· Examples</span></li>
+          <li data-keywords="Configured tests "><a href="engine-tour.html#smoke-tests">Smoke tests</a> <span>· CTest</span></li>
+          <li data-keywords="Configured tests "><a href="engine-tour.html#integration-tests">Integration tests</a> <span>· CTest</span></li>
+          <li data-keywords="Windows x64 "><a href="quickstart.html#prerequisites">Windows prerequisites</a> <span>· PowerShell / standalone launcher</span></li>
+          <li data-keywords="Windows x64 "><a href="quickstart.html#build-editor">Editor Debug build</a> <span>· PowerShell / standalone launcher</span></li>
+          <li data-keywords="Windows x64 "><a href="quickstart.html#build-editor">engine_app Debug build</a> <span>· PowerShell / standalone launcher</span></li>
+          <li data-keywords="Default configuration "><a href="quickstart.html#run-demo">NPC Zone demo</a> <span>· PowerShell / standalone launcher</span></li>
+          <li data-keywords="Launcher argument "><a href="quickstart.html#run-demo">--config</a> <span>· PowerShell / standalone launcher</span></li>
+          <li data-keywords="Launcher argument "><a href="quickstart.html#run-demo">--frames</a> <span>· PowerShell / standalone launcher</span></li>
+          <li data-keywords="Launcher argument "><a href="quickstart.html#run-demo">--version</a> <span>· PowerShell / standalone launcher</span></li>
+          </ul>
+        </section>
+
+        <h2 id="focused-validation">Focused validation</h2>
+        <p>Run from the repository root in Windows PowerShell after <a href="quickstart.html">configuring the Debug tree</a>. Set <code>$case</code> to the test target for your change, then build and run it.</p>
+        <ul>
+          <li>Scene codecs and round trip <code>integration_scene_loader_roundtrip_path</code></li>
+          <li>Runtime transforms and physics <code>integration_runtime_transform_physics_path</code></li>
+          <li>Scene lifecycle event ordering <code>integration_events_scene_lifecycle_order_path</code></li>
+          <li>Lua behaviour lifecycle <code>integration_lua_runtime_lifecycle_path</code></li>
+          <li>UI loading and bindings <code>integration_ui_happy_path</code></li>
+        </ul>
+        <pre tabindex="0"><code>$case = 'integration_scene_loader_roundtrip_path'
+cmake --build build/debug --config Debug --target $case
+ctest --test-dir build/debug -C Debug -R "^$case$" --output-on-failure</code></pre>
+        <p>Check the result for skipped cases. Tests exercising a graphics context need a working graphics environment. See the <a href="../../tests/integration/CMakeLists.txt">integration target definitions</a> and <a href="../../CONTRIBUTING.md#validation">contributor validation instructions</a>.</p>
+
+        <h2 id="guide-validation">Check the guide</h2>
+        <p>From the repository root, scan local guide links and HTML fragment targets, then serve the checkout to check navigation in a browser.</p>
+        <pre tabindex="0"><code>python3 docs/guide/check_links.py
+git diff --check
+python3 -m http.server 8000</code></pre>
+        <p>Open <code>http://localhost:8000/docs/guide/</code>. You can also open <a href="index.html">the guide home</a> directly from disk.</p>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="engine-features.html">Previous: Engine features</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

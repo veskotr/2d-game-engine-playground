@@ -17,7 +17,8 @@ class Runtime;
 class ProjectRuntime
 {
 public:
-    static core::Result<ProjectRuntime> open(const std::filesystem::path& descriptor);
+    static core::Result<ProjectRuntime> open(const std::filesystem::path& descriptor,
+        bool validateTileAssets = false);
     // Mounts `.slepkg` game packages in order as one namespace of assets and scenes.
     // The first package declaring a main scene provides the startup scene.
     static core::Result<ProjectRuntime> openPackages(const std::vector<std::filesystem::path>& packages,
@@ -38,6 +39,7 @@ public:
     static std::map<std::string, SpriteRegion> readSpriteRegions(const std::filesystem::path& texture);
     static renderer::TextureFilter previewTextureFilter(const std::filesystem::path& root, const std::filesystem::path& path,
         renderer::TextureFilter fallback = renderer::TextureFilter::Default);
+    static std::string resolveEditorAsset(const std::filesystem::path& root, const std::string& reference);
     static std::filesystem::path resolveEditorSource(const std::filesystem::path& root, const std::filesystem::path& path);
     void registerScenes(Runtime& runtime) const;
     std::string resolveAsset(const std::string& value) const;
@@ -45,7 +47,7 @@ public:
 private:
     struct Scene { std::string key, path; nlohmann::json document; };
     struct Cache;
-    void index();
+    void index(bool validateTileAssets = false);
     std::shared_ptr<Cache> cache;
     std::vector<std::shared_ptr<void>> mounts;
     core::EngineConfig config;

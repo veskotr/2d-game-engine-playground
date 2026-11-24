@@ -52,6 +52,10 @@ internal class ProjectDocuments(val project: OpenedProject) {
         }) else value })
     }
     fun referencedAssetIds(document: JsonObject): Set<String> = buildSet {
+        document["tileLayers"]?.jsonArray?.forEach { layer ->
+            val tileset = layer.jsonObject.getValue("tileset").jsonPrimitive.content
+            if (tileset.startsWith(prefix)) add(tileset.removePrefix(prefix))
+        }
         references(document) { text ->
             if (text.startsWith(prefix)) add(text.removePrefix(prefix))
             text

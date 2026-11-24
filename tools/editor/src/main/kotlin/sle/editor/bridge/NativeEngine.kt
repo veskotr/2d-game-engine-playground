@@ -15,7 +15,7 @@ internal object NativeEngine {
         PackagedEngine.enterAssetRoot()
     }
 
-    external fun prepareProject(path: ByteArray): ByteArray
+    external fun prepareProject(path: ByteArray, validateTileAssets: Boolean): ByteArray
     // config.json of a built game; same result shape and release as prepareProject.
     external fun prepareGame(path: ByteArray): ByteArray
     external fun releaseProject(handle: Long)

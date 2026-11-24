@@ -1,0 +1,42 @@
+{
+  "format": "sle-asset",
+  "version": 1,
+  "id": "7742b40d-ca26-535f-83ba-b1b9294899c3",
+  "texture": {
+    "filter": "nearest",
+    "regions": [
+      {
+        "id": "46b6a51b-323b-5aa0-a52d-2e0f0e179400",
+        "name": "Solid",
+        "x": 0,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": "32ddc6a2-2800-5d74-bc77-952672def3bd",
+        "name": "Slope",
+        "x": 16,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": "45a1b300-6d63-5424-bcdd-67200537cd29",
+        "name": "Perforated",
+        "x": 32,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      },
+      {
+        "id": "2ecdeddf-b24f-598d-b308-49f466e02dd8",
+        "name": "Decoration",
+        "x": 48,
+        "y": 0,
+        "width": 16,
+        "height": 16
+      }
+    ]
+  }
+}

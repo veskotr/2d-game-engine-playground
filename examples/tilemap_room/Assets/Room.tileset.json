@@ -1,0 +1,133 @@
+{
+  "format": "sle-tileset",
+  "version": 1,
+  "spritesheet": "project-asset://7742b40d-ca26-535f-83ba-b1b9294899c3",
+  "tileWidth": 16,
+  "tileHeight": 16,
+  "tiles": [
+    {
+      "id": "4b187ae5-87a3-52d4-9abd-dc9e1964ace8",
+      "name": "Solid",
+      "region": "46b6a51b-323b-5aa0-a52d-2e0f0e179400",
+      "collision": {
+        "mode": "fullCell",
+        "pieces": []
+      }
+    },
+    {
+      "id": "b978774f-7e75-5b6a-a1f2-ce1d08ca078d",
+      "name": "Slope",
+      "region": "32ddc6a2-2800-5d74-bc77-952672def3bd",
+      "collision": {
+        "mode": "custom",
+        "pieces": [
+          [
+            [
+              0,
+              0
+            ],
+            [
+              16,
+              0
+            ],
+            [
+              16,
+              16
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "0e309b34-5754-59e8-ae43-aceaa595d3a5",
+      "name": "Perforated",
+      "region": "45a1b300-6d63-5424-bcdd-67200537cd29",
+      "collision": {
+        "mode": "custom",
+        "pieces": [
+          [
+            [
+              0,
+              0
+            ],
+            [
+              16,
+              0
+            ],
+            [
+              16,
+              5
+            ],
+            [
+              0,
+              5
+            ]
+          ],
+          [
+            [
+              0,
+              11
+            ],
+            [
+              16,
+              11
+            ],
+            [
+              16,
+              16
+            ],
+            [
+              0,
+              16
+            ]
+          ],
+          [
+            [
+              0,
+              5
+            ],
+            [
+              5,
+              5
+            ],
+            [
+              5,
+              11
+            ],
+            [
+              0,
+              11
+            ]
+          ],
+          [
+            [
+              11,
+              5
+            ],
+            [
+              16,
+              5
+            ],
+            [
+              16,
+              11
+            ],
+            [
+              11,
+              11
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "id": "08e65a1b-f0b1-5062-b8d3-9ad13ad84837",
+      "name": "Decoration",
+      "region": "2ecdeddf-b24f-598d-b308-49f466e02dd8",
+      "collision": {
+        "mode": "none",
+        "pieces": []
+      }
+    }
+  ]
+}

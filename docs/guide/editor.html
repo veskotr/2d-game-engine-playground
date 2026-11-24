@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Editor workspace · SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html">Quickstart</a></li>
+          <li><a href="editor.html" aria-current="page">Editor workspace</a></li>
+          <li><a href="first-scene.html">First Room</a></li>
+          <li><a href="lua-gameplay.html">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html">Physics and UI</a></li>
+          <li><a href="run-and-export.html">Run and export</a></li>
+          <li><a href="engine-tour.html">Engine tour</a></li>
+          <li><a href="editor-tools.html">Editor tools</a></li>
+          <li><a href="project-assets.html">Project and assets</a></li>
+          <li><a href="tilemaps.html">Tilemaps</a></li>
+          <li><a href="engine-features.html">Engine features</a></li>
+          <li><a href="reference.html">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Editor workspace</h1>
+        <p>Open a project to work with its scenes and assets. In the default layout, Hierarchy is on the left, Scene and Game share the center, Details is on the right, and Assets is below. Use the <strong id="windows">Windows</strong> menu to find panels if your layout differs.</p>
+
+        <figure>
+          <img src="images/editor-workspace.png" alt="First Room open with Hierarchy at left, Scene in the center, Details at right, and Assets below.">
+          <figcaption>The default layout with the completed First Room open and Player selected.</figcaption>
+        </figure>
+
+        <h2 id="hierarchy">Hierarchy</h2>
+        <p>Select an entity by name to edit it. The tree shows parent and child relationships. Select the scene root to edit the scene name in Details. In First Room, the Player and Camera will both be children of the scene root.</p>
+
+        <h2 id="scene">Scene</h2>
+        <p>Use Scene to place entities and inspect camera framing. Select a sprite directly in the viewport or choose it in Hierarchy. Middle-drag or Alt+left-drag to pan, scroll to zoom, and use <strong>Fit</strong> to frame the scene. These controls move the editor view independently of the gameplay camera.</p>
+
+        <h2 id="details">Details</h2>
+        <p>Details follows the selection. Choose Player to edit its <strong>Name</strong>, <strong>Transform</strong>, and <strong>SpriteRenderer</strong>. Choose Camera to change its position and <strong>Camera2D</strong> settings. During Play, Live Details shows runtime values and authoring edits are locked until you stop.</p>
+
+        <h2 id="assets">Assets</h2>
+        <p>Assets shows the files under the open project's asset root. Select a folder before using <strong>Import…</strong> to copy files into it. To use an imported image, assign it to the sprite's texture field in Details.</p>
+
+        <h2 id="game">Game</h2>
+        <p>Game shows what the active gameplay camera sees. The editor may add bars around the view to preserve the camera's aspect ratio. When you press <strong>Play</strong>, the editor opens Game and runs a snapshot of the open scene. Click inside Game to give it keyboard and mouse focus. Press <strong>Stop</strong> to return to editing.</p>
+        <p><a href="../topics/EditorWorkspace.md">Workspace reference</a> · <a href="../topics/SceneEditor.md">Scene editor reference</a></p>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="quickstart.html">Previous: Quickstart</a>
+        <a href="first-scene.html">Next: First Room</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

@@ -69,10 +69,18 @@ private fun Modifier.controlChrome(colors: ControlColors, focused: Boolean): Mod
     return result
 }
 
+private val LocalTooltipsAbove = compositionLocalOf { false }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun EditorTooltip(help: String?, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    if(help.isNullOrBlank()) Box(modifier) { content() } else TooltipArea(modifier=modifier,tooltip={
+    val placement = if (LocalTooltipsAbove.current) {
+        TooltipPlacement.ComponentRect(Alignment.TopCenter, Alignment.TopCenter,
+            DpOffset(0.dp, -LocalEditorMetrics.current.gap))
+    } else {
+        TooltipPlacement.CursorPoint(DpOffset(0.dp, 16.dp))
+    }
+    if(help.isNullOrBlank()) Box(modifier) { content() } else TooltipArea(modifier=modifier,tooltipPlacement=placement,tooltip={
         Surface(color=LocalEditorColors.current.tooltipBackground,shape=RoundedCornerShape(LocalEditorMetrics.current.controlRadius)) {
             Text(help,color=LocalEditorColors.current.tooltipText,style=LocalEditorTypography.current.secondary,
                 modifier=Modifier.widthIn(max=360.dp).padding(horizontal=LocalEditorMetrics.current.controlPadding,vertical=LocalEditorMetrics.current.gap),
@@ -243,10 +251,13 @@ internal fun EditorSeparator(modifier: Modifier = Modifier, vertical: Boolean = 
 /** Command strip: consistent height, spacing and wrapping for panel toolbars. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun EditorToolbar(modifier: Modifier = Modifier, content: @Composable FlowRowScope.() -> Unit) {
+internal fun EditorToolbar(modifier: Modifier = Modifier, tooltipsAbove: Boolean = false,
+    content: @Composable FlowRowScope.() -> Unit) {
     val m=LocalEditorMetrics.current
-    FlowRow(modifier.fillMaxWidth().padding(horizontal=m.gap,vertical=m.gap/2),
-        horizontalArrangement=Arrangement.spacedBy(m.gap/2),verticalArrangement=Arrangement.spacedBy(m.gap/2),content=content)
+    CompositionLocalProvider(LocalTooltipsAbove provides tooltipsAbove) {
+        FlowRow(modifier.fillMaxWidth().padding(horizontal=m.gap,vertical=m.gap/2),
+            horizontalArrangement=Arrangement.spacedBy(m.gap/2),verticalArrangement=Arrangement.spacedBy(m.gap/2),content=content)
+    }
 }
 
 /** Vertical rule separating toolbar groups. */

@@ -152,6 +152,7 @@ store) adds a watched `NoticeSource` there. Test the result with an `EditorNotic
 - [ ] Dark and Light: open View → Appearance and check hover, focus, disabled, invalid.
 - [ ] Compact and Comfortable density; UI scale 75/85/100%.
 - [ ] A narrow dock (inspector < 240 dp stacks labels) and a detached window.
+- [ ] Hover viewport toolbar controls in docked and detached windows. The full tooltip should appear above the controls, clear of the native canvas.
 - [ ] Keyboard: Tab/Shift-Tab, Enter/Escape in fields, Alt menu mnemonics; new shortcuts
   are registered commands, not widget key handlers.
 - [ ] Undo/redo and file integrity unchanged; no document dirty flag from presentation.

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Run and export · SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html">Quickstart</a></li>
+          <li><a href="editor.html">Editor workspace</a></li>
+          <li><a href="first-scene.html">First Room</a></li>
+          <li><a href="lua-gameplay.html">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html">Physics and UI</a></li>
+          <li><a href="run-and-export.html" aria-current="page">Run and export</a></li>
+          <li><a href="engine-tour.html">Engine tour</a></li>
+          <li><a href="editor-tools.html">Editor tools</a></li>
+          <li><a href="project-assets.html">Project and assets</a></li>
+          <li><a href="tilemaps.html">Tilemaps</a></li>
+          <li><a href="engine-features.html">Engine features</a></li>
+          <li><a href="reference.html">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Run and export First Room</h1>
+        <p>Finish the <a href="physics-and-ui.html">wall, trigger, and HUD</a>, then save First Room and confirm <code>FirstRoom.scene.json</code> is the startup scene in <strong>File → Project Settings…</strong>.</p>
+
+        <h2 id="project-launch">Run inside the editor</h2>
+        <p><strong>Edit → Play</strong> runs the open scene. Click Game to give it keyboard focus, then hold <kbd>D</kbd> until Player reaches the wall and the HUD says <strong>Inside</strong>. Hold <kbd>A</kbd> until it says <strong>Outside</strong>. Stop, then choose <strong>Edit → Run Project</strong> to repeat the check against the saved startup scene.</p>
+
+        <h2 id="launcher-project-flag">Launch the folder project</h2>
+        <p>From the checkout in Windows PowerShell, replace <code>C:/Games/First Room</code> with your project folder. The Debug executable comes from the <a href="quickstart.html">quickstart build</a>.</p>
+        <pre tabindex="0"><code>&amp; "./build/debug/engine_app/Debug/engine_app.exe" --project "C:/Games/First Room/First Room.sleproject"</code></pre>
+        <p>The separate First Room window should show the same camera view, movement, wall, and HUD. Press <kbd>Esc</kbd> to exit. Add <code>--frames 120</code> for a bounded startup check.</p>
+        <p id="project-resources">The descriptor selects the startup scene and game window. Keep the asset root, files, and their <code>.slemeta</code> sidecars with the descriptor so project references can resolve from any working directory. See <a href="../topics/Projects.md">project files and runtime resources</a>.</p>
+
+        <h2 id="export-game">Export a Windows game</h2>
+        <figure>
+          <img src="images/export-game.png" alt="The expanded File menu lists Export Game… below Project Settings….">
+          <figcaption>Open File to find Export Game… for the current project.</figcaption>
+        </figure>
+        <ol>
+          <li>For a source-built editor, prepare the Windows x64 Release bundle in the existing CMake build tree.
+            <pre tabindex="0"><code>cmake --build build/debug --config Release --target sle_runtime_bundle --parallel 4</code></pre>
+          </li>
+          <li>Choose <strong>File → Export Game…</strong> and select <code>build/debug/runtime/Release</code> when prompted. A packaged Windows editor supplies its own bundle and skips the picker. Wait for the export to finish.</li>
+          <li>Open <code>Exports/First Room</code> under the project folder. A repeat export uses the next suffix, such as <code>First Room-2</code>. The delivery includes <code>engine_app.exe</code>, its DLLs, engine <code>assets/</code>, <code>notices/</code>, manifests, and <code>game/game.sleproject</code> with the project assets under <code>game/</code>.</li>
+          <li>Copy the entire delivery folder outside the source project. Double-click the copied <code>engine_app.exe</code>. It finds <code>game/game.sleproject</code> beside itself. Check the same movement, wall, and HUD in the copied game.</li>
+        </ol>
+        <p>To check the copied game from an unrelated working directory, run the following with the absolute path to your copied executable.</p>
+        <pre tabindex="0"><code>&amp; "C:/Deliveries/First Room/engine_app.exe" --frames 120</code></pre>
+        <p>Export uses the saved scene and project settings. See <a href="../topics/Projects.md#export-a-runnable-game">runnable folder export</a> and <a href="../topics/GamePackages.md">game package formats</a>.</p>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="physics-and-ui.html">Previous: Physics and UI</a>
+        <a href="engine-tour.html">Next: Engine tour</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

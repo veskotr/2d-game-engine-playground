@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lua gameplay · SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html">Quickstart</a></li>
+          <li><a href="editor.html">Editor workspace</a></li>
+          <li><a href="first-scene.html">First Room</a></li>
+          <li><a href="lua-gameplay.html" aria-current="page">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html">Physics and UI</a></li>
+          <li><a href="run-and-export.html">Run and export</a></li>
+          <li><a href="engine-tour.html">Engine tour</a></li>
+          <li><a href="editor-tools.html">Editor tools</a></li>
+          <li><a href="project-assets.html">Project and assets</a></li>
+          <li><a href="tilemaps.html">Tilemaps</a></li>
+          <li><a href="engine-features.html">Engine features</a></li>
+          <li><a href="reference.html">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Move Player with Lua</h1>
+        <p>Open the saved <a href="first-scene.html">First Room</a> scene and stop Play before editing. This chapter sets up keyboard input and the Player behaviour. The next chapter adds the physics body that the script drives.</p>
+
+        <h2 id="keyboard-input">Bind the movement keys</h2>
+        <ol>
+          <li>Choose <strong>File → Project Settings…</strong> and open <strong>Input Actions</strong>.</li>
+          <li>Enter <code>MoveLeft</code> and choose <strong>Add action</strong>. Choose <strong>Add key</strong> beside it, then press <kbd>A</kbd>.</li>
+          <li>Add <code>MoveRight</code> and bind <kbd>D</kbd>. Choose <strong>Save</strong>. The names are case-sensitive and the new bindings apply on the next Play or launch.</li>
+        </ol>
+
+        <h2 id="lua-behaviour-lifecycle">Attach the Player behaviour</h2>
+        <ol>
+          <li>Select Player and choose <strong>New Lua Behavior…</strong> in Details. Enter <code>Scripts/movement.lua</code> as the destination and choose <strong>Create and Attach</strong>. This creates the file under <code>Assets/Scripts/</code> and adds an enabled attachment named <code>movement</code> to <strong>Script</strong>.</li>
+          <li>Replace the generated Lua with the code below and save the file. Save the scene in the editor as well.</li>
+        </ol>
+        <pre tabindex="0"><code>local enter, leave
+local roomStatus = &quot;Outside&quot;
+
+return {
+    init = function(entity)
+        enter = Engine.Events.subscribe(&quot;zone.enter&quot;, function(event)
+            if event.zoneId == &quot;checkpoint&quot; and event.entityB == entity then
+                roomStatus = &quot;Inside&quot;
+                Engine.log(&quot;First Room: entered checkpoint&quot;)
+            end
+        end)
+        leave = Engine.Events.subscribe(&quot;zone.exit&quot;, function(event)
+            if event.zoneId == &quot;checkpoint&quot; and event.entityB == entity then
+                roomStatus = &quot;Outside&quot;
+                Engine.log(&quot;First Room: left checkpoint&quot;)
+            end
+        end)
+    end,
+    update = function(entity, dt)
+        local direction = 0
+        if Engine.Input.isActionDown(&quot;MoveLeft&quot;) then direction = direction - 1 end
+        if Engine.Input.isActionDown(&quot;MoveRight&quot;) then direction = direction + 1 end
+        Engine.Physics.setVelocity(entity, 160 * direction, 0)
+        Engine.setUIBinding(&quot;roomStatus&quot;, roomStatus)
+    end,
+    destroy = function(entity)
+        if enter then Engine.Events.unsubscribe(enter) end
+        if leave then Engine.Events.unsubscribe(leave) end
+    end
+}</code></pre>
+        <p>The engine calls <code>init</code> when the attachment starts, <code>update</code> each running frame, and <code>destroy</code> at teardown. The two subscription handles are local to this attachment and are released at teardown. See <a href="../topics/Behaviours.md">script behaviours and execution order</a>.</p>
+
+        <figure>
+          <img src="images/lua-behaviour.png" alt="Player Details displays the attached movement Lua behaviour.">
+          <figcaption>Expand Script in Player’s Details and look for the movement attachment under Behaviours.</figcaption>
+        </figure>
+
+        <h2 id="lua-bindings">Read input and set velocity</h2>
+        <p><code>Engine.Input.isActionDown</code> stays true while the bound key is held. The script sets horizontal velocity to 160 world units per second in the selected direction, so the velocity value stays the same across frame rates. Releasing both keys or holding both sets velocity to zero. After you add the body in the next chapter, click Game and hold <kbd>A</kbd> or <kbd>D</kbd> to check the movement. The camera stays centered on the room.</p>
+        <p id="run-lua-scripts">Play loads the attachment with the scene and runs its lifecycle. See the <a href="../../assets/scripts/engine_api.lua">generated Lua API</a> for the input, physics, and event signatures.</p>
+        <p id="gameplay-components">Lua can also inspect or edit supported components through <code>Engine.Components</code>. First Room uses the dedicated physics binding to control an authored rigid body. See <a href="../topics/Scripting.md">scripting</a> for the component API.</p>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="first-scene.html">Previous: First Room</a>
+        <a href="physics-and-ui.html">Next: Physics and UI</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

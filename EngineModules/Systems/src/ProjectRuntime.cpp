@@ -5,6 +5,7 @@
 #include "GamePackage.hpp"
 #include "ProjectSettings.hpp"
 #include "PrefabExpansion.hpp"
+#include "TileLayerLoader.hpp"
 #include <fstream>
 #include <algorithm>
 #include <cctype>
@@ -121,7 +122,7 @@ struct ProjectRuntime::Cache {
     fs::path path;
     ~Cache() { std::error_code ignored;fs::remove_all(path,ignored); }
 };
-core::Result<ProjectRuntime> ProjectRuntime::open(const fs::path& descriptor) {
+core::Result<ProjectRuntime> ProjectRuntime::open(const fs::path& descriptor, bool validateTileAssets) {
     using Result=core::Result<ProjectRuntime>;
     try {
         ProjectRuntime project;
@@ -155,7 +156,7 @@ core::Result<ProjectRuntime> ProjectRuntime::open(const fs::path& descriptor) {
         config.screenMode=mode=="Fullscreen"?core::ScreenMode::Fullscreen:mode=="BorderlessFullscreen"?core::ScreenMode::BorderlessFullscreen:core::ScreenMode::Windowed;
         config.targetFPS=number(game.at("targetFPS"));
         project.runtimeFolder=contained(project.root,project.root/".sle/runtime");
-        project.index();
+        project.index(validateTileAssets);
         return Result::success(std::move(project));
     } catch(const std::exception& error) { return Result::error(std::string("Project launch: ")+error.what()); }
 }
@@ -179,11 +180,11 @@ core::Result<ProjectRuntime> ProjectRuntime::openPackages(const std::vector<fs::
         require(!project.startup.empty(),"No game package declares a main scene");
         // Unpacked packages are shared and immutable; derivatives stay per launch.
         project.runtimeFolder=fs::temp_directory_path()/"sle-package-runtime";
-        project.index();
+        project.index(true);
         return Result::success(std::move(project));
     } catch(const std::exception& error) { return Result::error(std::string("Game packages: ")+error.what()); }
 }
-void ProjectRuntime::index() {
+void ProjectRuntime::index(bool validateTileAssets) {
     auto& project=*this;
     std::vector<fs::path> documents;
     for(const auto& assets:project.roots) for(const auto& entry:fs::recursive_directory_iterator(assets)) {
@@ -268,6 +269,11 @@ void ProjectRuntime::index() {
             require(expanded.ok(),expanded.error());document=expanded.value();
         }
         document=SceneAuthoring::canonicalScene(document);
+        if (validateTileAssets && document.contains("tileLayers")) {
+            // Export validation opens the staged package without a graphics context.
+            (void)detail::loadTileLayers(document.at("tileLayers"),
+                [&project](const auto& ref) { return project.resolveAsset(ref); }, {}, false, false);
+        }
         const auto id=identity(read(fs::path(path.string()+".slemeta")).at("id").get<std::string>());
         const auto key=document.at("key").get<std::string>();
         require(key==id || !project.paths.contains(key),"Scene key conflicts with a project UUID: "+key);
@@ -322,6 +328,27 @@ std::map<std::string, ProjectRuntime::SpriteRegion> ProjectRuntime::readSpriteRe
     sidecar += ".slemeta";
     if (!fs::exists(fs::symlink_status(sidecar))) return {};
     return readAssetMetadata(sidecar).regions;
+}
+std::string ProjectRuntime::resolveEditorAsset(const fs::path& root, const std::string& reference) {
+    constexpr std::string_view prefix = "project-asset://";
+    require(!root.empty() && reference.starts_with(prefix), "No open project for " + reference);
+    const auto requested = identity(reference.substr(prefix.size()));
+    fs::path found;
+    for (const auto& entry : fs::recursive_directory_iterator(root)) {
+        if (entry.is_symlink() || !entry.is_regular_file() || !suffix(entry.path(), ".slemeta")) continue;
+        // Unrelated invalid sidecars are reported by the asset browser.
+        std::string candidate;
+        try { candidate = readAssetMetadata(entry.path()).id; }
+        catch (const std::exception&) { continue; }
+        if (candidate != requested) continue;
+        auto source = entry.path();
+        source.replace_extension();
+        if (!fs::is_regular_file(fs::symlink_status(source))) continue;
+        require(found.empty(), "Ambiguous project asset UUID: " + requested);
+        found = contained(root, source);
+    }
+    require(!found.empty(), "Missing project asset UUID: " + requested);
+    return found.generic_string();
 }
 fs::path ProjectRuntime::resolveEditorSource(const fs::path& root, const fs::path& path) {
     require(!root.empty() && path.is_absolute(), "Reload requires a saved source in the open project");

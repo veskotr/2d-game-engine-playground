@@ -7,7 +7,7 @@ internal const val MAX_SCENE_ENTITIES=4096
 
 internal data class SceneDocument(val key: String = UUID.randomUUID().toString(), val name: String = "New Scene",
     val entities: List<EntityDocument> = emptyList(), val parents: Map<String,String> = emptyMap(),
-    val prefabInstances: List<PrefabInstance> = emptyList()) {
+    val prefabInstances: List<PrefabInstance> = emptyList(), val tileLayers: JsonArray? = null) {
     fun serialize(): String {
         require(key.isNotBlank()) { "Scene key is missing" }
         require(entities.size<=MAX_SCENE_ENTITIES) { "Scene editor supports at most $MAX_SCENE_ENTITIES entities" }
@@ -15,13 +15,14 @@ internal data class SceneDocument(val key: String = UUID.randomUUID().toString()
         validateSceneParents(entities.map { it.key },parents)
         return documentJson.encodeToString(JsonElement.serializer(),buildJsonObject {
             put("key",key);put("name",name)
+            tileLayers?.let { put("tileLayers", it) }
             put("entities",JsonArray(entities.map { JsonObject(Json.parseToJsonElement(it.serialize()).jsonObject.getValue("entities").jsonArray.single().jsonObject + (parents[it.key]?.let { parent -> mapOf("parent" to JsonPrimitive(parent)) } ?: emptyMap())) }))
         })+"\n"
     }
     companion object {
         fun parse(source: String): SceneDocument {
             val root=Json.parseToJsonElement(source).jsonObject
-            require(root.keys.all { it in setOf("key","name","entities") }) { "Scene editor supports authored entities; unsupported scene metadata was not discarded" }
+            require(root.keys.all { it in setOf("key","name","entities","tileLayers") }) { "Scene editor supports authored entities; unsupported scene metadata was not discarded" }
             require(root["entities"] is JsonArray) { "Scene entities must be an array" }
             val raw=root.getValue("entities").jsonArray
             require(raw.size<=MAX_SCENE_ENTITIES) { "Too many scene entities" }
@@ -39,7 +40,7 @@ internal data class SceneDocument(val key: String = UUID.randomUUID().toString()
                 EntityDocument.parse(buildJsonObject { put("root",key);put("entities",JsonArray(listOf(JsonObject(entity-"parent")))) }.toString())
             }
             fun text(field: String, fallback: String) = root[field]?.jsonPrimitive?.also { require(it.isString) { "$field must be a string" } }?.content ?: fallback
-            return SceneDocument(text("key",UUID.randomUUID().toString()),text("name","New Scene"),entities,parents).also { it.serialize() }
+            return SceneDocument(text("key",UUID.randomUUID().toString()),text("name","New Scene"),entities, parents, tileLayers = orderedTileLayers(root["tileLayers"]?.jsonArray)).also { it.serialize() }
         }
     }
 }

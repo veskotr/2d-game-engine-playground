@@ -41,6 +41,15 @@ void EntityPreviewSystem::frameCamera(entity::Scene& scene, core::Camera2D& came
             any = true;
         }
     });
+    for (const auto& layer : scene.getTileLayers()) {
+        if (!layer.visible) continue;
+        for (const auto& [coordinate, chunk] : layer.chunks) {
+            const glm::dvec2 lowerLeft(chunk.lowerLeft), upperRight(chunk.upperRight);
+            minimum = any ? glm::min(minimum, lowerLeft) : lowerLeft;
+            maximum = any ? glm::max(maximum, upperRight) : upperRight;
+            any = true;
+        }
+    }
     if (!std::isfinite(aspect) || aspect <= 0) aspect = 1.0f;
     const auto center = (minimum+maximum)*0.5;
     const auto extent = maximum-minimum;

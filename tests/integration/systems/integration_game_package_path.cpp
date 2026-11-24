@@ -1,8 +1,10 @@
 #include <sle/engine/GameConfig.hpp>
 #include <sle/engine/ProjectRuntime.hpp>
 #include <sle/engine/Runtime.hpp>
+#include <sle/engine/SceneLoader.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
 #include <chrono>
+#include <iterator>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -218,6 +220,60 @@ int main(int argc,char** argv) {
             check(runtime.hasScene("first") && runtime.hasScene("second") && runtime.hasScene(second),"package scene aliases missing");
             check(runtime.loadScene(first).ok() && runtime.loadScene("second").ok(),"package scenes failed to load");
         }
+        const std::string tileScene = "00000002-1111-4111-8111-111111111111";
+        const std::string sheet = "00000004-1111-4111-8111-111111111111";
+        std::vector<Entry> tilePackage{{"manifest.json", manifest(first, tileScene).dump()}};
+        for (const auto& entry : fs::directory_iterator(cwd / "tests/data/tilemap/Assets")) {
+            std::ifstream file(entry.path(), std::ios::binary);
+            check(file.is_open(), "Could not open tilemap package fixture");
+            tilePackage.emplace_back("assets/" + entry.path().filename().generic_string(),
+                std::string(std::istreambuf_iterator<char>(file), {}));
+        }
+        const auto tilePackagePath = root / "tiles.slepkg";
+        zip(tilePackagePath, tilePackage);
+        const auto packedTiles = sle::ProjectRuntime::openPackages({tilePackagePath}, config.engine);
+        check(packedTiles.ok(), packedTiles.error());
+        check(packedTiles.value().sceneDocument(tileScene).at("tileLayers").size() == 2,
+            "Packaged tile layers were lost");
+        const auto loadTileScene = [](const sle::ProjectRuntime& project, const fs::path& source) {
+            sle::entity::Scene scene;
+            const auto loaded = sle::SceneLoader::loadData(project.sceneDocument(project.startupScene()),
+                scene, source.generic_string(), {}, [&project](const auto& ref) { return project.resolveAsset(ref); });
+            check(loaded.ok(), loaded.error());
+            check(scene.getTileLayers().size() == 2, "Runtime did not load both tile layers");
+        };
+        loadTileScene(packedTiles.value(), tilePackagePath);
+
+        const auto room = root / "room";
+        fs::copy(cwd / "examples/tilemap_room", room, fs::copy_options::recursive);
+        const auto roomProject = room / "Room.sleproject";
+        const auto originalRoom = sle::ProjectRuntime::open(roomProject);
+        check(originalRoom.ok(), originalRoom.error());
+        const auto roomDocument = originalRoom.value().sceneDocument(originalRoom.value().startupScene());
+        const auto art = room / "Assets/Art";
+        fs::create_directory(art);
+        fs::rename(room / "Assets/Room.png", art / "Renamed.png");
+        fs::rename(room / "Assets/Room.png.slemeta", art / "Renamed.png.slemeta");
+        const auto reopenedRoom = sle::ProjectRuntime::open(roomProject);
+        check(reopenedRoom.ok(), reopenedRoom.error());
+        check(reopenedRoom.value().sceneDocument(reopenedRoom.value().startupScene()) == roomDocument,
+            "Moving the spritesheet changed the reopened room document");
+        loadTileScene(reopenedRoom.value(), roomProject);
+        auto corruptTiles = tilePackage;
+        for (auto& [path, bytes] : corruptTiles)
+            if (path == "assets/Colors.png") bytes.resize(33); // Keep PNG signature and IHDR only.
+        const auto corruptTilesPath = root / "corrupt-sheet.slepkg";
+        zip(corruptTilesPath, corruptTiles);
+        const auto corruptSheet = sle::ProjectRuntime::openPackages({corruptTilesPath}, config.engine);
+        check(!corruptSheet.ok() && corruptSheet.error().find(sheet) != std::string::npos,
+            "Package validation accepted a truncated spritesheet image");
+        std::erase_if(tilePackage, [](const Entry& entry) { return entry.first == "assets/Colors.png"; });
+        const auto brokenTilesPath = root / "missing-sheet.slepkg";
+        zip(brokenTilesPath, tilePackage);
+        const auto brokenTiles = sle::ProjectRuntime::openPackages({brokenTilesPath}, config.engine);
+        check(!brokenTiles.ok() && brokenTiles.error().find(sheet) != std::string::npos,
+            "Package validation did not identify the missing spritesheet");
+
         // Remounting reuses the verified shared cache; an extra file there is never indexed.
         const auto cache=project.assetRoots()[0];
         {

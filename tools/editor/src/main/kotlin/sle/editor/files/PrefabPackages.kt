@@ -143,8 +143,11 @@ internal object PrefabPackages {
     fun save(document: EntityDocument, assets: Map<Path, String>, path: Path, validate: (String) -> Unit) =
         saveDocument(document.serialize(), assets, path, "sle-prefab", "entity.json", validate)
 
-    fun saveScene(source: String, assets: Map<Path, String>, path: Path, validate: (String) -> Unit) =
+    fun saveScene(source: String, assets: Map<Path, String>, path: Path, validate: (String) -> Unit) {
+        val tileLayers = Json.parseToJsonElement(source).jsonObject["tileLayers"]?.jsonArray
+        require(tileLayers.isNullOrEmpty()) { "Save scenes with native tile layers inside a project and use Export Game to package them" }
         saveDocument(source, assets, path, "sle-scene", "scene.json", validate)
+    }
 
     private fun saveDocument(source: String, assets: Map<Path, String>, path: Path, format: String,
         documentEntry: String, validate: (String) -> Unit) {

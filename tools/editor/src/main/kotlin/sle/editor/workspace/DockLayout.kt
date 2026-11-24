@@ -61,7 +61,11 @@ fun defaultDockLayout(panels: List<PanelDescriptor>): DockLayout {
     val root = split(DockAxis.Vertical, .74f, top, tabs("assets", named("assets") + named("console") + named("luaProfiler")))
     // Unavailable and temporary panels start hidden; showing one restores it as a center tab.
     return DockLayout(main, listOf(DockHost(main, root, bounds)), hidden = panels.filter { !it.available || it.temporary }
-        .associate { it.id to PanelPlacement(main, GroupId("center"), center.size, bounds) })
+        .associate { panel ->
+            val destination = if (panel.id.value == "tilePalette") root?.tabs()?.firstOrNull { it.group == GroupId("assets") } else null
+            panel.id to PanelPlacement(main, destination?.group ?: GroupId("center"),
+                destination?.panels?.size ?: center.size, bounds)
+        })
 }
 
 fun validateLayout(layout: DockLayout, panels: Set<PanelId>): List<String> = buildList {

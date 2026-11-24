@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Physics and UI · SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html">Quickstart</a></li>
+          <li><a href="editor.html">Editor workspace</a></li>
+          <li><a href="first-scene.html">First Room</a></li>
+          <li><a href="lua-gameplay.html">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html" aria-current="page">Physics and UI</a></li>
+          <li><a href="run-and-export.html">Run and export</a></li>
+          <li><a href="engine-tour.html">Engine tour</a></li>
+          <li><a href="editor-tools.html">Editor tools</a></li>
+          <li><a href="project-assets.html">Project and assets</a></li>
+          <li><a href="tilemaps.html">Tilemaps</a></li>
+          <li><a href="engine-features.html">Engine features</a></li>
+          <li><a href="reference.html">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Add a wall, checkpoint, and HUD</h1>
+        <p>Continue with the <a href="lua-gameplay.html">Player behaviour and input actions</a> in First Room. Make each edit in the stopped scene and save before testing.</p>
+
+        <h2 id="rigid-bodies">Give Player a physics body</h2>
+        <p>Select Player and add <strong>RigidBody</strong> and <strong>BoxCollider</strong> in Details. Set <strong>Body Type</strong> to <strong>Dynamic</strong>, <strong>Gravity Scale</strong> to <code>0</code>, and turn on <strong>Fixed Rotation</strong>. Give the collider size <code>64 × 64</code>, centered at offset <code>(0, 0)</code>. Keep both components enabled. Press Play, click Game, and hold <kbd>D</kbd> briefly. Player moves right and stops when you release the key. Stop to restore the starting position.</p>
+
+        <h2 id="box-collider">Build the wall</h2>
+        <p>Create a Sprite at the scene root called <strong>Wall</strong> at <code>(420, 135)</code>. Assign the same <code>tile2.png</code> texture as Player and set size to <code>32 × 140</code>. Add a <strong>RigidBody</strong> with type <strong>Static</strong> and a <strong>BoxCollider</strong> of size <code>32 × 140</code> at zero offset. Keep Transform scale at <code>(1, 1)</code> so those dimensions match the drawn wall.</p>
+        <p id="collider-contacts">In Play, hold <kbd>D</kbd> until Player reaches Wall. The right edge of Player should stop against the left side of Wall, with Player's center near X <code>372</code>. Hold <kbd>A</kbd> to move away. Solid contacts can also be observed with <code>collision.begin</code> and <code>collision.end</code>. See <a href="../topics/Physics.md">physics shapes and units</a>.</p>
+        <p id="circle-collider">For a round obstacle, add <strong>CircleCollider</strong> to a body and set its radius and offset. First Room uses the box shape to match its wall.</p>
+
+        <h2 id="box-event-area">Create a checkpoint trigger</h2>
+        <p>Create a root Sprite called <strong>Checkpoint</strong> at <code>(345, 135)</code>. Assign <code>tile2.png</code>, set sprite size to <code>24 × 96</code>, and set its render layer to <code>-1</code> so Player draws over the marker. With Checkpoint selected, use <strong>Add Component</strong> to add <strong>BoxZone</strong>, the box event area. Verify its <strong>RigidBody</strong> is <strong>Static</strong>, set the zone size to <code>24 × 96</code> at zero offset, and replace the generated <strong>Zone ID</strong> with <code>checkpoint</code>.</p>
+        <p id="zone-events">Hold <kbd>D</kbd> in Play. Player should cross the marker and keep moving until it hits the wall. Move back with <kbd>A</kbd>. Console should report <code>First Room: entered checkpoint</code> and then <code>First Room: left checkpoint</code>. The box is a sensor, so its overlap produces <code>zone.enter</code> and <code>zone.exit</code> without blocking Player.</p>
+        <p id="event-subscriptions">The script checks the event's <code>zoneId</code> and <code>entityB</code> so only Player's overlap with this checkpoint updates the HUD. See the <a href="../topics/Events.md">events guide</a> and the <a href="../../assets/scripts/npc_zone_demo.lua">NPC Zone example</a>.</p>
+        <p id="circle-event-area">Use a <strong>CircleZone</strong> and set its radius for a round trigger. Both zone shapes use the same enter and exit events.</p>
+
+        <h2 id="xml-hud">Show the checkpoint state on screen</h2>
+        <ol>
+          <li>Save the XML below as <code>Assets/UI/room-hud.xml</code> in First Room. Copy the checkout's <a href="../../assets/fonts/Roboto-Regular.ttf"><code>assets/fonts/Roboto-Regular.ttf</code></a> into the project, for example beside the XML.</li>
+          <li>Create a root Entity called <strong>HUD</strong> and add <strong>UI</strong> in Details. Browse to the XML for the layout and the copied font for the font asset. Set <strong>Space Mode</strong> to <strong>Screen</strong>, keep it visible, and leave the binding scope empty. Save the scene.</li>
+        </ol>
+        <pre tabindex="0"><code>&lt;Panel id=&quot;roomPanel&quot; x=&quot;8&quot; y=&quot;8&quot; width=&quot;240&quot; height=&quot;36&quot; color=&quot;#101820CC&quot;&gt;
+    &lt;Label id=&quot;roomLabel&quot; x=&quot;12&quot; y=&quot;9&quot; fontSize=&quot;18&quot; color=&quot;#F7FBFF&quot;&gt;Checkpoint: {{roomStatus}}&lt;/Label&gt;
+&lt;/Panel&gt;</code></pre>
+        <p>Play should show <strong>Checkpoint: Outside</strong> near the top-left of Game. Move right into the checkpoint to see <strong>Inside</strong>, then left out of it to see <strong>Outside</strong> again. The Lua callbacks track whether Player is inside the checkpoint. Each update publishes that state to the label’s <code>roomStatus</code> binding. The bundled <a href="../../assets/ui/fps_hud.xml">FPS HUD</a> uses the same XML binding syntax.</p>
+        <figure>
+          <img src="images/physics-and-hud.png" alt="Player is between the green checkpoint and the wall while the Game HUD reads Checkpoint: Inside.">
+          <figcaption>Player overlaps the checkpoint beside the wall. Find the checkpoint status at the top left of Game.</figcaption>
+        </figure>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="lua-gameplay.html">Previous: Lua gameplay</a>
+        <a href="run-and-export.html">Next: Run and export</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

@@ -2,6 +2,8 @@
 
 This is the first stop for project context. Prefer the small docs listed here before opening older long-form references.
 
+[SLE HTML Guide](guide/index.html) covers the editor setup, the First Room tutorial, and the C++ runtime tour.
+
 ## Start Here
 
 1. [AGENTS.md](../AGENTS.md) - repository instructions and map.

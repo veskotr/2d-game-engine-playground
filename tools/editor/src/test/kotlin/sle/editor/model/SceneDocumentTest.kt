@@ -67,6 +67,21 @@ class SceneDocumentTest {
         assertFails { SceneDocument(entities=listOf(first,first)).serialize() }
     }
 
+    @Test fun sceneWorkspacePreservesTileLayersThroughEntityEditsAndResetsOnNewScene() {
+        val fixture = java.nio.file.Path.of("../../tests/data/tilemap/Assets/Two layers.scene.json")
+        val source = Json.parseToJsonElement(Files.readString(fixture)).jsonObject.getValue("document").toString()
+        val original = SceneDocument.parse(source)
+        val workspace = SceneWorkspaceState(emptyMap()) { it }
+        workspace.openResolved(source, emptyMap(), fixture)
+        assertFalse(workspace.dirty)
+        workspace.addEntity()
+        assertEquals(original.tileLayers, SceneDocument.parse(workspace.serialize()).tileLayers)
+        workspace.undo()
+        assertEquals(original, workspace.document())
+        workspace.newScene()
+        assertNull(workspace.document().tileLayers)
+    }
+
     @Test fun copiedPrefabRemapsItsOwnReferencesWithoutChangingOtherTargets() {
         val original=EntityDocument().addComponent("Animator",buildJsonObject {
             put("targetEntities",buildJsonObject { put("self","PLACEHOLDER");put("other","other") })

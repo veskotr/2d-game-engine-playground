@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project and assets | SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html">Quickstart</a></li>
+          <li><a href="editor.html">Editor workspace</a></li>
+          <li><a href="first-scene.html">First Room</a></li>
+          <li><a href="lua-gameplay.html">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html">Physics and UI</a></li>
+          <li><a href="run-and-export.html">Run and export</a></li>
+          <li><a href="engine-tour.html">Engine tour</a></li>
+          <li><a href="editor-tools.html">Editor tools</a></li>
+          <li><a href="project-assets.html" aria-current="page">Project and assets</a></li>
+          <li><a href="tilemaps.html">Tilemaps</a></li>
+          <li><a href="engine-features.html">Engine features</a></li>
+          <li><a href="reference.html">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Project and assets</h1>
+        <p>Use a folder project to keep scenes, templates, asset IDs and startup settings together. See <a href="../topics/Projects.md">project formats and paths</a>.</p>
+        <h2>Project and document commands</h2>
+        <h3 id="open-recent">Open Recent</h3>
+        <p>Use File → Open Recent to reopen a listed project. Resolve any unsaved edits when prompted.</p>
+        <h3 id="close-project">Close Project</h3>
+        <p>Use File → Close Project while the open project is editable to leave its workspace.</p>
+        <h3 id="open-scene">Open Scene…</h3>
+        <p>Use File → Open → Scene… to choose a scene, or open a project scene from Assets. The Scene workspace loads the selected document.</p>
+        <h3 id="new-entity-template">New Entity Template</h3>
+        <p>Use File → New → Entity Template to start a template document in the template workspace. Save it before using it from other scenes.</p>
+        <h3 id="open-entity-template">Open Entity Template…</h3>
+        <p>Use File → Open → Entity Template… or open an existing template asset to edit the template document.</p>
+        <h3 id="save-as">Save As…</h3>
+        <p>Use File → Save As… on the editable document and select a new path. Use the project Assets folder when the new document should be available to that project.</p>
+        <h3 id="game-window">Game window</h3>
+        <p>Open File → Project Settings… and set game title, dimensions, and window mode for the project’s game window, then save the settings before Run Project or export.</p>
+        <h3 id="project-script-trust">Project script trust</h3>
+        <p>Review a project’s Lua scripts before choosing Trust Editor Scripts under Project Editor Scripts in Project Settings. Use Revoke Trust to withdraw it. Project Lua execution in editor workflows depends on the trust setting.</p>
+        <h3 id="art-style">Art Style</h3>
+        <p>Use Project Settings → Art Style to control the default texture filtering for the project. Use per-image settings when a texture needs its own filter.</p>
+        <h3 id="sorting-layers">Sorting Layers</h3>
+        <p>In Project Settings, edit Sorting Layers and assign one to a renderer or tile layer. Use the ordering to control which artwork draws in front.</p>
+        <h3 id="collision-layers">Collision Layers</h3>
+        <p>In Project Settings, edit Collision Layers and the interaction matrix. Assign a layer to the relevant physics or tile authoring data and test the pair in Play.</p>
+        <h3 id="tags">Tags</h3>
+        <p>In Project Settings, define tags to reuse across entities. Assign tags in authoring and use them in scripts or event filters.</p>
+        <h2>Assets and templates</h2>
+        <h3 id="show-hide-asset-browser">Show / Hide Asset Browser</h3>
+        <p>With a project open, use View → Show Asset Browser or Hide Asset Browser to toggle the panel.</p>
+        <h3 id="refresh-assets">Refresh Assets</h3>
+        <p>Use View → Refresh Assets after an external addition or metadata edit to rescan the project.</p>
+        <h3 id="asset-filtering">Texture filter</h3>
+        <p>Select a texture in Assets and use Texture filter in its details to override the project default. Choose Nearest for crisp pixel art or Linear for interpolated sampling. Choose Default to use the project’s Art Style again.</p>
+        <h3 id="asset-context-actions">Asset context actions</h3>
+        <p>Right-click the Assets panel for Refresh and Up. Select an asset or folder to see its available operations in asset details. Use project-aware moves and renames to preserve UUID links. See <a href="../topics/Projects.md">asset identity and operations</a>.</p>
+        <h3 id="new-folder">New Folder…</h3>
+        <p>With a project open, click New Folder… in Assets and enter a name to create a folder under the current location.</p>
+        <h3 id="recover-deleted">Recover Deleted…</h3>
+        <p>In Assets, choose Recover Deleted… and select a deleted item from the project recovery list to restore it.</p>
+        <h3 id="find-references">Find References…</h3>
+        <p>Select a registered asset in Assets and use Find References… in its details to see where its UUID is used.</p>
+        <h3 id="rename-asset">Rename…</h3>
+        <p>Select an asset or folder in Assets and choose Rename…. Confirm the name to rename it through the project index.</p>
+        <h3 id="move-asset">Move…</h3>
+        <p>Select an asset or folder in Assets and choose Move…. Select a project destination so asset IDs follow the move.</p>
+        <h3 id="delete-asset">Delete…</h3>
+        <p>Select an asset or folder in Assets and use Delete…. Review the deletion dialog before confirming.</p>
+        <h3 id="reveal-in-explorer">Reveal in Explorer</h3>
+        <p>Use Reveal in Explorer in the selected asset’s details to locate it on disk.</p>
+        <h3 id="open-externally">Open Externally</h3>
+        <p>Select a project file and click Open Externally in asset details to open it in the OS-associated application.</p>
+        <h3 id="assign-new-uuid">Assign New UUID…</h3>
+        <p>Use Assign New UUID… in asset details to resolve an asset identity conflict. Check references before changing which UUID identifies a file.</p>
+        <h3 id="asset-open-in-ide">Open in IDE</h3>
+        <p>Select a Lua file in Assets and use Open in IDE to open the script with the editor integration.</p>
+        <h3 id="open-spritesheet">Open spritesheet…</h3>
+        <p>Select a project texture and choose Open spritesheet… from its asset details or compatible Sprite Renderer controls. Use <a href="tilemaps.html#add-grid-regions">grid slicing</a> to turn the sheet into reusable regions.</p>
+        <h3 id="delete-region">Delete region…</h3>
+        <p>Select an existing region and choose Delete region… in the region controls. Check dependent sprites or tiles before confirming removal.</p>
+        <h3 id="entity-template-overrides">Entity template overrides</h3>
+        <p>Instantiate a linked template in a scene and edit its exposed component values. Instance overrides persist on the instance; use Apply Changes to Entity Template when you intend to update the reusable source. See <a href="../topics/Prefabs.md">linked prefabs</a>.</p>
+        <h3 id="sleprefab">.sleprefab</h3>
+        <p>From an editable template use File → Export Package… to produce a portable <code>.sleprefab</code>. Use the template import or open workflow to bring it into another workspace. See <a href="../topics/PrefabPackages.md">prefab packages</a>.</p>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="editor-tools.html">Previous: Editor tools</a>
+        <a href="tilemaps.html">Next: Tilemaps</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

@@ -100,7 +100,7 @@ class WorkspaceLayoutCodec(private val registry: PanelRegistry) {
             val home=layout.hosts.single { it.id==main }
             var group=GroupId("recovered");var n=0
             while(group in groups) group=GroupId("recovered-${++n}")
-            val visible=missing.filter { registry.byId.getValue(it).available }
+            val visible = missing.filter { id -> registry.byId.getValue(id).let { it.available && !it.temporary } }
             val root=if(visible.isEmpty()) home.root else if(home.root==null) DockNode.Tabs(group,visible,visible.first()) else {
                 fun append(node: DockNode): DockNode = when(node) {
                     is DockNode.Tabs -> node.copy(panels=node.panels+visible)
@@ -108,8 +108,19 @@ class WorkspaceLayoutCodec(private val registry: PanelRegistry) {
                 }
                 append(home.root)
             }
+            val hiddenPanels = (missing - visible.toSet()).associateWith { id ->
+                val neighbor = when (id.value) {
+                    "tilePalette" -> PanelId("assets")
+                    else -> PanelId("scene")
+                }
+                val host = layout.hosts.firstOrNull { it.root?.tabs()?.any { tab -> neighbor in tab.panels } == true }
+                val anchor = host?.root?.tabs()?.firstOrNull { neighbor in it.panels }
+                if (host != null && anchor != null)
+                    PanelPlacement(host.id, anchor.group, anchor.panels.size, host.bounds)
+                else PanelPlacement(main, group, 0, home.bounds)
+            }
             layout=layout.copy(hosts=layout.hosts.map { if(it.id==main) it.copy(root=root) else it },
-                hidden=layout.hidden+missing.filter { !registry.byId.getValue(it).available }.associateWith { PanelPlacement(main,group,0,home.bounds) })
+                hidden=layout.hidden + hiddenPanels)
         }
         require(validateLayout(layout,registry.byId.keys).isEmpty()) { "Malformed layout" }
         return layout

@@ -23,6 +23,7 @@ internal class ProjectAssetOperations(private val project: OpenedProject) {
     private fun affected(snapshot: AssetSnapshot,relative: String)=snapshot.idsByPath.filterKeys { it==relative || it.startsWith("$relative/") }.values.toSet()
     private fun referenceIndex(snapshot: AssetSnapshot, documents: ProjectDocuments? = null): List<AssetReference> {
         val result=mutableListOf<AssetReference>()
+        val referencedTilesets = mutableSetOf<String>()
         // Use the current descriptor, not the UI's potentially stale settings snapshot.
         ProjectFiles.open(project.file).document.startupScene?.let { result.add(AssetReference("Project startup scene",it,documentPath=null)) }
         for(entry in snapshot.entries.filter { it.kind==AssetKind.File && (it.path.endsWith(".scene.json",true) || it.path.endsWith(".prefab.json",true)) }) {
@@ -38,9 +39,25 @@ internal class ProjectAssetOperations(private val project: OpenedProject) {
                 }
             }
             val document = envelope.getValue("document")
+            document.jsonObject["tileLayers"]?.jsonArray?.forEach { layer ->
+                val tileset = layer.jsonObject.getValue("tileset").jsonPrimitive.content
+                if (tileset.startsWith("project-asset://")) referencedTilesets.add(tileset.removePrefix("project-asset://"))
+            }
             if (documents == null) walk(document)
             else documents.referencedAssetIds(document.jsonObject).forEach { result.add(AssetReference(entry.path, it)) }
             envelope.getValue("assets").jsonArray.forEach { result.add(AssetReference(entry.path,it.jsonPrimitive.content)) }
+        }
+        for (entry in snapshot.entries.filter {
+            it.kind == AssetKind.File && (it.path.endsWith(".tileset.json", true) || snapshot.idsByPath[it.path] in referencedTilesets)
+        }) {
+            val file = path(entry.path)
+            require(Files.size(file) <= 4 * 1024 * 1024) { "Oversized tileset: ${entry.path}" }
+            val tileset = Json.parseToJsonElement(Files.readString(file)).jsonObject
+            require(tileset["format"] == JsonPrimitive("sle-tileset") &&
+                tileset["version"]?.jsonPrimitive?.intOrNull == 1) { "Unsupported tileset: ${entry.path}" }
+            val sheet = tileset.getValue("spritesheet").jsonPrimitive.content
+            require(sheet.startsWith("project-asset://")) { "Tileset spritesheet must use a UUID: ${entry.path}" }
+            result.add(AssetReference(entry.path, sheet.removePrefix("project-asset://"), documentPath = null))
         }
         return result.distinct()
     }

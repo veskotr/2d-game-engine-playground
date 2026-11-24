@@ -32,8 +32,9 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     var onDeleted: ((String)->Unit)? = null
     fun openProject(opened: OpenedProjectDocument) {
         require(opened.kind==ProjectDocumentKind.Scene) { "Select a project scene" }
-        openResolved(opened.source,opened.assets,opened.path)
-        prefabInstances=opened.prefabInstances;saved=snapshot();projectDocument=opened
+        val document = SceneDocument.parse(opened.source).copy(prefabInstances = opened.prefabInstances)
+        loadDocument(document, opened.assets, opened.path)
+        projectDocument=opened
     }
     fun openResolved(source: String,imported: Map<Path,String>,path: Path) {
         loadDocument(SceneDocument.parse(source),imported,path)
@@ -68,6 +69,8 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         private set
     var error by mutableStateOf<String?>(null)
     var message by mutableStateOf<String?>(null)
+    private var tileLayers by mutableStateOf<JsonArray?>(null)
+    private val tileLayerList by derivedStateOf { tileLayers.orEmpty().map { TileLayerDocument(it.jsonObject) } }
     private var prefabInstances by mutableStateOf<List<PrefabInstance>>(emptyList())
     private var extras by mutableStateOf<Map<Path,String>>(emptyMap())
     private data class Saved(val document: SceneDocument,val assets: Map<Path,String>)
@@ -78,7 +81,8 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     override val history=History().apply {
         restoreSelection={ recorded -> selection.restore(recorded,entities.map { it.document.key }.toSet()) }
     }
-    override val gestureActive get()=entities.any { it.gestureActive }
+    var cancelTileGesture by mutableStateOf<(() -> Unit)?>(null)
+    override val gestureActive get()=cancelTileGesture != null || entities.any { it.gestureActive }
     override fun entity(key: String)=entities.firstOrNull { it.document.key==key }
     override fun historySelection(key: String)=if(key in selection) selection.snapshot() else HistorySelection(key)
     /** The active selected entity; see [selection] for the whole set. */
@@ -99,8 +103,160 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     val dirty get() = snapshot()!=saved || entities.any { it.fieldErrors.isNotEmpty() }
     val canUndo get()=history.canUndo
     val canRedo get()=history.canRedo
-    fun document() = SceneDocument(key,name,entities.map { it.document },parents,prefabInstances)
+    fun document() = SceneDocument(key,name,entities.map { it.document },parents,prefabInstances,tileLayers)
     fun serialize() = document().serialize()
+
+    fun tileLayerDocuments() = tileLayerList
+    fun tileLayer(id: String) = tileLayerDocuments().firstOrNull { it.id == id }
+
+    private data class TileWorkspaceView(val layer: String?, val selections: Map<String, TileBounds>)
+    private val tileViews = linkedMapOf<Pair<Path, String>, TileWorkspaceView>()
+    var activeTileLayer by mutableStateOf<String?>(null)
+    private var tileSelections by mutableStateOf<Map<String, TileBounds>>(emptyMap())
+
+    private fun rememberTileView() {
+        val path = file?.toAbsolutePath()?.normalize() ?: return
+        tileViews[path to key] = TileWorkspaceView(activeTileLayer, tileSelections)
+        if (tileViews.size > 32) tileViews.remove(tileViews.keys.first())
+    }
+
+    private data class ParkedScene(
+        val baseline: Saved,
+        val entities: List<EntityWorkspaceState>,
+        val selection: HistorySelection,
+        val timeline: History.Timeline,
+    )
+    private val parkedScenes = linkedMapOf<Path, ParkedScene>()
+
+    private fun parkScene(next: Path?) {
+        val path = file?.toAbsolutePath()?.normalize() ?: return
+        parkedScenes.remove(path)
+        if (path == next || dirty || (!history.canUndo && !history.canRedo)) return
+        parkedScenes[path] = ParkedScene(saved, entities, selection.snapshot(), history.snapshotTimeline())
+        if (parkedScenes.size > 8) parkedScenes.remove(parkedScenes.keys.first())
+    }
+
+    fun tileSelection(layer: String) = tileSelections[layer]
+
+    fun selectTiles(layer: String, bounds: TileBounds?) {
+        tileSelections = if (bounds == null) tileSelections - layer else tileSelections + (layer to bounds)
+    }
+
+    fun setTileLayerVisible(id: String, visible: Boolean) =
+        setTileLayerFlag(id, "visible", visible, if (visible) "Show Tile Layer" else "Hide Tile Layer")
+
+    fun setTileLayerCollision(id: String, enabled: Boolean) =
+        setTileLayerFlag(id, "collisionEnabled", enabled, if (enabled) "Enable Tile Collision" else "Disable Tile Collision")
+
+    private fun setTileLayerFlag(id: String, flag: String, enabled: Boolean, label: String) {
+        val layer = tileLayer(id) ?: return
+        if ((layer.source[flag]?.jsonPrimitive?.boolean ?: true) == enabled) return
+        cancelTileGesture?.invoke()
+        changeTileLayers(label, replacingTileLayer(id, JsonObject(layer.source + (flag to JsonPrimitive(enabled)))))
+    }
+
+    fun pasteTiles(id: String, palette: TilePalette, pattern: TilePattern, anchor: TileCell): Boolean {
+        val layer = tileLayer(id)?.takeUnless { it.locked || !it.visible } ?: return false
+        require(layer.tileset == pattern.tileset && palette.reference == pattern.tileset) { "Clipboard uses a different tileset" }
+        val tileIds = palette.tiles.mapTo(hashSetOf()) { it.id }
+        require(pattern.tiles.values.all { it in tileIds }) { "Clipboard contains a missing tile" }
+        return paintTiles(id, pattern.placed(anchor), "Paste Tiles")
+    }
+
+    fun moveTiles(id: String, bounds: TileBounds, anchor: TileCell): Boolean {
+        val layer = tileLayer(id)?.takeUnless { it.locked || !it.visible } ?: return false
+        if (anchor == bounds.minimum) return false
+        val destination = requireNotNull(bounds.at(anchor)) { "Selection exceeds the tile grid" }
+        val copy = layer.copy(bounds)
+        val delta = layer.cells.keys.filter { it in bounds }.associateWith<TileCell, String?> { null } + copy.placed(anchor)
+        return recordTilePaint(id, delta, "Move Tiles", bounds to destination)
+    }
+
+    fun addTileLayer(tileset: String): String {
+        val layers = tileLayerDocuments()
+        val id = UUID.randomUUID().toString()
+        val usedOrders = layers.map { it.drawOrder }.toSet()
+        val top = layers.maxOfOrNull { it.drawOrder } ?: -1
+        val order = if (top < Int.MAX_VALUE) top + 1 else (0..layers.size).first { it !in usedOrders }
+        val layer = buildJsonObject {
+            put("id", id)
+            put("name", "Tile Layer ${layers.size + 1}")
+            put("tileset", tileset)
+            put("drawOrder", order)
+            put("cells", JsonArray(emptyList()))
+        }
+        changeTileLayers("Add Tile Layer", JsonArray((tileLayers.orEmpty() + layer)
+            .sortedBy { it.jsonObject.getValue("drawOrder").jsonPrimitive.int }))
+        return id
+    }
+
+    fun renameTileLayer(id: String, name: String) {
+        val layer = tileLayer(id) ?: return
+        val value = name.trim()
+        require(value.isNotEmpty() && value.encodeToByteArray().size <= 256) { "Enter a layer name of 1 to 256 bytes" }
+        if (layer.name == value) return
+        changeTileLayers("Rename Tile Layer", replacingTileLayer(id,
+            JsonObject(layer.source + ("name" to JsonPrimitive(value)))))
+    }
+
+    fun reorderTileLayer(id: String, direction: Int) {
+        val layers = tileLayerDocuments().sortedBy { it.drawOrder }
+        val index = layers.indexOfFirst { it.id == id }
+        if (index < 0) return
+        val other = layers.getOrNull(index + direction) ?: return
+        val layer = layers[index]
+        val next = JsonArray(layers.map {
+            val order = when (it.id) {
+                layer.id -> other.drawOrder
+                other.id -> layer.drawOrder
+                else -> it.drawOrder
+            }
+            JsonObject(it.source + ("drawOrder" to JsonPrimitive(order)))
+        }.sortedBy { it.getValue("drawOrder").jsonPrimitive.int })
+        changeTileLayers("Reorder Tile Layers", next)
+    }
+
+    fun setTileLayerLocked(id: String, locked: Boolean) {
+        val layer = tileLayer(id) ?: return
+        if (layer.locked == locked) return
+        cancelTileGesture?.invoke()
+        changeTileLayers(if (locked) "Lock Tile Layer" else "Unlock Tile Layer",
+            replacingTileLayer(id, JsonObject(layer.source + ("locked" to JsonPrimitive(locked)))))
+    }
+
+    fun paintTiles(id: String, cells: Map<TileCell, String?>, label: String): Boolean =
+        recordTilePaint(id, cells, label)
+
+    private fun recordTilePaint(id: String, cells: Map<TileCell, String?>, label: String,
+        selectionChange: Pair<TileBounds, TileBounds>? = null): Boolean {
+        val layer = tileLayer(id)?.takeUnless { it.locked || !it.visible } ?: return false
+        val after = cells.filter { (cell, tile) -> layer.cells[cell] != tile }
+        if (after.isEmpty()) return false
+        val before = after.keys.associateWith { layer.cells[it] }
+        fun apply(delta: Map<TileCell, String?>) {
+            tileLayers = replacingTileLayer(id, checkNotNull(tileLayer(id)).apply(delta))
+        }
+        val next = replacingTileLayer(id, layer.apply(after))
+        canonicalize(document().copy(tileLayers = next).serialize())
+        tileLayers = next
+        selectionChange?.let { selectTiles(id, it.second) }
+        history.record(History.Entry(label,
+            undo = { apply(before); selectionChange?.let { selectTiles(id, it.first) } },
+            redo = { apply(after); selectionChange?.let { selectTiles(id, it.second) } }))
+        return true
+    }
+
+    private fun replacingTileLayer(id: String, layer: JsonObject) = JsonArray(tileLayers.orEmpty().map {
+        if (it.jsonObject.getValue("id").jsonPrimitive.content == id) layer else it
+    })
+
+    private fun changeTileLayers(label: String, next: JsonArray) {
+        val before = tileLayers
+        canonicalize(document().copy(tileLayers = next).serialize())
+        tileLayers = next
+        history.record(History.Entry(label, undo = { tileLayers = before }, redo = { tileLayers = next }))
+    }
+
     fun validatePropertyCandidate(owner: EntityWorkspaceState, candidate: EntityDocument) {
         require(entity(candidate.key) === owner) { "The scene entity is no longer available" }
         val next = document().copy(entities = entities.map { if (it === owner) candidate else it.document })
@@ -195,6 +351,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     override fun undo() { if(!cancelOpenGesture()) history.undo() }
     override fun redo() { if(!cancelOpenGesture()) history.redo() }
     private fun cancelOpenGesture(): Boolean {
+        cancelTileGesture?.let { it(); return true }
         val open=entities.firstOrNull { it.gestureActive } ?: return false
         open.cancelGesture();return true
     }
@@ -414,8 +571,13 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         restore(target)
     }
     fun newScene() {
-        selected?.cancelGesture();key=UUID.randomUUID().toString();name="New Scene";entities=emptyList();parents=emptyMap();selection.clear()
-        extras=emptyMap();prefabInstances=emptyList();file=null;projectDocument=null;history.clear();error=null;message=null;saved=snapshot()
+        cancelTileGesture?.invoke()
+        selected?.cancelGesture()
+        rememberTileView()
+        parkScene(null)
+        key=UUID.randomUUID().toString();name="New Scene";entities=emptyList();parents=emptyMap();selection.clear()
+        activeTileLayer=null;tileSelections=emptyMap()
+        tileLayers=null;extras=emptyMap();prefabInstances=emptyList();file=null;projectDocument=null;history.clear();error=null;message=null;saved=snapshot()
     }
     fun open(path: Path) {
         val packet=if (path.toString().endsWith(".slescene",true)) PrefabPackages.openScene(path) else null
@@ -424,15 +586,46 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         projectDocument=null
     }
     private fun loadDocument(loaded: SceneDocument,assets: Map<Path,String>,path: Path) {
-        val used=mutableSetOf<Path>()
-        val states=loaded.entities.map { entity ->
-            val text=entity.serialize()
-            val own=assets.filterKeys { text.contains(it.toString().replace('\\','/')) }.also { used.addAll(it.keys) }
-            EntityWorkspaceState(catalog).apply { resetTo(entity,own) }
+        val target = path.toAbsolutePath().normalize()
+        cancelTileGesture?.invoke()
+        selected?.cancelGesture()
+        rememberTileView()
+        parkScene(target)
+        val parked = parkedScenes.remove(target)?.takeIf { previous ->
+            val baseline = previous.baseline
+            baseline.assets == assets && (baseline.document == loaded || runCatching {
+                canonicalize(baseline.document.serialize()) == canonicalize(loaded.serialize())
+            }.getOrDefault(false))
         }
-        prefabInstances=loaded.prefabInstances
-        selected?.cancelGesture();key=loaded.key;name=loaded.name;entities=states;parents=loaded.parents;selection.select(states.firstOrNull()?.document?.key)
-        extras=assets.filterKeys { it !in used };file=path;history.clear();error=null;message="Opened ${path.fileName}";saved=snapshot()
+        val used = mutableSetOf<Path>()
+        val states = loaded.entities.mapIndexed { index, entity ->
+            val text = entity.serialize()
+            val own = assets.filterKeys { text.contains(it.toString().replace('\\','/')) }
+                .also { used.addAll(it.keys) }
+            parked?.entities?.get(index) ?: EntityWorkspaceState(catalog).apply { resetTo(entity, own) }
+        }
+        tileLayers = loaded.tileLayers
+        val view = tileViews[target to loaded.key]
+        val layerIds = tileLayerDocuments().mapTo(hashSetOf()) { it.id }
+        activeTileLayer = view?.layer?.takeIf { it in layerIds }
+        tileSelections = view?.selections.orEmpty().filterKeys { it in layerIds }
+        prefabInstances = loaded.prefabInstances
+        key = loaded.key
+        name = loaded.name
+        entities = states
+        parents = loaded.parents
+        if (parked == null) {
+            selection.select(states.firstOrNull()?.document?.key)
+            history.clear()
+        } else {
+            selection.restore(parked.selection, states.mapTo(hashSetOf()) { it.document.key })
+            history.restoreTimeline(parked.timeline)
+        }
+        extras = assets.filterKeys { it !in used }
+        file = path
+        error = null
+        message = "Opened ${path.fileName}"
+        saved = snapshot()
     }
     fun save(path: Path) {
         require(path.toString().endsWith(".slescene",true)) { "Save scenes with the .slescene extension" }

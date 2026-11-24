@@ -1,5 +1,6 @@
 #include <sle/engine/SceneAuthoring.hpp>
 #include <sle/engine/EntityAuthoring.hpp>
+#include "TileLayerLoader.hpp"
 #include <set>
 #include <map>
 #include <stdexcept>
@@ -10,9 +11,9 @@ nlohmann::json SceneAuthoring::canonicalScene(const nlohmann::json& document)
     using Json = nlohmann::json;
     if (!document.is_object()) throw std::invalid_argument("Scene must be an object");
     for (const auto& [field, value] : document.items()) {
-        if (field != "entities" && field != "key" && field != "name")
+        if (field != "entities" && field != "key" && field != "name" && field != "tileLayers")
             throw std::invalid_argument("Unsupported field in editable scene: " + field);
-        if (field != "entities" && !value.is_string()) throw std::invalid_argument("Scene key/name must be strings");
+        if ((field == "key" || field == "name") && !value.is_string()) throw std::invalid_argument("Scene key/name must be strings");
     }
     if (document.contains("key") && document["key"].get<std::string>().empty())
         throw std::invalid_argument("Scene key must be nonempty");
@@ -28,6 +29,7 @@ nlohmann::json SceneAuthoring::canonicalScene(const nlohmann::json& document)
             throw std::invalid_argument("Scene entity keys must be unique and nonempty (not @scene)");
     }
     auto result = document;
+    if (result.contains("tileLayers")) result["tileLayers"] = detail::canonicalTileLayers(result["tileLayers"]);
     std::map<std::string,std::string> parents;
     for (auto& entity : result["entities"]) {
         if (!entity.contains("parent")) continue;

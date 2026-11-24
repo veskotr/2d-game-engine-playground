@@ -112,6 +112,18 @@ internal class History(private val capacity: Int = CAPACITY) {
         return true
     }
 
+    data class Timeline(val past: List<Entry>, val future: List<Entry>)
+
+    fun snapshotTimeline() = Timeline(past, future)
+
+    fun restoreTimeline(timeline: Timeline) {
+        check(collecting == null && !applying)
+        past = timeline.past
+        future = timeline.future
+        mergeable = null
+        revision++
+    }
+
     fun clear() { past = emptyList(); future = emptyList(); mergeable = null; revision++ }
 
     private fun apply(action: () -> Unit) {

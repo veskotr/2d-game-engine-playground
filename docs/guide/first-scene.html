@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>First Room · SLE Guide</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="layout">
+    <header class="sidebar">
+      <a class="wordmark" href="index.html">SLE Guide</a>
+      <nav aria-label="Chapters">
+        <ul>
+          <li><a href="index.html">Home</a></li>
+          <li><a href="quickstart.html">Quickstart</a></li>
+          <li><a href="editor.html">Editor workspace</a></li>
+          <li><a href="first-scene.html" aria-current="page">First Room</a></li>
+          <li><a href="lua-gameplay.html">Lua gameplay</a></li>
+          <li><a href="physics-and-ui.html">Physics and UI</a></li>
+          <li><a href="run-and-export.html">Run and export</a></li>
+          <li><a href="engine-tour.html">Engine tour</a></li>
+          <li><a href="editor-tools.html">Editor tools</a></li>
+          <li><a href="project-assets.html">Project and assets</a></li>
+          <li><a href="tilemaps.html">Tilemaps</a></li>
+          <li><a href="engine-features.html">Engine features</a></li>
+          <li><a href="reference.html">Reference</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main id="main" tabindex="-1">
+      <article>
+        <h1>Build your first scene</h1>
+        <p>Create a project called <strong>First Room</strong>, place a sprite and a camera, then check what the player sees in Game. Start with the editor open from the <a href="quickstart.html#build-editor">quickstart</a>.</p>
+
+        <h2 id="create-project">Create the project and scene</h2>
+        <ol>
+          <li>Choose <strong>File → New → Project…</strong>, pick a writable parent folder, and name the project <strong>First Room</strong>. Choose <strong>Pixel Art</strong> for nearest-neighbor texture filtering. Pick a parent where a First Room folder does not already exist.</li>
+          <li>The editor creates <code>First Room.sleproject</code>, opens an empty <code>Assets/Scenes/Main.scene.json</code>, and selects Main as the initial startup scene.</li>
+          <li>Choose <strong>File → New → Scene</strong>. Select the scene root in Hierarchy and set its <strong>Name</strong> in Details to <strong>First Room</strong>. This is the scene you will save and use as the startup scene.</li>
+        </ol>
+
+        <h2 id="import-sprite">Import an image</h2>
+        <p>In <a href="editor.html#assets">Assets</a>, select <strong>Textures</strong> and choose <strong>Import…</strong>. Open the checkout's <a href="../../assets/textures/tile2.png"><code>assets/textures/tile2.png</code></a>. The image appears in the project under <code>Assets/Textures/</code>. Keep the image and its adjacent <code>.slemeta</code> together so references keep working when you move or share the project.</p>
+
+        <h2 id="sprite">Create and position Player</h2>
+        <ol>
+          <li id="at-scene-root">Choose <strong>Create → Sprite → At Scene Root</strong>. Select the new entity in Hierarchy and set <strong>Name</strong> to <strong>Player</strong> in Details.</li>
+          <li>In <strong>SpriteRenderer</strong>, use <strong>Browse…</strong> beside <strong>Texture</strong> to select the imported <code>Assets/Textures/tile2.png</code>. Set <strong>Size</strong> to X <code>64</code>, Y <code>64</code> world units.</li>
+          <li>Under <strong>Transform</strong>, set <strong>Position</strong> to X <code>240</code>, Y <code>135</code>. Commit each edit before moving on. Use <strong>Fit</strong> in Scene if the sprite is outside the current editor view.</li>
+        </ol>
+        <p id="entity"><strong>Create → Entity</strong> starts with a transform. <strong>Sprite</strong> also adds the renderer, which is why this tutorial starts there.</p>
+        <p id="as-child"><strong>As Child</strong> places a new entity under the selected entity so it inherits the parent's transform. Use <strong>At Scene Root</strong> for both Player and Camera in this room. If you later reuse a group across scenes, see <a href="../topics/Prefabs.md">prefabs</a> and <a href="../topics/PrefabPackages.md">prefab packages</a>.</p>
+
+        <figure>
+          <img src="images/first-room-entity.png" alt="Player selected in Hierarchy and outlined in Scene, with Transform and SpriteRenderer in Details.">
+          <figcaption>Select Player in Hierarchy to edit its position and sprite in Details.</figcaption>
+        </figure>
+
+        <h2 id="camera">Frame Player with a gameplay camera</h2>
+        <ol>
+          <li>Choose <strong>Create → Camera → At Scene Root</strong> and select <strong>Camera</strong> in Hierarchy.</li>
+          <li>In Details, set its <strong>Transform</strong> position to X <code>240</code>, Y <code>135</code>. The camera position is the center of its view.</li>
+          <li>In <strong>Camera2D</strong>, use view size X <code>480</code>, Y <code>270</code>, zoom <code>1</code>, and leave the camera enabled. Choose <strong>Make Active</strong> to set it as the primary camera. In Scene, the camera outline should surround Player.</li>
+        </ol>
+
+        <h2 id="save-scene">Save and set the startup scene</h2>
+        <ol>
+          <li>Choose <strong>File → Save</strong> and save the new scene as <code>FirstRoom.scene.json</code> in the project's <code>Assets/Scenes/</code> folder. The scene and its metadata sidecar should appear on disk.</li>
+          <li id="startup-scene">Choose <strong>File → Project Settings…</strong>. Under <strong>Startup</strong>, open the <strong>Startup: …</strong> selector, choose the entry for <code>FirstRoom.scene.json</code>, and click <strong>Save</strong>. This saves the startup scene's asset UUID to <code>First Room.sleproject</code>.</li>
+        </ol>
+
+        <h2 id="play">Play and reopen</h2>
+        <ol>
+          <li>With First Room open, choose <strong>Edit → Play</strong> or press <kbd>F5</kbd>. Game should show the 64-by-64 sprite centered in the camera view. Choose <strong>Stop</strong> to restore the editing scene.</li>
+          <li>Close the editor, launch it again, then use <strong>File → Open → Project…</strong> to select <code>First Room.sleproject</code>. First Room should open with Player and Camera in Hierarchy and the image still assigned. Press Play again to check the same framing.</li>
+        </ol>
+        <p id="scene-recovery">The editor restores the last successfully opened or saved project scene. If that scene cannot be opened, it tries the configured startup scene. <strong>Edit → Run Project</strong> uses the saved startup scene, so you can use it to verify the startup setting separately from Play.</p>
+
+        <figure>
+          <img src="images/first-room-play.png" alt="The gameplay camera centers the Player sprite in the Game view.">
+          <figcaption>First Room in Play after adding Player and the camera.</figcaption>
+        </figure>
+
+        <h2 id="scene-formats">Choose a scene format</h2>
+        <p>Use <code>.scene.json</code> for day-to-day editing in a folder project. Keep the descriptor, asset files, and sidecars with the project so the editor and runtime can resolve UUIDs. Use <strong>File → Export Package…</strong> to produce a portable <code>.slescene</code> with the referenced assets for sharing or standalone scene work.</p>
+        <p><a href="../topics/Projects.md">Project folders and asset identity</a> · <a href="../topics/Scenes.md">Scene and entity identity</a> · <a href="../topics/PrefabPackages.md">Portable package formats</a></p>
+      </article>
+      <nav class="chapter-footer" aria-label="Chapter navigation">
+        <a href="editor.html">Previous: Editor workspace</a>
+        <a href="lua-gameplay.html">Next: Lua gameplay</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

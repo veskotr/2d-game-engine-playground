@@ -28,7 +28,8 @@ public:
     sle::core::Result<bool> loadScene(
         const std::string& sceneName,
         Runtime& runtime,
-        sle::entity::Scene& scene, bool emitLifecycleEvents = true, bool* errorReported = nullptr);
+        sle::entity::Scene& scene, bool emitLifecycleEvents = true, bool* errorReported = nullptr,
+        bool preserveTerrain = false);
 
     sle::core::Result<bool> requestSceneSwitch(const std::string& sceneName);
 

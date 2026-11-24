@@ -1,6 +1,7 @@
 #pragma once
 #include <sle/scene/Registry.hpp>
 #include <sle/scene/Entity.hpp>
+#include <sle/scene/TileLayer.hpp>
 #include <sle/events/EventBus.hpp>
 #include <unordered_map>
 #include <vector>
@@ -9,8 +10,8 @@
 
 namespace sle::entity {
 
-// Scene is purely structural: it owns entity lifetime and the parent-child
-// hierarchy. All component data lives in Registry.
+// Scene owns entity lifetime, hierarchy, and authored tile layers.
+// Entity component data lives in Registry.
 class Scene
 {
 public:
@@ -42,6 +43,9 @@ public:
     // ECS component access
     Registry& getRegistry() { return registry; }
     const Registry& getRegistry() const { return registry; }
+
+    std::vector<TileLayer>& getTileLayers() { return tileLayers; }
+    const std::vector<TileLayer>& getTileLayers() const { return tileLayers; }
 
     // Event bus for decoupled communication between systems within this scene.
     sle::events::EventBus& getEventBus() { return eventBus; }
@@ -81,6 +85,7 @@ private:
     sle::events::EventBus eventBus;
     std::unordered_map<uint32_t, std::vector<Entity>> childrenMap;     // entityID -> children
     std::vector<Entity> roots;
+    std::vector<TileLayer> tileLayers;
 
     inline static const std::vector<Entity> emptyChildren{};
 };

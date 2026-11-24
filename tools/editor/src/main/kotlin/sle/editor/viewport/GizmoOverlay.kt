@@ -2,10 +2,14 @@ package sle.editor.viewport
 
 import androidx.compose.ui.graphics.Color
 import sle.editor.model.EntityDocument
+import sle.editor.model.TileStampImage
 import sle.editor.viewport.tools.MoveHandles
 import sle.editor.viewport.tools.ScaleHandles
 
 import org.lwjgl.opengl.GL11
+import org.lwjgl.opengl.GL12
+import org.lwjgl.opengl.GL13
+import org.lwjgl.opengl.GL14
 import org.lwjgl.opengl.GL15
 import org.lwjgl.opengl.GL20
 import org.lwjgl.opengl.GL30
@@ -16,6 +20,7 @@ internal class GizmoOverlay {
     private var program = 0
     private var vao = 0
     private var buffer = 0
+    private val stampTextures = linkedMapOf<TileStampImage, Int>()
     private fun initialize() {
         fun shader(type: Int, source: String): Int {
             val shader = GL20.glCreateShader(type)
@@ -23,8 +28,22 @@ internal class GizmoOverlay {
             check(GL20.glGetShaderi(shader,GL20.GL_COMPILE_STATUS) != 0) { GL20.glGetShaderInfoLog(shader) }
             return shader
         }
-        val vertex = shader(GL20.GL_VERTEX_SHADER,"#version 330 core\nlayout(location=0) in vec2 p; void main(){gl_Position=vec4(p,0,1);}")
-        val fragment = shader(GL20.GL_FRAGMENT_SHADER,"#version 330 core\nuniform vec4 selectionColor; out vec4 color; void main(){color=selectionColor;}")
+        val vertex = shader(GL20.GL_VERTEX_SHADER, """
+            #version 330 core
+            layout(location=0) in vec2 p;
+            const vec2 coords[6] = vec2[6](vec2(0,0),vec2(1,0),vec2(1,1),vec2(0,0),vec2(1,1),vec2(0,1));
+            out vec2 uv;
+            void main() { gl_Position = vec4(p,0,1); uv = coords[gl_VertexID % 6]; }
+        """.trimIndent())
+        val fragment = shader(GL20.GL_FRAGMENT_SHADER, """
+            #version 330 core
+            uniform vec4 selectionColor;
+            uniform bool textured;
+            uniform sampler2D stamp;
+            in vec2 uv;
+            out vec4 color;
+            void main() { color = textured ? selectionColor * texture(stamp,uv) : selectionColor; }
+        """.trimIndent())
         program = GL20.glCreateProgram()
         GL20.glAttachShader(program,vertex); GL20.glAttachShader(program,fragment); GL20.glLinkProgram(program)
         GL20.glDeleteShader(vertex); GL20.glDeleteShader(fragment)
@@ -112,6 +131,77 @@ internal class GizmoOverlay {
         }
     }
     private fun blend(a: Color, b: Color) = a.copy(red=(a.red+b.red)/2,green=(a.green+b.green)/2,blue=(a.blue+b.blue)/2)
+    fun tileGhost(image: TileStampImage, stamps: List<Pair<Vec2, Vec2>>, camera: PreviewCamera) {
+        val activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE)
+        GL13.glActiveTexture(GL13.GL_TEXTURE0)
+        val previousTexture = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D)
+        val previousSampler = GL11.glGetInteger(org.lwjgl.opengl.GL33.GL_SAMPLER_BINDING)
+        val srcRgb = GL11.glGetInteger(GL14.GL_BLEND_SRC_RGB)
+        val dstRgb = GL11.glGetInteger(GL14.GL_BLEND_DST_RGB)
+        val srcAlpha = GL11.glGetInteger(GL14.GL_BLEND_SRC_ALPHA)
+        val dstAlpha = GL11.glGetInteger(GL14.GL_BLEND_DST_ALPHA)
+        try {
+            org.lwjgl.opengl.GL33.glBindSampler(0, 0)
+            val texture = stampTextures.remove(image) ?: run {
+                if (stampTextures.size >= 16) {
+                    val oldest = stampTextures.keys.first()
+                    GL11.glDeleteTextures(checkNotNull(stampTextures.remove(oldest)))
+                }
+                val created = GL11.glGenTextures()
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, created)
+                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST)
+                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST)
+                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE)
+                GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE)
+                GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, image.imageWidth, image.imageHeight,
+                    0, GL12.GL_BGRA, GL12.GL_UNSIGNED_INT_8_8_8_8_REV, image.argb)
+                created
+            }
+            stampTextures[image] = texture
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture)
+            render(camera, Color.White.copy(alpha = 0.55f)) { draw ->
+                val textured = GL20.glGetUniformLocation(program, "textured")
+                GL20.glUniform1i(textured, 1)
+                try {
+                    GL11.glEnable(GL11.GL_BLEND)
+                    GL14.glBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ONE_MINUS_SRC_ALPHA)
+                    val vertices = buildList {
+                        for ((bottomLeft, topRight) in stamps) {
+                            val topLeft = Vec2(bottomLeft.x, topRight.y)
+                            val bottomRight = Vec2(topRight.x, bottomLeft.y)
+                            addAll(listOf(topLeft, topRight, bottomRight, topLeft, bottomRight, bottomLeft))
+                        }
+                    }
+                    draw(GL11.GL_TRIANGLES, vertices)
+                } finally {
+                    GL20.glUniform1i(textured, 0)
+                }
+            }
+        } finally {
+            GL14.glBlendFuncSeparate(srcRgb, dstRgb, srcAlpha, dstAlpha)
+            org.lwjgl.opengl.GL33.glBindSampler(0, previousSampler)
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, previousTexture)
+            GL13.glActiveTexture(activeTexture)
+        }
+    }
+
+    fun tiles(grid: List<Vec2>, stamps: List<Pair<Vec2, Vec2>>, camera: PreviewCamera, color: Color, eraseColor: Color, erase: Boolean) {
+        if (grid.isNotEmpty()) render(camera, blend(color, Color.DarkGray)) { draw ->
+            draw(GL11.GL_LINES, grid)
+        }
+        if (stamps.isNotEmpty()) render(camera, if (erase) eraseColor else color) { draw ->
+            val lines = buildList {
+                for ((a, c) in stamps) {
+                    val b = Vec2(c.x, a.y)
+                    val d = Vec2(a.x, c.y)
+                    addAll(listOf(a, b, b, c, c, d, d, a))
+                    if (erase) addAll(listOf(a, c, b, d))
+                }
+            }
+            draw(GL11.GL_LINES, lines)
+        }
+    }
+
     /** Box selection rectangle in viewport pixels. */
     fun marquee(from: Vec2, to: Vec2, camera: PreviewCamera, color: Color) = render(camera, color) { draw ->
         val corners=listOf(from,Vec2(to.x,from.y),to,Vec2(from.x,to.y),from)
@@ -146,6 +236,8 @@ internal class GizmoOverlay {
         if (buffer != 0) GL15.glDeleteBuffers(buffer)
         if (vao != 0) GL30.glDeleteVertexArrays(vao)
         if (program != 0) GL20.glDeleteProgram(program)
+        stampTextures.values.forEach { GL11.glDeleteTextures(it) }
+        stampTextures.clear()
         program=0; vao=0; buffer=0
     }
 }

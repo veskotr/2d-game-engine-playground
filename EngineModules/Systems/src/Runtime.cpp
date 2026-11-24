@@ -122,6 +122,11 @@ namespace sle
         try { return projectContext->resolveAsset(value); }
         catch (const std::exception& error) { Log::warn("Project asset rejected: {}",error.what());return {}; }
     }
+    std::string Runtime::resolveTileAsset(const std::string& value, bool editorDocument) const {
+        if (!editorDocument && projectContext) return projectContext->resolveAsset(value);
+        return ProjectRuntime::resolveEditorAsset(editorAssetRoot, value);
+    }
+
     nlohmann::json Runtime::resolveProjectComponents(const nlohmann::json& value) const {
         return projectContext ? projectContext->resolveComponentAssets(value) : value;
     }
@@ -239,6 +244,7 @@ namespace sle
         // Release every runtime-owned GPU resource while the GL context is valid.
         // Clearing the shared cache alone cannot release UI and shader references.
         uiSystem.shutdown();
+        missingTileTexture.reset();
         defaultQuadShader.reset();
         defaultDebugShader.reset();
         Resources::clear();
@@ -293,6 +299,8 @@ namespace sle
             fitPreview=false;
         }
         auto& displayCamera=editorView ? editorCamera : camera;
+        if (embeddedPaused && renderSystem.isPhysicsDebugEnabled())
+            tileCollisionSystem->update(scene.getTileLayers(), entityPreview ? displayCamera : camera);
         renderer.setCamera(&displayCamera);
         configureRenderViewport();
         Context ctx{scene, scene.getRegistry(), scene.getEventBus(), globalBus_, renderer, displayCamera, physicsWorld.get(), 0.0f};
@@ -369,7 +377,7 @@ namespace sle
         catch (const std::exception& error) { return Result<bool>::error(error.what()); }
         const bool keepView = preserveView && entityPreview;
         registerSceneFromData("entity_preview", canonical, "editor.scene.json");
-        const auto loaded = sceneManager.loadScene("entity_preview", *this, scene, false);
+        const auto loaded = sceneManager.loadScene("entity_preview", *this, scene, false, nullptr, keepView);
         if (!loaded.ok()) return loaded;
         authoredSceneKeys.clear();
         for (const auto& e : canonical.at("entities")) authoredSceneKeys.push_back(e.at("key").get<std::string>());
@@ -807,6 +815,13 @@ namespace sle
         stateMachineSystem.update(scene, dt, &scriptEngine);
 
         // Consume dirty local transforms, step physics, and write back results.
+        if (!scene.getTileLayers().empty()) {
+            auto terrainCamera = camera;
+            CameraSystem::updateFromAuthoredTransforms(scene, terrainCamera);
+            tileCollisionSystem->update(scene.getTileLayers(), terrainCamera);
+        } else {
+            tileCollisionSystem->clear();
+        }
         physicsSystem.update(ctx);
         auto t3 = Clock::now();
 
@@ -872,6 +887,18 @@ namespace sle
 
         renderSystem.setDefaultShaderID(defaultQuadShader->getID());
         renderSystem.setDefaultTextureID(0);
+        if (embedded) {
+            constexpr unsigned char pixels[] = {
+                255, 0, 255, 255, 32, 0, 32, 255,
+                32, 0, 32, 255, 255, 0, 255, 255
+            };
+            renderer::TextureLoadOptions options;
+            options.minFilter = options.magFilter = renderer::TextureFilter::Nearest;
+            missingTileTexture = std::make_unique<renderer::Texture>();
+            if (!missingTileTexture->loadFromRGBAData(2, 2, pixels, options))
+                return Result<bool>::error("Failed to create missing tile texture");
+            renderSystem.setMissingTileTextureID(missingTileTexture->getID());
+        }
         renderSystem.setPhysicsDebugEnabled(false);
         renderer.setDebugShaderID(defaultDebugShader->getID());
 
@@ -906,6 +933,7 @@ namespace sle
         // Initialize physics world with default gravity
         physicsWorld = std::make_unique<sle::physics::PhysicsWorld>(glm::vec2(0.0f, -9.81f));
         physicsWorld->setFixedTimestep(1.0f / 120.0f);
+        tileCollisionSystem = std::make_unique<TileCollisionSystem>(*physicsWorld);
 
         // Audio init is best-effort; failure is non-fatal (headless CI, no audio device, etc.)
         if (initializeAudioOnInit)

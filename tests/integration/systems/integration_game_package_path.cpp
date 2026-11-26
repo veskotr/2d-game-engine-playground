@@ -3,6 +3,8 @@
 #include <sle/engine/Runtime.hpp>
 #include <sle/engine/SceneLoader.hpp>
 #include <sle/scene/components/ScriptComponent.hpp>
+#include <sle/ui/UILayoutParser.hpp>
+#include <sle/ui/UIResources.hpp>
 #include <chrono>
 #include <iterator>
 #include <cstdint>
@@ -68,10 +70,16 @@ std::vector<Entry> basePackage(const Json& mainScene) {
         {"manifest.json",settings.dump()},
         {"assets/Scenes/first.scene.json",scene("first")},{"assets/Scenes/first.scene.json.slemeta",meta(first)},
         {"assets/Scripts/main.lua",R"(local value=require('levels.value')
+local created=false
 return { update=function(self,dt)
  local actor=Engine.findEntityByKey('first-actor') or Engine.findEntityByKey('second-actor')
  if Engine.Input.isActionDown('Back') and not Engine.Input.isActionPressed('Back') then
    Engine.setTransformPosition(actor, 71, 0)
+ end
+ if not created then
+   local spawned=Engine.instantiatePrefab('Prefabs/' .. 'spawn.prefab.json', 'dynamic-prefab')
+   if not spawned then error('dynamic project asset lookup failed') end
+   created=true
  end
  local matches=Engine.findEntitiesByTag('Actor')
  if #matches ~= 1 or matches[1] ~= actor then error('packaged tag query failed') end
@@ -106,9 +114,11 @@ void fixture(const fs::path& directory,bool withMainScene, const std::string& fi
         settings["settings"]["collisionLayers"] = Json::parse(R"({"blockedPairs":[[0,1]]})");
         base.front().second = settings.dump();
     }
-    zip(directory/"game.slepkg", base);
     if (withMainScene) {
         auto level = levelPackage();
+        for (const auto& entry : base)
+            if (entry.first.starts_with("assets/Prefabs/")) level.push_back(entry);
+        std::erase_if(base, [](const Entry& entry) { return entry.first.starts_with("assets/Prefabs/"); });
         if (!filter.empty()) {
             const std::string textureId = "77777777-7777-4777-8777-777777777777";
             const std::string regionId = "66666666-6666-4666-8666-666666666666";
@@ -135,6 +145,7 @@ void fixture(const fs::path& directory,bool withMainScene, const std::string& fi
         }
         zip(directory/"levels.slepkg",level);
     }
+    zip(directory/"game.slepkg", base);
     writeConfig(directory/"config.json",withMainScene?std::vector<std::string>{"game.slepkg","levels.slepkg"}:std::vector<std::string>{"game.slepkg"});
 }
 bool opens(const fs::path& config) {
@@ -243,6 +254,45 @@ int main(int argc,char** argv) {
             check(scene.getTileLayers().size() == 2, "Runtime did not load both tile layers");
         };
         loadTileScene(packedTiles.value(), tilePackagePath);
+
+        auto levelOnly = tilePackage;
+        std::vector<Entry> sharedTiles{{"manifest.json", manifest(second, nullptr).dump()}};
+        for (const auto& entry : levelOnly)
+            if (entry.first.starts_with("assets/Colors.")) sharedTiles.push_back(entry);
+        std::erase_if(levelOnly, [](const Entry& entry) { return entry.first.starts_with("assets/Colors."); });
+        const std::string layoutId = "88888888-8888-4888-8888-888888888888";
+        sharedTiles.emplace_back("assets/UI/Hud.xml", R"(<panel id="packaged-hud"><text>Tiles</text></panel>)");
+        sharedTiles.emplace_back("assets/UI/Hud.xml.slemeta", meta(layoutId));
+        for (auto& [path, bytes] : levelOnly) {
+            if (!path.ends_with(".scene.json")) continue;
+            auto scene = Json::parse(bytes);
+            scene["document"]["entities"].push_back({
+                {"key","hud"},{"components",{{"UI",{{"layoutAsset","project-asset://"+layoutId}}}}}
+            });
+            bytes = scene.dump();
+        }
+        auto levelManifest = Json::parse(levelOnly.front().second);
+        levelManifest["settings"]["tags"] = Json::parse(R"([{"id":"tiles","name":"Tiles"}])");
+        levelOnly.front().second = levelManifest.dump();
+        const auto sharedPath = root / "shared-tiles.slepkg";
+        const auto levelPath = root / "tile-level.slepkg";
+        zip(sharedPath, sharedTiles);
+        zip(levelPath, levelOnly);
+        const auto splitTiles = sle::ProjectRuntime::openPackages({sharedPath, levelPath}, config.engine);
+        check(splitTiles.ok(), splitTiles.error());
+        check(splitTiles.value().startupScene() == tileScene && splitTiles.value().tagsByName().at("Tiles") == "tiles",
+            "Startup settings were lost when the startup package was mounted second");
+        loadTileScene(splitTiles.value(), levelPath);
+        const auto& entities = splitTiles.value().sceneDocument(tileScene).at("entities");
+        const auto hud = std::find_if(entities.begin(), entities.end(), [](const Json& entity) {
+            return entity.at("key") == "hud";
+        });
+        check(hud != entities.end(), "Packaged UI entity missing");
+        sle::ui::UILayoutResource layout;
+        check(layout.loadFromFiles(hud->at("components").at("UI").at("layoutAsset").get<std::string>()),
+            "Cross-package XML layout could not be read");
+        const auto parsedLayout = sle::ui::UILayoutParser::parse(layout);
+        check(parsedLayout.ok() && parsedLayout.value().id == "packaged-hud", "Cross-package XML layout changed");
 
         const auto room = root / "room";
         fs::copy(cwd / "examples/tilemap_room", room, fs::copy_options::recursive);

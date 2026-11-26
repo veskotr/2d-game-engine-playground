@@ -82,6 +82,13 @@ int main(int argc, char** argv)
     std::wstring executableBuffer(32768,L'\0');
     const auto length=GetModuleFileNameW(nullptr,executableBuffer.data(),static_cast<DWORD>(executableBuffer.size()));
     if (length>0 && length<executableBuffer.size()) { executableBuffer.resize(length);executable=fs::path(executableBuffer); }
+#elif defined(__linux__)
+    // The kernel reports the actual executable even for PATH and symlink launches.
+    std::error_code executableError;
+    const auto executablePath = fs::read_symlink("/proc/self/exe", executableError);
+    if (!executableError) {
+        executable = executablePath;
+    }
 #endif
     // A delivery folder owns its default project; explicit options retain priority.
     const auto deliveredProject=executable.parent_path()/"game"/"game.sleproject";

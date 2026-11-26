@@ -19,6 +19,7 @@ internal data class ProjectDocumentCommands(
     val openPath: (Path)->Unit,
     val savePath: (ProjectDocumentKind,Path)->Unit,
     val exportPackage: (ProjectDocumentKind)->Unit,
+    val saveDirtyForExport: (suspend () -> Unit)?,
 )
 
 @Composable
@@ -305,5 +306,27 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
         }
     }
     if(opened==null) return null
-    return ProjectDocumentCommands({openFile(it)},{kind,path -> save(kind,path)},{ kind -> choose(kind,true,true,true) })
+    val saveDirtyForExport: (suspend () -> Unit)? =
+        if ((scene?.dirty != true || scene.projectDocument != null) &&
+            (prefab?.dirty != true || prefab.projectDocument != null) && canEdit()) {
+            {
+                check(sameProject() && canEdit()) { "Project documents changed before export" }
+                try {
+                    // Saving a template can refresh linked instances in the scene and make it dirty again.
+                    val order = listOf(ProjectDocumentKind.Scene, ProjectDocumentKind.Prefab, ProjectDocumentKind.Scene)
+                    for (kind in order) {
+                        val dirty = if (kind == ProjectDocumentKind.Scene) scene?.dirty == true else prefab?.dirty == true
+                        if (dirty) {
+                            val save = checkNotNull(autosave(kind)) { "Save valid project documents before exporting" }
+                            save()
+                        }
+                    }
+                    check(scene?.dirty != true && prefab?.dirty != true) { "Project documents still have unsaved changes" }
+                } finally {
+                    browser?.refresh()
+                }
+            }
+        } else null
+    return ProjectDocumentCommands({openFile(it)},{kind,path -> save(kind,path)},{ kind -> choose(kind,true,true,true) },
+        saveDirtyForExport)
 }

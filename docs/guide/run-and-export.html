@@ -43,22 +43,28 @@
         <p>The separate First Room window should show the same camera view, movement, wall, and HUD. Press <kbd>Esc</kbd> to exit. Add <code>--frames 120</code> for a bounded startup check.</p>
         <p id="project-resources">The descriptor selects the startup scene and game window. Keep the asset root, files, and their <code>.slemeta</code> sidecars with the descriptor so project references can resolve from any working directory. See <a href="../topics/Projects.md">project files and runtime resources</a>.</p>
 
-        <h2 id="export-game">Export a Windows game</h2>
+        <h2 id="export-game">Export a runnable game</h2>
         <figure>
           <img src="images/export-game.png" alt="The expanded File menu lists Export Game… below Project Settings….">
           <figcaption>Open File to find Export Game… for the current project.</figcaption>
         </figure>
         <ol>
-          <li>For a source-built editor, prepare the Windows x64 Release bundle in the existing CMake build tree.
-            <pre tabindex="0"><code>cmake --build build/debug --config Release --target sle_runtime_bundle --parallel 4</code></pre>
-          </li>
-          <li>Choose <strong>File → Export Game…</strong> and select <code>build/debug/runtime/Release</code> when prompted. A packaged Windows editor supplies its own bundle and skips the picker. Wait for the export to finish.</li>
-          <li>Open <code>Exports/First Room</code> under the project folder. A repeat export uses the next suffix, such as <code>First Room-2</code>. The delivery includes <code>engine_app.exe</code>, its DLLs, engine <code>assets/</code>, <code>notices/</code>, manifests, and <code>game/game.sleproject</code> with the project assets under <code>game/</code>.</li>
-          <li>Copy the entire delivery folder outside the source project. Double-click the copied <code>engine_app.exe</code>. It finds <code>game/game.sleproject</code> beside itself. Check the same movement, wall, and HUD in the copied game.</li>
+          <li>Choose <strong>File → Export Game…</strong>. If you have drafts, choose <strong>Save and Export</strong> or <strong>Export Saved Versions</strong>. Save untitled documents to the project first.</li>
+          <li>Choose <strong>Windows x64</strong>, <strong>Linux x64</strong>, or <strong>Both</strong>. If prompted, select a prepared Release bundle for each requested target. See the <a href="../topics/Projects.md#export-a-runnable-game">runtime bundle build instructions</a>.</li>
+          <li>Open <code>Exports/First Room</code>. Repeat exports use a suffix such as <code>First Room-2</code>. The export contains a runnable <code>windows-x64/</code> or <code>linux-x64/</code> folder for each selected target, alongside its ZIP or TAR.GZ archive.</li>
+          <li>Copy the runnable folder or extract its archive on the target OS. Open <code>First Room.exe</code> on Windows or run <code>"./First Room"</code> on Linux. The game reads the adjacent config and packages. Check the movement, wall, and HUD.</li>
         </ol>
-        <p>To check the copied game from an unrelated working directory, run the following with the absolute path to your copied executable.</p>
-        <pre tabindex="0"><code>&amp; "C:/Deliveries/First Room/engine_app.exe" --frames 120</code></pre>
-        <p>Export uses the saved scene and project settings. See <a href="../topics/Projects.md#export-a-runnable-game">runnable folder export</a> and <a href="../topics/GamePackages.md">game package formats</a>.</p>
+        <p>From an unrelated working directory, run the executable by its absolute path.</p>
+        <pre tabindex="0"><code>&amp; "C:/Deliveries/windows-x64/First Room.exe" --frames 120</code></pre>
+        <p>See the <a href="../topics/GamePackages.md">package layout and compatibility details</a>.</p>
+
+        <h2 id="content-update">Export, apply, and roll back an update</h2>
+        <ol>
+          <li>Keep a clean copy of the <code>windows-x64/</code> delivery with both manifests. Linux x64 supports full exports only. Edit and save project content, then choose <strong>File → Export Content Update…</strong> and select the delivery as the baseline. Use the same project and exact Windows x64 runtime. If the runtime changes, export a full game.</li>
+          <li>Choose <strong>File → Apply Content Update…</strong> and select the baseline and update folder. The editor verifies both and publishes a runnable sibling folder. Launch the executable in that folder to check the update.</li>
+          <li>To roll back, launch the original delivery. Apply preserves its files.</li>
+        </ol>
+        <p>Updates carry whole packages whose contents changed, along with the target config and manifests. See <a href="../topics/Projects.md#export-and-apply-a-content-update">baseline selection and update behavior</a>.</p>
       </article>
       <nav class="chapter-footer" aria-label="Chapter navigation">
         <a href="physics-and-ui.html">Previous: Physics and UI</a>

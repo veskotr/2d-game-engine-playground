@@ -1,23 +1,26 @@
 # Game packages and built games
 
-The runtime and internal `GameBuild` tooling support runnable folders where game
-content lives in `.slepkg` packages and the engine reads a small `config.json`.
-The editor exposes **File → Export Game…** as its single game delivery action;
-see [runnable export](Projects.md#export-a-runnable-game). Package tooling can produce:
+**File → Export Game…** builds a runnable delivery from saved project files.
+The editor assigns content to `.slepkg` packages and writes a `config.json` that
+mounts them. See [runnable export](Projects.md#export-a-runnable-game) for the
+editor workflow.
 
 ```text
-My Build/
+windows-x64/
   My Game.exe             # the engine executable, named after the project
   *.dll                   # Release C++ runtime and dependency libraries
   assets/                 # engine shaders, UI and fonts
   notices/                # dependency license notices
   config.json             # engine config: window, targetFPS, packages
-  game.slepkg             # all project assets, scenes, prefabs and the main scene
+  shared.slepkg           # common, dynamic and unreferenced assets
+  scene-<uuid>.slepkg     # one per saved scene
+  sle-release.json        # runtime identity, package hashes and asset ownership
   sle-distribution.json   # delivery file hashes
 ```
 
-Double-click `My Game.exe`. Internal package tooling copies the prebuilt engine executable
-(`engine_app.exe`) and renames it after the project. Characters that Windows forbids
+The Windows x64 delivery uses `My Game.exe` and the Linux x64 delivery uses
+`My Game`. Export copies the prebuilt engine launcher and renames it after the
+project. Characters that Windows forbids
 in filenames become `_`, and device names such as `CON` get a trailing `_`. A name
 that would replace another runtime file is refused. The executable icon is still the
 default. The runtime bundle's own `sle-runtime.json` and `RUNNING.txt` are left out.
@@ -25,33 +28,35 @@ No compiler is involved: a game is data, and the engine is prebuilt.
 
 With no options the executable uses the
 `config.json` beside it, independently of the working directory. Explicit
-`--config`/`--project` still take precedence. A folder delivery from
-**Export Game…** (`game/game.sleproject`) is still discovered first.
+`--config`/`--project` still take precedence. An older folder delivery
+with `game/game.sleproject` is still discovered first.
 Use `--frames N` for a bounded diagnostic run.
 
 ## Building
 
-The packaged editor ships the prebuilt Windows x64 Release runtime in its resources
-(`runtime/`), so Export Game uses it without asking. Editors run from
-the repository (`gradlew run`) have no bundled runtime. They ask for a prepared one,
-built once with ([runnable export](Projects.md#export-a-runnable-game) describes it):
+Choose Windows x64, Linux x64, or Both. A prepared `sle_runtime_bundle` must
+match each selected target. Packaged builds require a versioned runtime with
+package support. Native tile layers require SLE 0.33 or newer. The editor uses
+bundled runtimes when available
+and prompts for the others. Both builds share identical config and package
+bytes. Each target has its own release inventory with its target and runtime
+hash. The numbered export directory contains the runnable folders and their
+ZIP (Windows) or TAR.GZ (Linux) archives. Extract the Linux archive on Linux
+to preserve the launcher's executable mode. See [runnable export](Projects.md#export-a-runnable-game).
 
-```powershell
-cmake --build build/debug --config Release --target sle_runtime_bundle --parallel 4
-```
+A saved scene gets a package named for its UUID. That filename and package ID
+survive scene renames. An asset reached by exactly one scene normally goes into
+that scene's package. Assets used by several scenes, Lua scripts and
+unreferenced assets go into Shared. The planner follows references through entity
+templates, overrides and tile resources, keeps sidecars with payloads and groups
+files that must resolve relative to one another. The startup package supplies the
+main scene and project-wide runtime settings.
 
-Internal callers of `GameBuild.build` supply a saved project, prepared runtime and
-a new output folder outside the project and runtime bundle. This package API
-uses saved files only. It has no editor menu or output chooser.
-
-The build runs on a worker. It stages the runtime, `game.slepkg` and `config.json` in
-a sibling `.sle-build-*` folder. The engine then mounts that staged package exactly as the
-delivered game will. Next the build checks that sources, the runtime and the staged files
-did not change, and publishes with a no-overwrite move. Failures leave no destination
-folder. The same preconditions as Export Game apply: every asset needs its
-`.slemeta` identity (Refresh Assets first), links and case-insensitive name collisions
-are rejected, and source files are never modified. Identical sources produce a
-byte-identical package.
+The build stages the runtime, packages and config in a sibling `.sle-build-*`
+folder. The engine mounts the staged package set before the editor rechecks
+source, runtime and staged files and publishes without overwriting. Every asset
+needs a `.slemeta` identity. Use **Refresh Assets** if metadata is missing.
+The runtime continues to support single-package builds such as the example below.
 
 ## `config.json`
 
@@ -84,8 +89,40 @@ They are mounted in order into one namespace:
 - **Lua `require`:** searches `Scripts/` then the asset root of each package, in
   package order.
 
-Internal package tooling writes one `game.slepkg` per build. Additional packages can come
-from other builds of separate projects. Add them to `config.json` by hand.
+Export Game writes `shared.slepkg` followed
+by `scene-<UUID>.slepkg` files in scene UUID order. Package IDs derive from the
+project UUID and the package owner. Scene renames preserve IDs and filenames.
+The startup package declares `mainScene` and carries the project gameplay settings.
+Each package receives the same project texture default. Asset sidecars and files
+that require physical colocation travel with their owners.
+
+The staged delivery includes `sle-release.json` (version 1). It records the project
+UUID, runtime bundle manifest SHA-256, launch config SHA-256, ordered package IDs
+and paths with their SHA-256 digests, and the owner package ID for every asset UUID.
+The native bridge mounts the staged config before the build publishes the folder.
+Identical saved inputs and prior ownership produce identical package and release
+bytes. The original `GameBuild.build` entry point still produces one `game.slepkg`.
+
+## Content update format
+
+A content update contains `sle-content-update.json` (version 1), the target
+`config.json`, `sle-release.json`, `sle-distribution.json`, and whole archives
+for new or changed package paths. The update manifest records SHA-256 digests
+of the base release and distribution manifests, digests of the update files,
+and the obsolete package paths. A config-only update carries the manifests
+and config. Identical content and launch configuration produce no update.
+
+The selected release supplies the previous asset owners. Shared ownership
+persists, and a private asset promoted to Shared changes both archives in the
+same update. Apply reconstructs the target from verified runtime and unchanged
+packages in the base plus the update files. It verifies the resulting digests,
+checks the config against the target inventory, mounts the packages through
+the native bridge, and publishes the sibling delivery. Obsolete archives are
+absent from that delivery. The base stays available as exported.
+
+Use a delivery with both versioned manifests and all files intact as the
+baseline. To start an update chain for an older loose or single-package
+delivery without a release manifest, export a new full game first.
 
 ## Package format (version 1)
 
@@ -135,11 +172,10 @@ running. Automatic eviction is not implemented.
 
 ## Limits
 
-- One package per internal build. Splitting a project into several packages is not
-  automated yet.
-- STORED only: package size equals the sum of the asset sizes.
-- Windows x64 Release runtime bundles only, as with Export Game. Linux editors
-  ship no runtime yet, because `cmake/BuildRuntimeBundle.cmake` is Windows-only.
+- Each planned archive must fit the version 1 limits. Export reports any archive
+  that exceeds them.
+- STORED entries keep the original asset bytes with ZIP headers and a manifest.
+- Content updates require a Windows x64 delivery. Use a full export for Linux x64.
 - The built executable uses the default icon.
 - No encryption, signing or streaming. Packages are unpacked to disk because
   textures, audio and Lua load from files.
@@ -163,3 +199,6 @@ running. Automatic eviction is not implemented.
 The startup package supplies `settings.tags` for Lua tag queries across all
 mounted scenes. Scene and prefab memberships retain their IDs when the
 startup package has no matching definition. See [entity tags](Projects.md#entity-tags).
+- `GameContentUpdateTest` (editor) covers scene and Shared edits, ownership
+  promotion, obsolete packages, config-only updates, unchanged builds, damaged
+  inputs and failed staging.

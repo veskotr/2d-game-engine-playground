@@ -18,6 +18,25 @@ internal data class PrefabUpdate(val saved: OpenedProjectDocument,val scene: Sce
 
 internal data class AdoptedAssets(val source: String,val assets: Map<Path,String>,val moved: Map<Path,Path>)
 
+// Only component asset fields are interpreted. Names, script variables and entity keys are data.
+internal fun projectDocumentAssetFields(document: JsonObject, resolve: (String) -> String): JsonObject {
+    fun fields(value: JsonElement,field: String=""): JsonElement = when(value) {
+        is JsonObject -> if(field=="variables" || field == "targetEntities" || field == "parameters") value else JsonObject(value.mapValues { (key,child) -> fields(child,if(field=="stateClipMap") "clipAsset" else key) })
+        is JsonArray -> JsonArray(value.map { fields(it,field) })
+        is JsonPrimitive -> if(value.isString && value.content.isNotBlank() && PrefabPackages.isAssetField(field)) JsonPrimitive(resolve(value.content)) else value
+    }
+    return JsonObject(document.mapValues { (key,value) -> if(key=="entities") JsonArray(value.jsonArray.map { entity ->
+        JsonObject(entity.jsonObject.mapValues { (field,child) -> if(field=="components") fields(child) else child })
+    }) else if(key=="prefabs") JsonArray(value.jsonArray.map { item ->
+        val instance=item.jsonObject
+        JsonObject(instance.mapValues { (field,child) -> when(field) {
+            "file" -> JsonPrimitive(resolve(child.jsonPrimitive.content))
+            "overrides" -> fields(child)
+            else -> child
+        } })
+    }) else value })
+}
+
 /** Portable source persistence. Native codecs only see the resolved, ordinary document. */
 internal class ProjectDocuments(val project: OpenedProject) {
     private val prefix="project-asset://"
@@ -33,30 +52,12 @@ internal class ProjectDocuments(val project: OpenedProject) {
         require(Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS) && Files.size(path)<=16*1024*1024) { "Missing or oversized project document: $path" }
         return Files.newInputStream(path).use { it.readNBytes(16*1024*1024+1) }.also { require(it.size<=16*1024*1024) { "Project document exceeds 16 MiB" } }
     }
-    // Only component asset fields are interpreted. Names, script variables and entity keys are data.
-    private fun references(document: JsonObject,resolve: (String)->String): JsonObject {
-        fun fields(value: JsonElement,field: String=""): JsonElement = when(value) {
-            is JsonObject -> if(field=="variables" || field == "targetEntities" || field == "parameters") value else JsonObject(value.mapValues { (key,child) -> fields(child,if(field=="stateClipMap") "clipAsset" else key) })
-            is JsonArray -> JsonArray(value.map { fields(it,field) })
-            is JsonPrimitive -> if(value.isString && value.content.isNotBlank() && PrefabPackages.isAssetField(field)) JsonPrimitive(resolve(value.content)) else value
-        }
-        return JsonObject(document.mapValues { (key,value) -> if(key=="entities") JsonArray(value.jsonArray.map { entity ->
-            JsonObject(entity.jsonObject.mapValues { (field,child) -> if(field=="components") fields(child) else child })
-        }) else if(key=="prefabs") JsonArray(value.jsonArray.map { item ->
-            val instance=item.jsonObject
-            JsonObject(instance.mapValues { (field,child) -> when(field) {
-                "file" -> JsonPrimitive(resolve(child.jsonPrimitive.content))
-                "overrides" -> fields(child)
-                else -> child
-            } })
-        }) else value })
-    }
     fun referencedAssetIds(document: JsonObject): Set<String> = buildSet {
         document["tileLayers"]?.jsonArray?.forEach { layer ->
             val tileset = layer.jsonObject.getValue("tileset").jsonPrimitive.content
             if (tileset.startsWith(prefix)) add(tileset.removePrefix(prefix))
         }
-        references(document) { text ->
+        projectDocumentAssetFields(document) { text ->
             if (text.startsWith(prefix)) add(text.removePrefix(prefix))
             text
         }
@@ -106,7 +107,7 @@ internal class ProjectDocuments(val project: OpenedProject) {
             require(text.startsWith(prefix)) { "Project asset field must contain a UUID reference: $text" }
             return resolve(snapshot,text.removePrefix(prefix)).toString().replace('\\','/')
         }
-        var document=references(envelope.getValue("document").jsonObject,::pathFor)
+        var document=projectDocumentAssetFields(envelope.getValue("document").jsonObject,::pathFor)
         val assets=envelope.getValue("assets").jsonArray.associate { value ->
             val asset=resolve(snapshot,value.jsonPrimitive.content);asset to asset.fileName.toString()
         }
@@ -189,12 +190,12 @@ internal class ProjectDocuments(val project: OpenedProject) {
             else runCatching { Path.of(text).toAbsolutePath().normalize() }.getOrNull()
         val document=Json.parseToJsonElement(source).jsonObject
         val referenced=mutableListOf<Path>()
-        references(document) { text -> normalized(text)?.let(referenced::add);text }
+        projectDocumentAssetFields(document) { text -> normalized(text)?.let(referenced::add);text }
         val names=assets.mapKeys { it.key.toAbsolutePath().normalize() }
         val external=(referenced+names.keys).distinct().filter(adoption::outside)
         if(external.isEmpty()) return AdoptedAssets(source,assets,emptyMap())
         val moved=external.associateWith { adoption.adopt(it,names[it]) }
-        val rewritten=references(document) { text -> normalized(text)?.let(moved::get)?.toString()?.replace('\\','/') ?: text }
+        val rewritten=projectDocumentAssetFields(document) { text -> normalized(text)?.let(moved::get)?.toString()?.replace('\\','/') ?: text }
         AdoptedAssets(documentJson.encodeToString(JsonElement.serializer(),rewritten),
             assets.entries.associate { (path,name) -> (moved[path.toAbsolutePath().normalize()] ?: path) to name },moved)
     }
@@ -214,7 +215,7 @@ internal class ProjectDocuments(val project: OpenedProject) {
             require(snapshot.pathsById[id]==relative || (!Files.exists(file) && id !in snapshot.pathsById)) { "Destination asset identity is ambiguous" }
         }
         fun idFor(path: Path) = assetIdFor(snapshot,root,path)
-        val portable=references(Json.parseToJsonElement(source).jsonObject) { text ->
+        val portable=projectDocumentAssetFields(Json.parseToJsonElement(source).jsonObject) { text ->
             if(text.startsWith(prefix)) { resolve(snapshot,text.removePrefix(prefix));text }
             else { require(!text.startsWith("asset://")) { "Unresolved package reference" };prefix+idFor(Path.of(text)) }
         }

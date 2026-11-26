@@ -50,7 +50,7 @@ class ProjectDistributionTest {
         val thumbnailName = Files.list(project.root.resolve(".sle/cache/thumbnails")).use {
             it.toList().single().fileName.toString()
         }
-        val game = GameBuild.build(project, bundle(), project.root.resolveSibling("Built")) {}
+        val game = GameBuild.build(project, bundle("0.16.0"), project.root.resolveSibling("Built")) {}
         ZipFile(game.folder.resolve(GameBuild.PACKAGE).toFile()).use { archive ->
             assertTrue(archive.entries().asSequence().none { ".sle" in it.name.split('/') || it.name.substringAfterLast('/') == thumbnailName })
             val entry = archive.getEntry("assets/Textures/sprite.png.slemeta")
@@ -117,13 +117,14 @@ class ProjectDistributionTest {
         AssetIdentity.ensure(p.assets.resolve("Scripts/modules/value.lua"))
         return ProjectFiles.save(p,p.document.copy(startupScene=AssetIdentity.read(AssetIdentity.sidecar(saved.path))))
     }
-    private fun bundle(): Path {
+    private fun bundle(engineVersion: String? = null): Path {
         val root=Files.createTempDirectory("sle-runtime-")
-        Files.writeString(root.resolve("engine_app.exe"),"executable")
+        Files.write(root.resolve("engine_app.exe"), runtimeFixtureLauncher())
         Files.createDirectories(root.resolve("assets/shaders"));Files.writeString(root.resolve("assets/shaders/sprite.vert"),"shader")
         Files.writeString(root.resolve("msvcp140.dll"),"crt")
         val manifest=buildJsonObject {
             put("format","sle-runtime");put("version",1);put("platform","windows-x64");put("configuration","Release");put("executable","engine_app.exe")
+            engineVersion?.let { put("engineVersion", it) }
             put("files",buildJsonObject {
                 Files.walk(root).use { paths -> paths.filter { Files.isRegularFile(it) }.forEach { file ->
                     put(root.relativize(file).toString().replace('\\','/'),java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file)).joinToString("") { "%02x".format(it) })
@@ -187,7 +188,7 @@ class ProjectDistributionTest {
         assertFails { ProjectDistribution.export(p,runtime,target) { descriptor ->
             Files.writeString(descriptor.parent.parent.resolve("engine_app.exe"),"changed executable")
         } }
-        assertFalse(Files.exists(target));assertEquals("executable",Files.readString(runtime.resolve("engine_app.exe")))
+        assertFalse(Files.exists(target));assertContentEquals(runtimeFixtureLauncher(), Files.readAllBytes(runtime.resolve("engine_app.exe")))
     }
     @Test fun preservesCustomAssetRootUnknownFilesAndRuntimeChangeFailure() {
         val p=project();val custom=p.root.resolve("Content/Shared")

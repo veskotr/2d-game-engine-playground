@@ -17,13 +17,14 @@ class GameBuildTest {
         return ProjectFiles.save(p,p.document.copy(startupScene=AssetIdentity.read(AssetIdentity.sidecar(saved.path)),
             game=ProjectGameSettings(title="Packaged",width=640,height=360,vsync=false,mode="Windowed",targetFPS=30)))
     }
-    private fun bundle(engineVersion: String = "0.26.0"): Path {
+    private fun bundle(engineVersion: String? = "0.26.0", target: String = "windows-x64"): Path {
         val root=Files.createTempDirectory("sle-runtime-")
-        Files.writeString(root.resolve("engine_app.exe"),"executable")
+        val executable = if (target == "linux-x64") "engine_app" else "engine_app.exe"
+        Files.write(root.resolve(executable), runtimeFixtureLauncher(target == "linux-x64"))
         Files.createDirectories(root.resolve("assets/shaders"));Files.writeString(root.resolve("assets/shaders/sprite.vert"),"shader")
         Files.writeString(root.resolve("msvcp140.dll"),"crt")
         Files.writeString(root.resolve("sle-runtime.json"),buildJsonObject {
-            put("format","sle-runtime");put("version",1);put("engineVersion",engineVersion);put("platform","windows-x64");put("configuration","Release");put("executable","engine_app.exe")
+            put("format","sle-runtime");put("version",1);engineVersion?.let { put("engineVersion", it) };put("platform",target);put("configuration","Release");put("executable",executable)
             put("files",buildJsonObject {
                 Files.walk(root).use { paths -> paths.filter { Files.isRegularFile(it) }.forEach { file ->
                     put(root.relativize(file).toString().replace('\\','/'),ProjectDistribution.hash(file))
@@ -31,6 +32,279 @@ class GameBuildTest {
             })
         }.toString())
         return root
+    }
+
+    @Test fun exportsBothTargetsWithIdenticalPackagesAndPublishesAllOrNeither() {
+        val p = project()
+        val windows = bundle()
+        val linux = bundle("0.33.0", "linux-x64")
+        val bundles = mapOf(GameTarget.Windows to windows, GameTarget.Linux to linux)
+        val result = GameBuild.exportTargets(p, bundles, validate = {})
+        val win = result.games.getValue(GameTarget.Windows)
+        val lin = result.games.getValue(GameTarget.Linux)
+        assertEquals("Game.exe", win.executable.fileName.toString())
+        assertEquals("Game", lin.executable.fileName.toString())
+        for (file in win.packages.map { it.path } + GameBuild.CONFIG) {
+            assertEquals(ProjectDistribution.hash(win.folder.resolve(file)), ProjectDistribution.hash(lin.folder.resolve(file)))
+        }
+        val archive = result.archives.getValue(GameTarget.Windows)
+        ZipFile(archive.toFile()).use { zip ->
+            val entry = zip.getEntry("windows-x64/Game.exe")
+            assertNotNull(entry)
+            assertContentEquals(runtimeFixtureLauncher(), zip.getInputStream(entry).use { it.readAllBytes() })
+        }
+        assertTrue(Files.size(result.archives.getValue(GameTarget.Linux)) > 0)
+        for ((target, game) in result.games) {
+            val manifest = Json.parseToJsonElement(Files.readString(game.folder.resolve(GameBuild.RELEASE))).jsonObject
+            assertEquals(target.id, manifest.getValue("platform").jsonPrimitive.content)
+            assertEquals(ProjectDistribution.hash(bundles.getValue(target).resolve("sle-runtime.json")),
+                manifest.getValue("runtimeSha256").jsonPrimitive.content)
+        }
+        val before = ProjectDistribution.inventory(result.folder.parent)
+        assertFailsWith<IllegalStateException> {
+            GameBuild.exportTargets(p, bundles, validate = {
+                if (it.parent.fileName.toString() == "linux-x64") error("second target failed")
+            })
+        }
+        assertEquals(before, ProjectDistribution.inventory(result.folder.parent))
+    }
+
+    @Test fun verifiesTargetAndVersionAndAcceptsLegacyWindows() {
+        val p = project()
+        val win = bundle("0.16.0")
+        val linux = bundle("0.33.0", "linux-x64")
+        fun export(target: GameTarget, bundle: Path) =
+            GameBuild.exportTargets(p, mapOf(target to bundle), validate = {})
+        export(GameTarget.Windows, win)
+        assertFailsWith<IllegalArgumentException> { export(GameTarget.Windows, bundle(null)) }
+        assertFailsWith<IllegalArgumentException> { export(GameTarget.Windows, bundle("0.15.0")) }
+        assertFailsWith<IllegalArgumentException> { export(GameTarget.Linux, win) }
+        assertFailsWith<IllegalArgumentException> { export(GameTarget.Windows, linux) }
+        assertFailsWith<IllegalArgumentException> { export(GameTarget.Linux, bundle("0.32.0", "linux-x64")) }
+        Files.writeString(linux.resolve("engine_app"), "modified")
+        assertFailsWith<IllegalArgumentException> { export(GameTarget.Linux, linux) }
+    }
+
+    @Test fun rejectsABundleWithTheWrongLauncherEvenIfItsHashMatches() {
+        val p = project()
+        val runtime = bundle("0.33.0", "linux-x64")
+        val launcher = runtime.resolve("engine_app")
+        val linuxHash = ProjectDistribution.hash(launcher)
+        Files.write(launcher, runtimeFixtureLauncher())
+        val manifest = runtime.resolve("sle-runtime.json")
+        Files.writeString(manifest, Files.readString(manifest).replace(linuxHash, ProjectDistribution.hash(launcher)))
+        val failure = assertFailsWith<IllegalArgumentException> {
+            GameBuild.exportTargets(p, mapOf(GameTarget.Linux to runtime), validate = {})
+        }
+        assertContains(failure.message.orEmpty(), "Linux x64 launcher")
+    }
+
+    @Test fun linuxRuntimePathsCanDifferInCaseOnACaseSensitiveHost() {
+        if (System.getProperty("os.name").startsWith("Windows")) return
+        val p = project()
+        val runtime = bundle("0.33.0", "linux-x64")
+        val first = "assets/shaders/sprite.vert"
+        val second = "assets/shaders/SPRITE.vert"
+        if (Files.exists(runtime.resolve(second))) return
+        Files.writeString(runtime.resolve(second), "a second shader")
+        val manifest = runtime.resolve("sle-runtime.json")
+        val original = Json.parseToJsonElement(Files.readString(manifest)).jsonObject
+        val files = JsonObject(original.getValue("files").jsonObject +
+            (second to JsonPrimitive(ProjectDistribution.hash(runtime.resolve(second)))))
+        Files.writeString(manifest, JsonObject(original + ("files" to files)).toString())
+        val result = GameBuild.exportTargets(p, mapOf(GameTarget.Linux to runtime), validate = {})
+        val delivery = result.games.getValue(GameTarget.Linux).folder
+        assertEquals("shader", Files.readString(delivery.resolve(first)))
+        assertEquals("a second shader", Files.readString(delivery.resolve(second)))
+        assertFailsWith<IllegalArgumentException> { GameContentUpdate.apply(delivery, runtime, delivery.resolveSibling("update")) }
+    }
+
+    @Test fun verifiesWindowsRuntimeNamesAndCaseFoldedPaths() {
+        val p = project()
+        val runtime = bundle()
+        fun add(path: String) {
+            Files.writeString(runtime.resolve(path), path)
+            val inventory = runtime.resolve("sle-runtime.json")
+            Files.writeString(inventory, Files.readString(inventory).replace("\"files\":{",
+                "\"files\":{\"$path\":\"${ProjectDistribution.hash(runtime.resolve(path))}\","))
+        }
+        if (!System.getProperty("os.name").startsWith("Windows")) {
+            add("con.txt")
+            val error = assertFailsWith<IllegalArgumentException> {
+                GameBuild.exportTargets(p, mapOf(GameTarget.Windows to runtime), validate = {})
+            }
+            assertContains(error.message.orEmpty(), "con.txt")
+            Files.delete(runtime.resolve("con.txt"))
+            add("MSVCP140.dll")
+            assertFailsWith<IllegalArgumentException> {
+                GameBuild.exportTargets(p, mapOf(GameTarget.Windows to runtime), validate = {})
+            }
+        }
+        val malformed = bundle()
+        val manifest = malformed.resolve("sle-runtime.json")
+        Files.writeString(manifest, Files.readString(manifest).replace(
+            "\"executable\":\"engine_app.exe\"", "\"executable\":\"msvcp140.dll\""))
+        assertFailsWith<IllegalArgumentException> {
+            GameBuild.exportTargets(p, mapOf(GameTarget.Windows to malformed), validate = {})
+        }
+    }
+
+    @Test fun nativeTileScenesRequireATileCapableWindowsRuntime() {
+        val p = project()
+        val scene = p.assets.resolve("Scenes/start.scene.json")
+        val saved = Json.parseToJsonElement(Files.readString(scene)).jsonObject
+        val document = JsonObject(saved.getValue("document").jsonObject +
+            ("tileLayers" to JsonArray(listOf(buildJsonObject { put("name", "Tiles") }))))
+        Files.writeString(scene, JsonObject(saved + ("document" to document)).toString())
+        val error = assertFailsWith<IllegalArgumentException> {
+            GameBuild.build(p, bundle("0.32.0"), p.root.resolveSibling("Old Runtime")) {}
+        }
+        assertContains(error.message.orEmpty(), "Native tile layers")
+    }
+
+    @Test fun packagedExportNumbersDeliveriesAndPreservesThemOnFailure() {
+        val p = project()
+        val runtime = bundle()
+        val first = GameBuild.exportAutomatically(p, runtime, validate = {})
+        val second = GameBuild.exportAutomatically(p, runtime, validate = {})
+        val exports = p.root.resolve("Exports").toRealPath()
+        assertEquals(exports.resolve("Game"), first.folder)
+        assertEquals(exports.resolve("Game-2"), second.folder)
+        assertEquals(3, first.packages.size)
+        assertTrue(first.packages.any { it.path == "shared.slepkg" })
+        first.packages.forEach { assertEquals(Files.size(first.folder.resolve(it.path)), it.bytes) }
+        val before = ProjectDistribution.inventory(exports)
+        assertFailsWith<IllegalStateException> {
+            GameBuild.exportAutomatically(p, runtime, validate = { error("Native validation failed") })
+        }
+        assertEquals(before, ProjectDistribution.inventory(exports))
+        assertFailsWith<IllegalArgumentException> {
+            GameBuild.exportAutomatically(p, exports, validate = {})
+        }
+    }
+
+    @Test fun automaticBuildStagesDeterministicPackagesAndReleaseInventory() {
+        val original = project()
+        val mixedCaseDescriptor = original.document.copy(
+            id = original.document.id.uppercase(),
+            startupScene = original.document.startupScene?.uppercase(),
+            settings = ProjectSettings(artStyle = ProjectArtStyle.PixelArt)
+        )
+        Files.writeString(original.file, mixedCaseDescriptor.serialize())
+        val p = ProjectFiles.open(original.file)
+        val runtime = bundle()
+        val target = p.root.resolveSibling("Automatic")
+        val startup = assertNotNull(p.document.startupScene).lowercase()
+        val starter = AssetIdentity.read(AssetIdentity.sidecar(p.assets.resolve("Scenes/Main.scene.json")))
+        val packages = listOf("shared.slepkg") + listOf(startup, starter).sorted().map { "scene-$it.slepkg" }
+        val built = GameBuild.buildPackages(p, runtime, target, validate = { config ->
+            assertFalse(Files.exists(target))
+            assertTrue(Files.exists(config.resolveSibling(GameBuild.RELEASE)))
+            assertEquals(JsonArray(packages.map(::JsonPrimitive)),
+                Json.parseToJsonElement(Files.readString(config)).jsonObject["packages"])
+            for ((index, path) in packages.withIndex()) {
+                ZipFile(config.resolveSibling(path).toFile()).use { zip ->
+                    val manifest = Json.parseToJsonElement(zip.getInputStream(zip.getEntry("manifest.json"))
+                        .bufferedReader().use { it.readText() }).jsonObject
+                    assertEquals(if (path == "scene-$startup.slepkg") JsonPrimitive(startup) else JsonNull, manifest["mainScene"])
+                    assertEquals("pixelArt", manifest.getValue("settings").jsonObject.getValue("artStyle").jsonPrimitive.content)
+                    assertEquals(index == 0, zip.getEntry("assets/Scripts/modules/value.lua") != null)
+                }
+            }
+        })
+        val release = Json.parseToJsonElement(Files.readString(target.resolve(GameBuild.RELEASE))).jsonObject
+        assertEquals(original.document.id, release.getValue("projectId").jsonPrimitive.content)
+        val packageRecords = release.getValue("packages").jsonArray.map { it.jsonObject }
+        assertEquals(packages, packageRecords.map { it.getValue("path").jsonPrimitive.content })
+        assertEquals(packages.size, packageRecords.map { it.getValue("id") }.toSet().size)
+        for ((path, record) in packages.zip(packageRecords)) {
+            assertEquals(ProjectDistribution.hash(target.resolve(path)), record.getValue("sha256").jsonPrimitive.content)
+        }
+        val moduleId = AssetIdentity.read(AssetIdentity.sidecar(p.assets.resolve("Scripts/modules/value.lua")))
+        assertEquals(packageRecords.first().getValue("id"), release.getValue("owners").jsonObject[moduleId])
+        val repeatTarget = target.resolveSibling("Again")
+        val nativeLibrary = System.getenv("SLE_GAME_BUILD_TEST_NATIVE")
+        val again = if (nativeLibrary == null) {
+            GameBuild.buildPackages(p, runtime, repeatTarget, validate = {})
+        } else {
+            val previous = System.setProperty("sle.nativeLibrary", nativeLibrary)
+            try {
+                GameBuild.buildPackages(p, runtime, repeatTarget).also { println("Validated staged packages through prepareGame") }
+            } finally {
+                if (previous == null) System.clearProperty("sle.nativeLibrary")
+                else System.setProperty("sle.nativeLibrary", previous)
+            }
+        }
+        for (path in packages + listOf(GameBuild.CONFIG, GameBuild.RELEASE)) {
+            assertEquals(ProjectDistribution.hash(built.folder.resolve(path)), ProjectDistribution.hash(again.folder.resolve(path)))
+        }
+    }
+
+    @Test fun automaticBuildRejectsStageTamperingAndPreservesOccupiedDestination() {
+        val p = project()
+        val runtime = bundle()
+        val target = p.root.resolveSibling("Automatic")
+        assertFailsWith<IllegalArgumentException> {
+            GameBuild.buildPackages(p, runtime, target, validate = {
+                Files.writeString(it.resolveSibling(GameBuild.RELEASE), "tampered")
+            })
+        }
+        assertFalse(Files.exists(target))
+        val module = p.assets.resolve("Scripts/modules/value.lua")
+        assertFailsWith<IllegalArgumentException> {
+            GameBuild.buildPackages(p, runtime, target, validate = { Files.writeString(module, "return 99") })
+        }
+        assertFalse(Files.exists(target))
+        assertFailsWith<FileAlreadyExistsException> {
+            GameBuild.buildPackages(p, runtime, target, validate = {
+                Files.createDirectory(target)
+                Files.writeString(target.resolve("existing"), "keep")
+            })
+        }
+        assertEquals("keep", Files.readString(target.resolve("existing")))
+    }
+
+    @Test fun buildKeepsPhysicalPathsTogetherAndRejectsDuplicateIdentities() {
+        val initial = project()
+        val map = initial.assets.resolve("Data/map.tmj")
+        val image = initial.assets.resolve("Textures/map.png")
+        Files.writeString(map, """{"tilesets":[{"image":"../Textures/map.png"}]}""")
+        Files.writeString(image, "fixture image")
+        AssetIdentity.ensure(map)
+        AssetIdentity.ensure(image)
+        val scene = ProjectDocuments(initial).save(
+            initial.assets.resolve("Scenes/Map.scene.json"), ProjectDocumentKind.Scene,
+            """{"key":"map","entities":[]}""", mapOf(map to "Map"), null,
+        ) {}
+        val sceneId = AssetIdentity.read(AssetIdentity.sidecar(scene.path))
+        val p = ProjectFiles.save(initial, initial.document.copy(startupScene = sceneId))
+        val runtime = bundle()
+        val target = p.root.resolveSibling("With Map")
+        val built = GameBuild.buildPackages(p, runtime, target, validate = {})
+        ZipFile(built.folder.resolve("scene-$sceneId.slepkg").toFile()).use { archive ->
+            assertNotNull(archive.getEntry("assets/Data/map.tmj"))
+            assertNotNull(archive.getEntry("assets/Textures/map.png"))
+            assertNotNull(archive.getEntry("assets/Textures/map.png.slemeta"))
+        }
+        Files.copy(AssetIdentity.sidecar(map), AssetIdentity.sidecar(image), StandardCopyOption.REPLACE_EXISTING)
+        val rejected = target.resolveSibling("Duplicate")
+        val failure = assertFailsWith<IllegalArgumentException> {
+            GameBuild.buildPackages(p, runtime, rejected, validate = { fail("Invalid sources reached native validation") })
+        }
+        assertContains(failure.message.orEmpty(), "Duplicate asset UUID")
+        assertFalse(Files.exists(rejected))
+    }
+
+    @Test fun packageWriterRejectsVersionOneEntryLimits() {
+        val root = Files.createTempDirectory("sle-package-limits-")
+        val out = root.resolve("limit.slepkg")
+        val many = (1..GamePackageWriter.MAX_ENTRIES).associate { "$it.txt" to "" }
+        val countError = assertFailsWith<IllegalArgumentException> {
+            GamePackageWriter.write(out, buildJsonObject {}, root, many)
+        }
+        assertContains(countError.message.orEmpty(), "65000")
+        assertFalse(Files.exists(out))
+        assertFailsWith<IllegalArgumentException> { GamePackageWriter.requirePortable("é".repeat(128) + ".txt") }
     }
 
     @Test fun buildsConfigAndStoredPackageWithMainSceneSidecarsAndNoLocalState() {
@@ -67,7 +341,7 @@ class GameBuildTest {
             assertEquals("return 42",zip.getInputStream(zip.getEntry("assets/Scripts/modules/value.lua")).readBytes().decodeToString())
         }
         // The engine executable carries the project name; runtime-bundle metadata is not delivered.
-        assertEquals(target.resolve("Game.exe"),built.executable);assertEquals("executable",Files.readString(built.executable))
+        assertEquals(target.resolve("Game.exe"),built.executable);assertContentEquals(runtimeFixtureLauncher(), Files.readAllBytes(built.executable))
         assertFalse(Files.exists(target.resolve("engine_app.exe")) || Files.exists(target.resolve("sle-runtime.json")))
         assertTrue(Files.exists(target.resolve("msvcp140.dll")) && Files.exists(target.resolve("sle-distribution.json")))
         val distribution=Json.parseToJsonElement(Files.readString(target.resolve("sle-distribution.json"))).jsonObject
@@ -228,6 +502,8 @@ class GameBuildTest {
         assertEquals("Space_ Odyssey_.exe",GameBuild.executableName("Space: Odyssey?"))
         assertEquals("Trailing.exe",GameBuild.executableName("  Trailing.. "))
         assertEquals("CON_.exe",GameBuild.executableName("CON"))
+        assertEquals("COM¹_.exe", GameBuild.executableName("COM¹"))
+        assertFailsWith<IllegalArgumentException> { GamePackageWriter.requirePortable("path/LPT².txt") }
         assertEquals("Game.exe",GameBuild.executableName("..."))
         assertEquals("engine_app.exe",GameBuild.executableName("engine_app"))
         // A name that would replace a runtime file is refused rather than overwriting it.

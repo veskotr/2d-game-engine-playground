@@ -5,6 +5,7 @@ import org.lwjgl.system.JNI
 import org.lwjgl.system.MemoryStack
 import org.lwjgl.system.MemoryUtil
 import java.io.File
+import sle.editor.project.GameTarget
 
 /**
  * Packaged distributions carry the engine library and shared `assets/` as Compose app resources.
@@ -22,15 +23,19 @@ internal object PackagedEngine {
      * editors. Export Game copies it next to the game data; no compiler is ever needed.
      * Development runs have none and choose a `sle_runtime_bundle` output instead.
      */
-    val runtimeBundle: File?
-        get() = resources?.resolve("runtime")?.takeIf { it.resolve("sle-runtime.json").isFile }
+    fun runtimeBundle(target: GameTarget): File? {
+        val runtime = resources?.resolve("runtime") ?: return null
+        return runtime.resolve(target.id).takeIf { it.resolve("sle-runtime.json").isFile }
+            ?: runtime.takeIf { windows && target == GameTarget.Windows && it.resolve("sle-runtime.json").isFile }
+    }
+
+    val assets: File? get() = resources?.resolve("assets")?.takeIf { it.isDirectory }
 
     /**
      * The engine resolves `assets/...` against the process working directory. A packaged editor
-     * launched from elsewhere moves the process there; Java's cached `user.dir` is unaffected.
+     * uses the bundled resources as its process directory; Java's cached `user.dir` is unaffected.
      */
     fun enterAssetRoot() {
-        if (File("assets/shaders").isDirectory) return
         val root = resources?.takeIf { it.resolve("assets/shaders").isDirectory } ?: return
         MemoryStack.stackPush().use { stack ->
             val changed = if (windows) {

@@ -1,5 +1,6 @@
 package sle.editor.smoke
 
+import sle.editor.bridge.PackagedEngine
 import sle.editor.ui.postedAfter
 import androidx.compose.ui.geometry.Rect
 import kotlinx.coroutines.*
@@ -18,7 +19,7 @@ import javax.swing.*
 
 internal suspend fun runProjectRuntimeSmoke(window: JFrame,canvas: ()->EngineCanvas,project: ProjectWorkspaceState,
     projects: ProjectCommands,browser: ()->AssetBrowserState?,bounds: Map<String,Rect>,fields: Map<String,Rect>,
-    scene: SceneWorkspaceState,playback: ScenePlaybackState,notices: sle.editor.ui.EditorNotices,distribution: Boolean=false,
+    scene: SceneWorkspaceState,playback: ScenePlaybackState,notices: sle.editor.ui.EditorNotices,distributionPrefab: EntityWorkspaceState?=null,
 ) {
     val robot=Robot().apply { autoDelay=15 }
     suspend fun await(message: String,condition: ()->Boolean) {
@@ -35,17 +36,19 @@ internal suspend fun runProjectRuntimeSmoke(window: JFrame,canvas: ()->EngineCan
     }
     suspend fun settings(): JDialog {
         val file=window.jMenuBar.components.filterIsInstance<JMenu>().single { it.text=="File" }
-        val origin=file.locationOnScreen;click(Point(origin.x+file.width/2,origin.y+file.height/2))
+        file.doClick()
         await("File menu did not open") { file.popupMenu.isShowing }
         val item=file.popupMenu.components.filterIsInstance<JMenuItem>().single { it.text=="Project Settings…" }
-        val at=item.locationOnScreen;click(Point(at.x+item.width/2,at.y+item.height/2))
+        MenuSelectionManager.defaultManager().clearSelectedPath()
+        item.doClick(0)
         await("Settings did not open") { Window.getWindows().filterIsInstance<JDialog>().any { it.isShowing && it.title=="Project Settings" } }
         return Window.getWindows().filterIsInstance<JDialog>().single { it.isShowing && it.title=="Project Settings" }
     }
-    val reports=Path.of(System.getProperty("sle.smokeReport")).parent
+    val reports = Files.createDirectories(Path.of(System.getProperty("sle.smokeReport")).parent).toRealPath()
     val first=withContext(Dispatchers.IO) {
-        val p=ProjectFiles.create(Files.createTempDirectory(reports,"project-runtime-").resolve("Source Game"),"Source Game")
-        ProjectAssetImports(p.root,p.assets).importAsset(Path.of("assets/textures/tile2.png"),"Textures")
+        val p=ProjectFiles.create(Files.createTempDirectory(reports,"run-").resolve("Source Game"),"Source Game")
+        val assets = PackagedEngine.assets?.toPath() ?: Path.of("assets").toAbsolutePath()
+        ProjectAssetImports(p.root,p.assets).importAsset(assets.resolve("textures/tile2.png"),"Textures")
         Files.createDirectories(p.assets.resolve("Scripts/modules"))
         Files.writeString(p.assets.resolve("Scripts/modules/value.lua"),"return 123")
         Files.writeString(p.assets.resolve("Scripts/main.lua"),"""
@@ -91,7 +94,7 @@ internal suspend fun runProjectRuntimeSmoke(window: JFrame,canvas: ()->EngineCan
     await("Embedded project launch failed") { canvas().scenePlayback()==Playback.Running && playback.project!=null }
     check(scene.serialize()==draft && scene.dirty)
     canvas().runInContext {
-        if(org.lwjgl.opengl.GL.getCapabilitiesWGL().WGL_EXT_swap_control)
+        if(canvasSwapInterval != null && org.lwjgl.opengl.GL.getCapabilitiesWGL().WGL_EXT_swap_control)
             check(org.lwjgl.opengl.WGLEXTSwapControl.wglGetSwapIntervalEXT()==1) { "Project VSync setting ignored" }
     }
     await("Deferred project Lua scene/module failed") {
@@ -105,7 +108,7 @@ internal suspend fun runProjectRuntimeSmoke(window: JFrame,canvas: ()->EngineCan
     playback.stop();await("Project Stop failed") { canvas().scenePlayback()==Playback.Stopped && canvas().authoringReady() }
     check(scene.serialize()==draft && scene.dirty)
     canvas().runInContext {
-        if(org.lwjgl.opengl.GL.getCapabilitiesWGL().WGL_EXT_swap_control)
+        if(canvasSwapInterval != null && org.lwjgl.opengl.GL.getCapabilitiesWGL().WGL_EXT_swap_control)
             check(org.lwjgl.opengl.WGLEXTSwapControl.wglGetSwapIntervalEXT()==0) { "Stop retained game VSync" }
     }
     scene.newScene();projects.close();await("Project close failed") { !project.busy && project.opened==null }
@@ -118,14 +121,17 @@ internal suspend fun runProjectRuntimeSmoke(window: JFrame,canvas: ()->EngineCan
     playback.stop();await("Relocated Stop failed") { canvas().scenePlayback()==Playback.Stopped }
     // Actual standalone command, with project and engine resources outside cwd.
     val standalone=withContext(Dispatchers.IO) {
-        val executable=Path.of("build/debug/engine_app/Debug/engine_app.exe").toAbsolutePath()
+        val host = distributionSmokeHost()
+        val executable = if (host == GameTarget.Windows && PackagedEngine.runtimeBundle(host) == null) {
+            Path.of("build/debug/engine_app/Debug/engine_app.exe").toAbsolutePath()
+        } else distributionSmokeRuntime(host).resolve(host.launcher)
         val process=ProcessBuilder(executable.toString(),"--project",movedFile.toAbsolutePath().toString(),"--frames","8")
             .directory(reports.toFile()).redirectErrorStream(true).redirectOutput(reports.resolve("project-runtime-standalone.log").toFile()).start()
         check(process.waitFor(30,TimeUnit.SECONDS)) { process.destroyForcibly();"Standalone project did not finish" }
         process.exitValue() to Files.readString(reports.resolve("project-runtime-standalone.log"))
     }
     check(standalone.first==0 && standalone.second.contains("scene: second-scene") && !standalone.second.contains("[ERROR]")) { standalone.toString() }
-    if(distribution) runProjectDistributionSmoke(window,canvas,project,scene)
+    distributionPrefab?.let { runProjectDistributionSmoke(window,canvas,project,scene,it,notices) }
     // Missing startup must preserve the dirty draft and stopped runtime.
     val active=project.opened!!
     project.refreshSettings(withContext(Dispatchers.IO) { ProjectFiles.save(active,active.document.copy(startupScene=null)) })

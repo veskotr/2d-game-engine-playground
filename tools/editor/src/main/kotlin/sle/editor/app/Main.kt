@@ -101,6 +101,11 @@ fun main(args: Array<String>) {
     if ("--multi-viewport-smoke" in args) { sle.editor.smoke.runMultiViewportSmoke(); return }
     if ("--docking-feasibility-smoke" in args) { sle.editor.smoke.runDockingFeasibilitySmoke("--docking-feasibility-gpu" in args); return }
     if ("--authoring-smoke" in args) { runAuthoringSmoke(); return }
+    if ("--project-distribution-smoke" in args && System.getProperty("sle.smokeReport") == null) {
+        val reports = java.nio.file.Files.createTempDirectory("sle-").toRealPath()
+        System.setProperty("sle.smokeReport", reports.resolve("embedded-smoke.png").toString())
+        System.setProperty("sle.workspaceData", reports.resolve("workspace").toString())
+    }
     launchEditor(args)
 }
 
@@ -336,7 +341,8 @@ private fun launchEditor(args: Array<String>) = application {
                     window.isAlwaysOnTop=true;window.toFront()
                     while(readyFrames<5 || projectActions==null) delay(30)
                     sle.editor.smoke.runProjectRuntimeSmoke(window,{canvas ?: error("Viewport missing")},project,projectActions!!,
-                        {observedAssets},assetBounds,projectFields,scene.getOrThrow(),scenePlayback,workspace.notices,distributionSmoke)
+                        {observedAssets},assetBounds,projectFields,scene.getOrThrow(),scenePlayback,workspace.notices,
+                        authoring.getOrThrow().takeIf { distributionSmoke })
                     watchdog?.stop();exitApplication()
                 } catch(failure: Throwable) { canvas?.stopRendering();failure.printStackTrace();exitProcess(1) }
             }
@@ -601,7 +607,8 @@ private fun launchEditor(args: Array<String>) = application {
             val openLuaSource: (sle.editor.console.LuaSource) -> Unit = { source ->
                 openScriptSource { scriptEditor.open(source.path, source.line) }
             }
-            val distribution=sle.editor.project.projectDistributionControls(project,notices)
+            val distribution=sle.editor.project.projectDistributionControls(project, notices,
+                scene.getOrNull()?.dirty == true || authoring.getOrNull()?.dirty == true, documents?.saveDirtyForExport)
             val runProject=sle.editor.project.projectRunAction(project,scenePlayback) { canvas?.finishGesture();editingSceneKey=null;showScene(true) }
             SideEffect {
                 val opened = project.opened
@@ -965,7 +972,9 @@ private fun launchEditor(args: Array<String>) = application {
                         onDensity={ workspace.appearance.update(appearance.copy(density=it)) },
                         onExit={if(manager.requestExit { !project.busy && confirmDiscard(authoring.getOrNull()) && confirmDiscardScene(scene.getOrNull()) && workspace.saveProjectEditorState() }) exitApplication()},
                         projectEntries=projectFileMenu(project,commands,scenePlayback.editing)+listOf(
-                            sle.editor.ui.EditorMenuEntry("Export Game…",project.opened!=null && !project.busy,action=distribution.exportGame)),
+                            sle.editor.ui.EditorMenuEntry("Export Game…",project.opened!=null && !project.busy,action=distribution.exportGame),
+                            sle.editor.ui.EditorMenuEntry("Export Content Update…",project.opened!=null && !project.busy,action=distribution.exportUpdate),
+                            sle.editor.ui.EditorMenuEntry("Apply Content Update…",!project.busy,action=distribution.applyUpdate)),
                         projectAssets=assetCommands,projectDocuments=documents,
                         assetEntries=assetBrowserMenu(assets,assetBrowserVisible) { if(assetBrowserVisible) manager.hidePanel(PanelId("assets")) else manager.showPanel(PanelId("assets")) },
                     ) + windowsMenu(manager) { panel ->
@@ -1095,7 +1104,7 @@ private fun launchEditor(args: Array<String>) = application {
                             else -> workspace.tools.gestureHint ?: sle.editor.viewport.tools.toolHint(workspace.tools.active,
                                 sle.editor.viewport.tools.ToolHintContext(workspace.snap.settings,sceneState?.selection?.size ?: 0,workspace.tools.pivot))
                         },
-                        progress=if(distribution.exporting) "Exporting game…" else if(project.busy) "Working…" else null,
+                        progress=distribution.progress ?: if(project.busy) "Working…" else null,
                         selectionCount=if(mode==ViewportMode.Scene) sceneState?.selection?.size ?: 0 else 0,
                         playState=when(desiredPlayback) { Playback.Running -> "Playing"; Playback.Paused -> "Paused"; else -> if(mode==ViewportMode.Scene) "Editing" else null },
                         dirty=if(mode==ViewportMode.Entity) activeEntity?.dirty==true else sceneState?.dirty==true,

@@ -501,39 +501,66 @@ are unreliable under WSLg.
 
 ## Package a standalone editor
 
-`createDistributable` builds a runnable folder that includes its own Java runtime, the
-engine library and the shared `assets/`. On Windows it also includes the prebuilt
-standalone game runtime (`engine_app.exe`, DLLs, engine assets) under `runtime/`.
-Export Game copies that runtime, so editor users never need a compiler.
-Package on each target OS; jpackage cannot cross-build. First build `sle_editor_native`
-and, on Windows, `sle_runtime_bundle` in Release:
+`createDistributable` builds a runnable editor folder with its own Java runtime,
+a host-native JNI bridge, shared assets, and both game runtimes. The editor finds
+the game runtimes under `runtime/windows-x64/` and `runtime/linux-x64/`. Export either
+target or both without downloading tools or installing a compiler.
+
+Build the editor on the OS it will run on. Prepare both `sle_runtime_bundle`
+outputs on their respective x64 hosts from the same source revision. Gradle checks
+the platform, engine version, Release configuration, and file hashes of both
+bundles before packaging. Their default locations are
+`build/release/runtime/Release` (Windows) and
+`build/linux-x64-release/runtime/Release` (Linux), relative to the checkout.
+Use `-PslePackageWindowsRuntimeBundle=<path>` and
+`-PslePackageLinuxRuntimeBundle=<path>` to point at transferred bundles.
+
+On Windows, from the checkout root, build the native artifacts and package the
+app image and EXE installer. EXE and MSI packaging use WiX with JDK 21.
 
 ```powershell
 cmake --preset release -DSLE_BUILD_EDITOR=ON
 cmake --build build/release --config Release --target sle_editor_native sle_runtime_bundle
 cd tools/editor
-.\gradlew.bat createDistributable
+.\gradlew.bat createDistributable packageExe
 ```
 
-In VS Code, **Terminal → Run Task → Editor: Package Windows App** runs all three steps.
-`gradle.ps1 <task>` runs any Gradle task with JDK 21 selected automatically. See
-[VS Code tasks and versions](../../CONTRIBUTING.md#vs-code). The editor version is
-`version` in `build.gradle.kts` and is shown in the window title with the engine version.
+Run the app image at `build/compose/binaries/main/app/SLE Editor/SLE Editor.exe`
+or install the EXE under `build/compose/binaries/main/exe/`. Use `packageMsi`
+to build an MSI. The EXE produced by the workflow is unsigned.
 
-Run `build/compose/binaries/main/app/SLE Editor/SLE Editor.exe`. On Linux, build
-`libsle_editor_native.so` in Release and pass it with
-`-PslePackageNativeLibrary=<path>` unless it is at `build/release/tools/editor-native/`.
-The launcher is `SLE Editor/bin/SLE Editor`. `packageDistributionForCurrentOS` builds
-installers (MSI/EXE on Windows, which need the WiX download; DEB on Linux).
+On Linux, from the checkout root:
 
-Pass `-PslePackageRuntimeBundle=<path>` when the runtime bundle is not at
-`build/release/runtime/Release`. Windows packaging fails if it is missing.
+```bash
+cmake --preset linux-x64-release -DSLE_BUILD_EDITOR=ON
+cmake --build build/linux-x64-release --target sle_editor_native sle_runtime_bundle
+cd tools/editor
+bash ./gradlew createDistributable
+bash packaging/package-linux.sh "build/compose/binaries/main/app/SLE Editor" \
+  build/editor-artifacts /path/to/appimagetool-x86_64.AppImage
+```
 
-Packaged editors load the engine library from `compose.application.resources.dir`.
-When the working directory has no `assets/`, they switch the process working directory
-to the bundled assets, because the engine resolves `assets/...` relative to it. On
-MSVC, `SLE_BUILD_EDITOR` defines `_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR`, because the
-JVM's bundled `msvcp140.dll` may predate the compiler's C++ runtime.
+Make the AppImage executable with `chmod +x` and launch it. For the portable
+TAR.GZ, extract it and run `SLE Editor/bin/SLE Editor`. Both formats use system
+graphics and audio libraries. The editor's OpenGL viewport requires a working
+desktop graphics stack. The DEB target remains available through `packageDeb`.
+Use `-PslePackageNativeLibrary=<path>` if the Release bridge is outside the
+default CMake build directory.
+
+The [Editor distribution workflow](../../.github/workflows/editor-distribution.yml)
+builds both native payloads for one revision and packages the Windows EXE, Linux
+AppImage, and portable TAR.GZ as workflow artifacts. The clean desktop support
+matrix is tracked in the [distribution plan](../../docs/plans/cross-platform-distribution.md).
+
+Packaged editors read the engine library and assets from
+`compose.application.resources.dir`. The native process uses that directory as
+its working directory because the engine resolves `assets/...` relative to it.
+Keep projects and exports in a writable location outside the installation.
+
+To exercise a packaged editor from an unrelated directory, set
+`SLE_SMOKE_TILEMAP_PROJECT` to a copy of `examples/tilemap_room` and pass
+`--project-distribution-smoke` to the editor launcher. The smoke writes its
+fixtures and reports to a temporary folder and uses the installed game runtimes.
 
 ## Validation
 
@@ -659,21 +686,28 @@ payloads; referenced deletion requires confirmation. Retain `.sle/trash` for
 restart-visible recovery. Dynamic Lua/XML/module paths still require manual repair.
 See [managed asset details](../../docs/topics/Projects.md#managed-assets).
 
-Runnable game export: build a prepared runtime with
-`cmake --build build/debug --config Release --target sle_runtime_bundle`, then use
-**File → Export Game…** and choose `build/debug/runtime/Release`. The editor creates
-an `Exports` folder inside the project, with a new project-named subfolder for each
-export (`MyGame`, `MyGame-2`, etc.). The configured asset root must be separate
-from `Exports`. Export uses saved files, preserves drafts and excludes `.sle`
-state/trash. Start the delivered `engine_app.exe`; its adjacent `game/` directory
-selects the startup project independently of cwd. See
-[distribution details](../../docs/topics/Projects.md#export-a-runnable-game).
-`run --args=--project-distribution-smoke` exercises actual export and relocated
-standalone launch; it requires that Release runtime bundle first.
+**File → Export Game…** offers Windows x64, Linux x64, or Both on either editor
+host. Use the matching bundled runtime or select a prepared Release
+`sle_runtime_bundle` for each requested target. Choose **Save and Export**
+or **Export Saved Versions** when documents are dirty. Save untitled documents
+to the project first and keep the asset root separate from `Exports/`.
 
-**Export Game…** is the single game delivery action. Runtime `.slepkg` and
-`config.json` support remains available to internal tooling; see
-[game packages](../../docs/topics/GamePackages.md).
+Each numbered export contains a runnable subfolder and archive for each target.
+Copy `windows-x64/` or extract `windows-x64.zip` on Windows. Copy `linux-x64/`
+or extract `linux-x64.tar.gz` on Linux. Each delivery includes the game launcher,
+runtime files, config, packages, and manifests. Both targets use the same
+saved-content packages.
+
+**File → Export Content Update…** uses a clean earlier Windows x64 delivery
+from the same project and exact runtime as its baseline. **File → Apply Content
+Update…** verifies the baseline and update, then publishes a runnable sibling
+folder. Launch the original delivery to roll back. Use a full export for Linux.
+See [project distribution](../../docs/topics/Projects.md#export-a-runnable-game).
+
+`run --args=--project-distribution-smoke` exports both targets, exercises Windows
+content updates, and launches the host's extracted archive. Set
+`SLE_SMOKE_WINDOWS_RUNTIME` and `SLE_SMOKE_LINUX_RUNTIME` when the bundles are
+outside the default Release build paths.
 
 The opt-in docking graphics experiment runs for about 48 seconds after startup:
 `gradlew.bat run --args=--docking-feasibility-smoke` measures CPU image transport;

@@ -1,0 +1,134 @@
+name: Editor distribution
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-release:
+    name: Build Release native artifacts (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x64
+            runner: windows-2022
+            preset: release
+            output: build/release
+            bridge: tools/editor-native/Release/sle_editor_native.dll
+          - target: linux-x64
+            runner: ubuntu-24.04
+            preset: linux-x64-release
+            output: build/linux-x64-release
+            bridge: tools/editor-native/libsle_editor_native.so
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install GLFW build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config libgl-dev libegl-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libwayland-dev libxkbcommon-dev wayland-protocols
+      - name: Build the native bridge and game runtime
+        run: |
+          python -m pip install jinja2
+          python_exe="$(python -c 'import sys; print(sys.executable)')"
+          cmake --preset ${{ matrix.preset }} -DSLE_BUILD_EDITOR=ON "-DPython_EXECUTABLE=$python_exe" "-DPython3_EXECUTABLE=$python_exe"
+          cmake --build ${{ matrix.output }} --config Release --target sle_editor_native sle_runtime_bundle --parallel 4
+      - name: Archive native payload with file modes
+        run: |
+          mkdir -p native
+          cp "${{ matrix.output }}/${{ matrix.bridge }}" native/
+          cp -a "${{ matrix.output }}/runtime/Release" native/runtime
+          tar -C native -cf native.tar .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}-${{ github.sha }}
+          path: native.tar
+          if-no-files-found: error
+
+  package-editor:
+    name: Package editor (${{ matrix.target }})
+    needs: native-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x64
+            runner: windows-2022
+          - target: linux-x64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*-${{ github.sha }}
+          path: native
+      - name: Unpack both runtimes from this workflow run
+        shell: bash
+        run: |
+          for target in windows-x64 linux-x64; do
+            mkdir "native/$target"
+            tar -xf "native/native-$target-$GITHUB_SHA/native.tar" -C "native/$target"
+          done
+      - name: Build and verify the Windows editor and EXE installer
+        if: runner.os == 'Windows'
+        working-directory: tools/editor
+        shell: pwsh
+        run: |
+          ./gradlew.bat createDistributable packageExe --console=plain -PslePackageNativeLibrary=../../native/windows-x64/sle_editor_native.dll -PslePackageWindowsRuntimeBundle=../../native/windows-x64/runtime -PslePackageLinuxRuntimeBundle=../../native/linux-x64/runtime
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python packaging/check-editor-image.py 'build/compose/binaries/main/app/SLE Editor' build/packaged-resources windows-x64
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y squashfs-tools
+      - name: Build and verify the Linux editor, AppImage and portable archive
+        if: runner.os == 'Linux'
+        working-directory: tools/editor
+        shell: bash
+        run: |
+          bash ./gradlew createDistributable --console=plain \
+            -PslePackageNativeLibrary=../../native/linux-x64/libsle_editor_native.so \
+            -PslePackageWindowsRuntimeBundle=../../native/windows-x64/runtime \
+            -PslePackageLinuxRuntimeBundle=../../native/linux-x64/runtime
+          curl --fail --location --retry 3 -o "$RUNNER_TEMP/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          bash packaging/package-linux.sh 'build/compose/binaries/main/app/SLE Editor' build/editor-artifacts "$RUNNER_TEMP/appimagetool"
+          mkdir "$RUNNER_TEMP/extracted-appimage" "$RUNNER_TEMP/extracted-portable"
+          appimage="$(realpath build/editor-artifacts/SLE-Editor-linux-x64.AppImage)"
+          (cd "$RUNNER_TEMP/extracted-appimage" && "$appimage" --appimage-extract > /dev/null)
+          tar -xzf build/editor-artifacts/SLE-Editor-linux-x64.tar.gz -C "$RUNNER_TEMP/extracted-portable"
+          for image in "$RUNNER_TEMP/extracted-appimage/squashfs-root" "$RUNNER_TEMP/extracted-portable/SLE Editor"; do
+            python packaging/check-editor-image.py "$image" build/packaged-resources linux-x64
+            test -x "$image/lib/app/resources/runtime/linux-x64/engine_app"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sle-editor-${{ matrix.target }}-${{ github.sha }}
+          path: |
+            tools/editor/build/compose/binaries/main/exe/*.exe
+            tools/editor/build/editor-artifacts/*
+          if-no-files-found: error

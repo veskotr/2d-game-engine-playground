@@ -397,81 +397,88 @@ filesystem-authoritative. Runnable folder export is documented below and tracked
 
 Follow the [tilemap room walkthrough](../../examples/tilemap_room/README.md) to import a PNG, paint a room and export it.
 
-Build a prepared Windows x64 Release runtime once, using the existing Windows
-CMake build tree:
+On either editor host, choose **File → Export Game…** and select **Windows x64**,
+**Linux x64**, or **Both**. The editor uses a matching bundled runtime when
+available and prompts for a prepared Release runtime for each remaining target.
+Build each runtime on its target operating system and transfer its complete
+bundle to the editor host if needed. For example:
 
 ```powershell
-cmake --build build/debug --config Release --target sle_runtime_bundle --parallel 4
+cmake --build build/release --config Release --target sle_runtime_bundle --parallel 4
 ```
 
-The bundle appears at `build/debug/runtime/Release`. The same target works in a
-separately configured Release build tree. Export does not compile or download
-anything. Debug runtimes cannot be distributed through this workflow.
-
-Choose **File → Export Game…**, select that prepared runtime folder. The editor
-automatically creates an `Exports` folder inside your project and places the game
-in a subfolder named after the project folder. Repeated exports use `-2`, `-3`,
-and so on, preserving previous exports. The configured asset root must be separate
-from `Exports`; overlapping custom asset roots are rejected. A packaged Windows editor ships the
-runtime and skips the runtime chooser. Export uses saved files: unsaved
-scene/prefab drafts are kept in the editor and excluded from the game. Select a startup scene in Project
-Settings and save your intended changes before exporting. Export runs on a worker
-and reports completion or an error without replacing the current workspace.
-
-The delivery contains:
-
-```text
-My Delivery/
-  engine_app.exe
-  *.dll                    # Release runtime/dependency libraries
-  assets/                  # engine shaders, UI and fonts
-  notices/                 # dependency license notices from the build
-  sle-runtime.json         # versioned runtime file hashes
-  sle-distribution.json    # delivery file hashes and descriptor location
-  game/
-    game.sleproject
-    Assets/                # or the project's configured relative asset root
+```bash
+cmake --preset linux-x64-release
+cmake --build build/linux-x64-release --target sle_runtime_bundle --parallel 4
 ```
 
-Double-click `engine_app.exe` to run the saved startup scene. With no explicit
-config/project option the executable selects `game/game.sleproject` beside itself,
-independently of the working directory. Explicit `--project` and `--config` retain
-priority; executables without a delivered project keep their existing engine.json
-workflow. For a bounded diagnostic run:
+Select `build/release/runtime/Release` for Windows or
+`build/linux-x64-release/runtime/Release` for Linux. Export uses these bundles
+offline and requires no compiler. Keep the asset root and bundles separate from
+the output. The editor creates `<project>/Exports/<project-folder>` and uses
+`-2`, `-3`, and so on for repeat exports.
 
-```powershell
-C:/Deliveries/MyGame/engine_app.exe --frames 8
-```
+Choose a startup scene in Project Settings. When documents have unsaved changes,
+choose **Save and Export** to save existing project documents or **Export Saved
+Versions** to keep your drafts and export the files on disk. Give untitled
+documents a project filename first to include them. Export runs in the
+background and reports the output folder, package sizes, and any assets grouped
+to preserve file-relative lookups.
 
-The first distribution format is a folder containing ordinary source assets and
-UUID sidecars. It copies the complete asset tree, including unknown file types and
-Lua module directories, because dynamic asset paths cannot be inferred safely.
-Moving the delivery preserves references; edits to its original source project do
-not change the exported copy. Existing relative/dynamic XML, Lua IO and nested
-resource-format contracts still apply; export does not rewrite those strings or
-include arbitrary files outside the configured asset root.
+Each selected target gets a runnable subfolder and a matching download archive:
 
-A unique sibling staging folder receives the copy, native project validation and
-SHA-256 inventory checks before a no-overwrite publish. Missing/invalid metadata,
-unresolved UUIDs, source/runtime changes during export, damaged bundle files,
-links, case-insensitive name collisions and occupied destinations are rejected.
-For tile layers, export validates the tileset, its spritesheet image and region
-sidecar, and the tile IDs used by the scene.
-The exporter never assigns source UUIDs; Refresh Assets first if metadata is
-missing. Source `.sle` caches/editor state/recovery trash are excluded and retained
-in place. Native validation's staged entity template caches are removed before publishing.
-A running delivery may later create its own `.sle/runtime` derivatives, so keep
-its game directory writable. An interrupted export can leave a sibling
-`.sle-export-*` staging folder; the final destination appears only after validation.
+| Target | Subfolder | Archive | Example launcher |
+|---|---|---|---|
+| Windows x64 | `windows-x64/` | `windows-x64.zip` | `My Game.exe` |
+| Linux x64 | `linux-x64/` | `linux-x64.tar.gz` | `My Game` |
 
-The bundle includes app-local Release MSVC libraries and engine resources. It
-expects Windows 10 or later and a compatible OpenGL driver. Relocation and source
-independence are tested locally; a separate clean-machine deployment test remains
-necessary for any wider platform support claim. Installers, encrypted archives,
-asset pruning and content streaming are future formats.
+Each runnable folder includes the launcher, runtime files, `config.json`,
+`shared.slepkg`, one package per saved scene, and the release and distribution
+manifests. Both targets share identical config and package bytes. Copy the
+runnable folder or extract the archive, then launch from any working directory.
+Extract the Linux archive on Linux to restore the launcher's executable mode
+when transferring an export from Windows.
 
-**Export Game…** is the editor's game delivery action. Internal package tooling and
-the runtime still support `config.json` and `.slepkg`; see [game packages](GamePackages.md).
+Move or share the complete delivery folder. The launcher discovers its adjacent
+config and starts the saved startup scene. Explicit `--project` and `--config`
+retain priority. Older folder deliveries continue to launch through their
+adjacent `game/game.sleproject` descriptor. Single-package deliveries continue
+to use their adjacent `config.json`.
+
+The editor mounts the staged packages with the engine before publication and
+checks that the source, runtimes, staged files, and archives match their inventories.
+All selected deliveries are published together.
+Missing metadata, unresolved known dependencies, changed files, links and
+case-insensitive path collisions can fail the export. Use **Refresh Assets** to
+assign missing identities. Project-local `.sle` caches and recovery trash
+stay in the source project. The no-overwrite publish preserves previous exports.
+
+The Windows x64 Release bundle requires Windows 10 or later and a compatible
+OpenGL driver. See [Game packages](GamePackages.md) for ownership and the
+delivery format.
+
+## Export and apply a content update
+
+Choose **File → Export Content Update…** and select the folder of the earlier
+Windows x64 packaged release, such as the `windows-x64/` subfolder. Use the
+same project and exact runtime bundle as that release. Linux x64 supports full
+exports only. The baseline needs the release and distribution manifests from
+a full automatic package export or an applied update. The same saved-document
+choices apply as for a full export.
+The editor writes a numbered update folder under the project's `Exports/`
+directory when content or launch configuration changes. Use **Export Game…**
+for a full delivery when the runtime has changed.
+
+On Windows, deeply nested project folders can exceed native path limits during
+update validation. If a missing-package error points into an update staging
+folder, move the project closer to the drive root and retry.
+
+Choose **File → Apply Content Update…**, then select the base delivery and the
+update folder. Use a clean copy of the original delivery with its manifests
+and recorded files intact. The editor verifies the files and mounts the
+reconstructed game before publishing a numbered sibling folder. Start the
+executable in that folder to play the update. The original delivery remains
+available for rollback. See the [content update format](GamePackages.md#content-update-format).
 
 ## Validation
 
@@ -515,11 +522,14 @@ and windowed `integration_project_play_path` cover resolver failures and actual
 Lua gameplay after relocation.
 
 `gradlew.bat run --args=--project-distribution-smoke` extends the project runtime
-fixture with actual Export Game menu/choosers, saved-source copies, native entity template
-cache cleanup, source trash preservation, dirty-draft/context preservation,
-collision failure and a relocated Release no-config launch from an unrelated cwd.
-It changes the original script temporarily to prove delivery independence and
-restores it afterward. Reports: `build/reports/project-distribution-editor.png`
-and `project-distribution-standalone.log`. Filesystem tests cover source/bundle
+fixture with the Export Game menu, both save choices, and both target bundles.
+Use `SLE_SMOKE_WINDOWS_RUNTIME` and `SLE_SMOKE_LINUX_RUNTIME` to point to prepared
+bundles outside the default build paths. The smoke compares releases and their
+package hashes, checks recovery trash and draft preservation, and launches the
+archive extracted for the host platform from an unrelated working directory. It also exports a two-scene
+tilemap project with a shared template and verifies that a failed export
+preserves earlier deliveries. Reports include
+`build/reports/project-distribution-editor.png` and
+`project-distribution-standalone.log`. Filesystem tests cover source/bundle
 changes, custom roots, missing metadata, missing DLLs, staged corruption,
 validation failure and concurrent destination arrival.

@@ -16,6 +16,21 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "linux-x64-release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-x64-release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_SHARED_LIBS": "OFF",
+        "SLE_BUILD_EDITOR": "OFF"
+      }
     }
   ]
 }

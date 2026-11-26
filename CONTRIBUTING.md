@@ -20,10 +20,20 @@ Initial configuration downloads dependencies declared in
 stub generation target. Run executables from the repository root so asset paths resolve.
 See [README.md](README.md) for app and example commands.
 
-The supplied presets use the Visual Studio generator. They cannot run directly
-in a Linux/WSL shell. Use Windows tooling for the supported workflow; a Linux
-port needs a separate build directory, generator, and system graphics dependencies.
-Do not reuse a Windows CMake cache from Linux.
+The `debug` and `release` presets use the Visual Studio generator. On Linux x64,
+install Ninja, a C++20 compiler, Python with Jinja2, and the graphics development
+packages listed in the [Linux editor setup](tools/editor/README.md#build-and-run-linux-x64--wsl2).
+The standalone runtime build does not require a JDK.
+
+```bash
+cmake --preset linux-x64-release
+cmake --build build/linux-x64-release --target sle_runtime_bundle --parallel
+```
+
+The bundle is staged at `build/linux-x64-release/runtime/Release`. It includes
+`engine_app`, engine assets, dependency notices, and the SHA-256 inventory
+`sle-runtime.json`. The launcher uses system glibc, C++ runtime, and desktop
+graphics and audio libraries. Its ABI requirements depend on the build host.
 
 ## VS Code
 
@@ -45,8 +55,10 @@ Visual Studio 2022, plus JDK 21 for the editor (found the same way as
 | Editor: Package Installers (MSI/EXE) | Same, then `packageDistributionForCurrentOS` |
 | Editor: Run Packaged App | Starts the packaged `SLE Editor.exe` |
 
-To produce the Windows editor executable yourself, run **Editor: Package Windows App**,
-or the same steps from a terminal:
+To produce the Windows editor executable yourself, stage the Linux x64 Release
+runtime at `build/linux-x64-release/runtime/Release` first, then run **Editor:
+Package Windows App** or the commands below. For other bundle locations and
+Linux packaging, see [package a standalone editor](tools/editor/README.md#package-a-standalone-editor).
 
 ```powershell
 cmake --preset release -DSLE_BUILD_EDITOR=ON

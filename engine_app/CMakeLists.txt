@@ -31,10 +31,21 @@ add_custom_command(TARGET engine_app POST_BUILD
 
 # A separate build artifact: authoring/export never invokes the compiler implicitly.
 if(WIN32 AND MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(sle_runtime_platform windows-x64)
     set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
     set(CMAKE_INSTALL_DEBUG_LIBRARIES FALSE)
     include(InstallRequiredSystemLibraries)
     get_filename_component(sle_compiler_directory "${CMAKE_CXX_COMPILER}" DIRECTORY)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$"
+       AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT BUILD_SHARED_LIBS)
+    set(sle_runtime_platform linux-x64)
+    set_target_properties(engine_app PROPERTIES
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH "$ORIGIN/lib"
+    )
+endif()
+
+if(sle_runtime_platform)
     configure_file("${CMAKE_SOURCE_DIR}/cmake/RuntimeBundleConfig.cmake.in"
         "${CMAKE_CURRENT_BINARY_DIR}/RuntimeBundleConfig.cmake" @ONLY)
     add_custom_target(sle_runtime_bundle

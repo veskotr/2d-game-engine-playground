@@ -55,7 +55,7 @@ else()
         if(NOT result EQUAL 0 OR NOT "${output}${errors}" MATCHES "Completed 8 frames; scene: second")
             message(FATAL_ERROR "Packaged game launch failed for ${filter} (exit ${result}): ${output}${errors}")
         endif()
-        if("${output}${errors}" MATCHES "cross-package module missing|packaged tag query failed|failed to load texture|sprite region .*missing or outside")
+        if("${output}${errors}" MATCHES "cross-package module missing|dynamic project asset lookup failed|packaged tag query failed|failed to load texture|sprite region .*missing or outside")
             message(FATAL_ERROR "A packaged dependency failed to load for ${filter}: ${output}${errors}")
         endif()
         execute_process(COMMAND "${SAMPLER_TEST}" --check-package-sampler "${root}/delivery/config.json" "${filter}"

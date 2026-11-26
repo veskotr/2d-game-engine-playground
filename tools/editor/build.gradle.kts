@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
@@ -9,7 +11,7 @@ plugins {
 group = "sle.editor"
 // Editor version: 0.MINOR.PATCH while pre-1.0; bump MINOR for each added editor feature.
 // The engine version lives in the top-level CMakeLists.txt project(VERSION).
-version = "0.32.0"
+version = "0.34.0"
 
 val hostOs = System.getProperty("os.name")
 val isWindowsHost = hostOs.startsWith("Windows")
@@ -66,36 +68,81 @@ sourceSets.main { resources.srcDir(generateEditorVersion) }
 val packagedNativeLibrary = providers.gradleProperty("slePackageNativeLibrary").orElse(
     rootDir.resolve(
         if (isWindowsHost) "../../build/release/tools/editor-native/Release/sle_editor_native.dll"
-        else "../../build/release/tools/editor-native/libsle_editor_native.so",
+        else "../../build/linux-x64-release/tools/editor-native/libsle_editor_native.so",
     ).canonicalPath,
 )
-// The prebuilt standalone runtime (engine_app.exe, DLLs, engine assets) that Build/Export Game
-// copy beside game data, so editor users never need a compiler. Windows-only for now:
-// cmake/BuildRuntimeBundle.cmake produces Windows x64 bundles only.
-val packagedRuntimeBundle = providers.gradleProperty("slePackageRuntimeBundle").orElse(
-    rootDir.resolve("../../build/release/runtime/Release").canonicalPath,
+// Use a common resource directory so both export targets are available on either host.
+val runtimeBundles = mapOf(
+    "windows-x64" to providers.gradleProperty("slePackageWindowsRuntimeBundle")
+        .orElse(providers.gradleProperty("slePackageRuntimeBundle"))
+        .orElse(rootDir.resolve("../../build/release/runtime/Release").canonicalPath),
+    "linux-x64" to providers.gradleProperty("slePackageLinuxRuntimeBundle")
+        .orElse(rootDir.resolve("../../build/linux-x64-release/runtime/Release").canonicalPath),
 )
+val runtimeLaunchers = mapOf("windows-x64" to "engine_app.exe", "linux-x64" to "engine_app")
+val engineCmake = rootDir.resolve("../../CMakeLists.txt")
+val engineVersion = providers.fileContents(layout.projectDirectory.file("../../CMakeLists.txt")).asText.map { cmake ->
+    requireNotNull(Regex("""project\(GameEngine\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)""").find(cmake)).groupValues[1]
+}
 val packagedResources = layout.buildDirectory.dir("packaged-resources")
 val preparePackagedResources by tasks.registering(Sync::class) {
     into(packagedResources)
     from(rootDir.resolve("../../assets")) { into("common/assets") }
     from(packagedNativeLibrary.map { file(it) }) { into(if (isWindowsHost) "windows-x64" else "linux-x64") }
-    if (isWindowsHost) from(packagedRuntimeBundle.map { file(it) }) { into("windows-x64/runtime") }
+    for ((target, bundle) in runtimeBundles) {
+        from(bundle.map { file(it) }) {
+            into("common/runtime/$target")
+            if (isLinuxHost && target == "linux-x64") {
+                filesMatching("engine_app") { permissions { unix("755") } }
+            }
+        }
+    }
+}
+val verifyPackagedResources by tasks.registering {
+    dependsOn(preparePackagedResources)
+    inputs.dir(packagedResources)
+    inputs.file(engineCmake)
+    doLast {
+        val resources = packagedResources.get().asFile
+        val library = file(packagedNativeLibrary.get())
+        val host = if (isWindowsHost) "windows-x64" else "linux-x64"
+        check(resources.resolve("$host/${library.name}").isFile) {
+            "Engine library missing: $library. Build sle_editor_native in Release or pass -PslePackageNativeLibrary."
+        }
+        for ((target, bundle) in runtimeBundles) {
+            val runtime = resources.resolve("common/runtime/$target")
+            val inventory = runtime.resolve("sle-runtime.json")
+            check(inventory.isFile) { "Missing $target Release runtime bundle at ${bundle.get()}" }
+            val manifest = JsonSlurper().parse(inventory) as Map<*, *>
+            val launcher = runtimeLaunchers.getValue(target)
+            check(manifest["format"] == "sle-runtime" && manifest["version"] == 1 &&
+                manifest["platform"] == target && manifest["configuration"] == "Release" &&
+                manifest["engineVersion"] == engineVersion.get() && manifest["executable"] == launcher) {
+                "Expected $target SLE ${engineVersion.get()} Release runtime at ${bundle.get()}"
+            }
+            val digest = MessageDigest.getInstance("SHA-256")
+            val actual = runtime.walkTopDown().filter { it.isFile && it != inventory }.associate { payload ->
+                payload.inputStream().buffered().use { stream ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val count = stream.read(buffer)
+                        if (count < 0) break
+                        digest.update(buffer, 0, count)
+                    }
+                }
+                payload.relativeTo(runtime).invariantSeparatorsPath to digest.digest().toHexString()
+            }
+            check(actual == manifest["files"] && launcher in actual && actual.keys.any { it.startsWith("assets/shaders/") }) {
+                "Runtime bundle files are missing, modified or unexpected: ${bundle.get()}"
+            }
+        }
+    }
 }
 tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(preparePackagedResources) }
 tasks.matching { it.name == "createDistributable" || it.name.startsWith("package") }.configureEach {
+    dependsOn(verifyPackagedResources)
     // Compose's packaging tasks otherwise stay UP-TO-DATE when only app resources change.
     inputs.files(preparePackagedResources).withPropertyName("slePackagedResources")
-    doFirst {
-        val library = file(packagedNativeLibrary.get())
-        check(library.isFile) {
-            "Engine library missing: $library. Build sle_editor_native in Release (or pass -PslePackageNativeLibrary)."
-        }
-        val runtime = file(packagedRuntimeBundle.get())
-        check(!isWindowsHost || runtime.resolve("sle-runtime.json").isFile) {
-            "Runtime bundle missing: $runtime. Build sle_runtime_bundle in Release (or pass -PslePackageRuntimeBundle)."
-        }
-    }
 }
 
 compose.desktop {

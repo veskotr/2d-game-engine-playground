@@ -2,9 +2,15 @@ package sle.editor.project
 
 import kotlinx.serialization.json.*
 import sle.editor.project.assets.AssetIdentity
+import java.io.RandomAccessFile
 import java.nio.file.*
 import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
+
+internal enum class GameTarget(val id: String, val label: String, val launcher: String) {
+    Windows("windows-x64", "Windows x64", "engine_app.exe"),
+    Linux("linux-x64", "Linux x64", "engine_app"),
+}
 
 /** Saved-source delivery. No scanner: export must never create metadata in the source. */
 internal object ProjectDistribution {
@@ -17,13 +23,16 @@ internal object ProjectDistribution {
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
-    internal fun inventory(root: Path): Inventory {
+    internal fun inventory(root: Path, caseInsensitive: Boolean = true): Inventory {
         val folders=mutableListOf<String>();val files=sortedMapOf<String,String>();val names=mutableSetOf<String>()
         Files.walkFileTree(root,object: SimpleFileVisitor<Path>() {
             private fun checked(path: Path): String {
                 require(!Files.isSymbolicLink(path) && path.toRealPath()==path) { "Distribution cannot include links: $path" }
-                val relative=root.relativize(path).toString().replace('\\','/')
-                require(names.add(relative.lowercase(java.util.Locale.ROOT))) { "Case-insensitive filename collision: $relative" }
+                val relative=root.relativize(path).joinToString("/")
+                if (caseInsensitive) {
+                    val folded = relative.map(Char::uppercaseChar).joinToString("")
+                    require(names.add(folded)) { "Case-insensitive filename collision: $relative" }
+                }
                 return relative
             }
             override fun preVisitDirectory(dir: Path,attrs: BasicFileAttributes): FileVisitResult {
@@ -55,40 +64,66 @@ internal object ProjectDistribution {
             }
         }
     }
-    private fun hasTagComponents(assets: Path, inventory: Inventory): Boolean {
-        fun hasTags(fields: JsonElement?) = (fields as? JsonObject)?.containsKey("Tags") == true
-
-        return inventory.files.keys.asSequence()
+    private fun anyProjectDocument(assets: Path, inventory: Inventory, matches: (JsonObject) -> Boolean): Boolean =
+        inventory.files.keys.asSequence()
             .filter { name -> ProjectDocumentKind.entries.any { name.endsWith(it.suffix, ignoreCase = true) } }
             .any { name ->
                 val path = assets.resolve(name)
                 require(Files.size(path) <= 16 * 1024 * 1024) { "Oversized project document: $name" }
                 val document = Json.parseToJsonElement(Files.readString(path)).jsonObject["document"] as? JsonObject
-                val entities = document?.get("entities") as? JsonArray
-                val prefabs = document?.get("prefabs") as? JsonArray
-                entities.orEmpty().any { hasTags((it as? JsonObject)?.get("components")) } ||
-                    prefabs.orEmpty().any { instance ->
-                        val overrides = (instance as? JsonObject)?.get("overrides") as? JsonObject
-                        overrides?.values.orEmpty().any(::hasTags)
-                    }
+                document != null && matches(document)
+            }
+
+    private fun hasTagComponents(document: JsonObject): Boolean {
+        fun hasTags(fields: JsonElement?) = (fields as? JsonObject)?.containsKey("Tags") == true
+
+        val entities = document["entities"] as? JsonArray
+        val prefabs = document["prefabs"] as? JsonArray
+        return entities.orEmpty().any { hasTags((it as? JsonObject)?.get("components")) } ||
+            prefabs.orEmpty().any { instance ->
+                val overrides = (instance as? JsonObject)?.get("overrides") as? JsonObject
+                overrides?.values.orEmpty().any(::hasTags)
             }
     }
 
-    /** Complete, unmodified Windows x64 Release bundle produced by sle_runtime_bundle. */
-    internal fun runtimeInventory(runtime: Path, settings: ProjectSettings, assets: Path, assetFiles: Inventory): Inventory {
-        val runtimeFiles=inventory(runtime)
-        val manifest=Json.parseToJsonElement(Files.readString(runtime.resolve("sle-runtime.json"))).jsonObject
+    internal data class RuntimeInventory(val inventory: Inventory, val engineVersion: String?)
+
+    /** Complete, unmodified Release bundle produced by sle_runtime_bundle for the selected target. */
+    internal fun runtimeInventory(
+        runtime: Path,
+        settings: ProjectSettings,
+        assets: Path,
+        assetFiles: Inventory,
+        target: GameTarget = GameTarget.Windows,
+        packaged: Boolean = false,
+    ): RuntimeInventory {
+        val runtimeFiles = inventory(runtime, caseInsensitive = target == GameTarget.Windows)
+        val manifestPath = runtime.resolve("sle-runtime.json")
+        require("sle-runtime.json" in runtimeFiles.files) { "Missing runtime inventory in $runtime" }
+        val manifestBytes = Files.readAllBytes(manifestPath)
+        val manifestDigest = MessageDigest.getInstance("SHA-256").digest(manifestBytes).toHexString()
+        require(manifestDigest == runtimeFiles.files.getValue("sle-runtime.json")) { "Runtime inventory changed during export" }
+        val manifest = Json.parseToJsonElement(manifestBytes.decodeToString()).jsonObject
         require(manifest["format"]==JsonPrimitive("sle-runtime") && manifest["version"]==JsonPrimitive(1) &&
-            manifest["platform"]==JsonPrimitive("windows-x64") && manifest["configuration"]==JsonPrimitive("Release") &&
-            manifest["executable"]==JsonPrimitive("engine_app.exe")) { "Select a Windows x64 Release SLE runtime bundle" }
-        val version = (manifest["engineVersion"] as? JsonPrimitive)?.content.orEmpty().split('.')
-        val numbers = version.map(String::toIntOrNull)
-        fun compatible(minor: Int) = numbers.size == 3 && numbers.all { it != null && it >= 0 } &&
-            (numbers[0]!! > 0 || numbers[1]!! >= minor)
+            manifest["platform"]==JsonPrimitive(target.id) && manifest["configuration"]==JsonPrimitive("Release") &&
+            manifest["executable"]==JsonPrimitive(target.launcher)) { "Select a ${target.label} Release SLE runtime bundle" }
+        val engineVersion = manifest["engineVersion"]?.let {
+            require(it is JsonPrimitive && it.isString && it.content.matches(Regex("[0-9]+\\.[0-9]+\\.[0-9]+"))) {
+                "Invalid SLE runtime engine version"
+            }
+            it.content
+        }
+        val version = engineVersion?.split('.')?.map {
+            requireNotNull(it.toIntOrNull()) { "Invalid SLE runtime engine version" }
+        }
+        fun compatible(minor: Int) = version != null && (version[0] > 0 || version[1] >= minor)
+        require(target != GameTarget.Linux || compatible(33)) { "Linux x64 export requires an SLE 0.33 or newer runtime bundle" }
+        require(!packaged || compatible(16)) { "Packaged Windows games require an SLE 0.16 or newer runtime bundle" }
         val hasCollisionSettings = settings.collisionLayers.json().isNotEmpty()
         val minimumMinor = when {
+            !compatible(33) && anyProjectDocument(assets, assetFiles) { (it["tileLayers"] as? JsonArray).orEmpty().isNotEmpty() } -> 33
             settings.inputActions.isNotEmpty() -> 30
-            settings.tags.isNotEmpty() || (!compatible(29) && hasTagComponents(assets, assetFiles)) -> 29
+            settings.tags.isNotEmpty() || (!compatible(29) && anyProjectDocument(assets, assetFiles, ::hasTagComponents)) -> 29
             settings.sortingLayers.isNotEmpty() -> 28
             hasCollisionSettings -> 27
             settings.artStyle != null -> 26
@@ -97,6 +132,7 @@ internal object ProjectDistribution {
         if (minimumMinor > 0) {
             require(compatible(minimumMinor)) {
                 val feature = when (minimumMinor) {
+                    33 -> "Native tile layers"
                     30 -> "Project input actions"
                     29 -> "Project tags"
                     28 -> "Sorting layer labels"
@@ -108,17 +144,61 @@ internal object ProjectDistribution {
         }
         val expected=manifest.getValue("files").jsonObject.mapValues { (_,value) -> value.jsonPrimitive.content }
         require(expected==runtimeFiles.files-"sle-runtime.json") { "Runtime bundle files are missing, modified or unexpected; rebuild sle_runtime_bundle" }
-        require("engine_app.exe" in runtimeFiles.files && runtimeFiles.files.keys.any { it.startsWith("assets/shaders/") }) { "Runtime executable/resources are missing" }
+        require(target.launcher in runtimeFiles.files && runtimeFiles.files.keys.any { it.startsWith("assets/shaders/") }) { "Runtime executable/resources are missing" }
+        require(launcherMatchesTarget(runtime.resolve(target.launcher), target)) {
+            "Expected an executable ${target.label} launcher at ${runtime.resolve(target.launcher)}"
+        }
         require(runtimeFiles.files.keys.none { it.substringBefore('/').equals("game",true) || it.substringBefore('/').equals(".sle",true) ||
-            it.equals("sle-distribution.json",true) || it.equals("config.json",true) || it.endsWith(".slepkg",true) }) { "Select a runtime bundle, not an exported game" }
-        return runtimeFiles
+            it.equals("sle-distribution.json",true) || it.equals(GameContentUpdate.MANIFEST,true) || it.equals(GameBuild.RELEASE,true) || it.equals("config.json",true) || it.endsWith(".slepkg",true) }) { "Select a runtime bundle, not an exported game" }
+        val paths = runtimeFiles.folders + runtimeFiles.files.keys
+        if (target == GameTarget.Windows) paths.forEach(GamePackageWriter::requirePortable)
+        else require(paths.none { path -> path.any { it.code < 32 || it == '\\' } }) { "Invalid path in Linux runtime bundle" }
+        return RuntimeInventory(runtimeFiles, engineVersion)
     }
+    private fun launcherMatchesTarget(path: Path, target: GameTarget): Boolean = RandomAccessFile(path.toFile(), "r").use { binary ->
+        fun word() = java.lang.Short.reverseBytes(binary.readShort()).toInt() and 0xffff
+        when (target) {
+            GameTarget.Windows -> {
+                if (binary.length() < 64 || binary.readUnsignedShort() != 0x4d5a) return@use false // MZ
+                binary.seek(60)
+                val pe = Integer.reverseBytes(binary.readInt()).toLong()
+                if (pe < 64 || pe + 26 > binary.length()) return@use false
+                binary.seek(pe)
+                if (binary.readInt() != 0x50450000 || word() != 0x8664) return@use false // PE, AMD64
+                binary.seek(pe + 20)
+                val optionalHeaderSize = word()
+                val characteristics = word()
+                optionalHeaderSize >= 2 && pe + 24 + optionalHeaderSize <= binary.length() &&
+                    characteristics and 0x2002 == 2 && word() == 0x20b // Executable PE32+, not a DLL
+            }
+            GameTarget.Linux -> {
+                if (binary.length() < 64 || binary.readInt() != 0x7f454c46 ||
+                    binary.readUnsignedByte() != 2 || binary.readUnsignedByte() != 1 ||
+                    binary.readUnsignedByte() != 1) return@use false // Little-endian ELF64
+                binary.seek(16)
+                val type = word()
+                (type == 2 || type == 3) && word() == 62 // ELF executable or PIE for x86-64
+            }
+        }
+    }
+
     /** Publish inside the project, keeping earlier exports intact. */
     fun exportAutomatically(project: OpenedProject,runtimeBundle: Path,validate: (Path)->Unit): Path {
+        return export(project,runtimeBundle,nextExportDestination(project,runtimeBundle),validate)
+    }
+
+    internal fun nextExportDestination(project: OpenedProject, runtimeBundle: Path): Path =
+        nextExportDestination(project, listOf(runtimeBundle))
+
+    internal fun nextExportDestination(project: OpenedProject, runtimeBundles: Collection<Path>): Path {
         val sourceRoot=project.root.toRealPath()
         val exports=sourceRoot.resolve("Exports")
         val assets=sle.editor.project.assets.assetPath(sourceRoot,project.assets)
         require(!assets.startsWith(exports) && !exports.startsWith(assets)) { "Asset root must be separate from Exports" }
+        for (bundle in runtimeBundles) {
+            require(!Files.isSymbolicLink(bundle)) { "Runtime bundle cannot be a link" }
+            require(!exports.startsWith(bundle.toRealPath())) { "Exports must be separate from the runtime bundle" }
+        }
         require(!Files.isSymbolicLink(exports)) { "Exports cannot be a link" }
         Files.createDirectories(exports)
         require(exports.toRealPath()==exports) { "Exports cannot point through a link" }
@@ -126,7 +206,7 @@ internal object ProjectDistribution {
         var target=exports.resolve(name)
         var number=2
         while(Files.exists(target,LinkOption.NOFOLLOW_LINKS)) target=exports.resolve("$name-${number++}")
-        return export(project,runtimeBundle,target,validate)
+        return target
     }
     fun export(project: OpenedProject,runtimeBundle: Path,destination: Path,validate: (Path)->Unit): Path {
         val source=ProjectFiles.open(project.file)
@@ -148,7 +228,7 @@ internal object ProjectDistribution {
         require(raw.parent.toRealPath()==raw.parent) { "Export destination cannot point through a link" }
         require(!Files.exists(target,LinkOption.NOFOLLOW_LINKS)) { "Export destination already exists; choose a new folder" }
         val assetFiles=inventory(assets);identities(assets,assetFiles)
-        val runtimeFiles=runtimeInventory(runtime, source.document.settings, assets, assetFiles)
+        val runtimeFiles=runtimeInventory(runtime, source.document.settings, assets, assetFiles).inventory
         val stage=Files.createTempDirectory(target.parent,".sle-export-")
         try {
             copy(runtime,stage,runtimeFiles)

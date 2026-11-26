@@ -147,3 +147,24 @@ The smoke launches the copied Release executable after relocation, without an
 explicit config/project and from an unrelated cwd. Native launcher discovery and
 explicit-config precedence also have `integration_distribution_launch_path`
 CTest coverage; build `engine_app` before running it.
+
+
+## GitHub application releases
+
+Follow [Publish a GitHub release](tools/editor/README.md#publish-a-github-release).
+The release tag must be `v` followed by the editor version in
+`tools/editor/build.gradle.kts`. Publishing through GitHub's Releases screen
+creates the selected new tag and triggers tested Windows/Linux application builds;
+Actions attaches the installer, AppImage, portable archives, and checksums while
+preserving the release notes. Commit and push the intended sources first.
+
+Before changing release tooling, run:
+
+```bash
+python -m unittest discover -s tools/editor/packaging/tests -p 'test_*.py'
+actionlint .github/workflows/editor-distribution.yml
+```
+
+Use **Actions → Editor distribution → Run workflow** for artifact-only preview
+builds. A full hosted release run remains separate validation from local archive
+and workflow checks.

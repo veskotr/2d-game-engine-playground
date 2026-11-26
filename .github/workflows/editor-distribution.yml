@@ -1,14 +1,69 @@
 name: Editor distribution
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: editor-distribution-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  validate:
+    name: Validate release version and packaging tools
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      engine_version: ${{ steps.metadata.outputs.engine_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Test release packaging tools
+        run: python -m unittest discover -s tools/editor/packaging/tests -p 'test_*.py'
+      - name: Validate the selected tag against the source version
+        id: metadata
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: python tools/editor/packaging/release.py metadata --event-name "$EVENT_NAME" --event "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+
+  editor-tests:
+    name: Test the tagged editor
+    needs: validate
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Run editor unit tests
+        working-directory: tools/editor
+        run: .\gradlew.bat test --no-daemon --console=plain
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-editor-test-reports-${{ github.sha }}
+          path: |
+            tools/editor/build/reports/tests/test/
+            tools/editor/build/test-results/test/
+          if-no-files-found: warn
+          overwrite: true
+
   native-release:
     name: Build Release native artifacts (${{ matrix.target }})
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
@@ -29,6 +84,9 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -58,10 +116,11 @@ jobs:
           name: native-${{ matrix.target }}-${{ github.sha }}
           path: native.tar
           if-no-files-found: error
+          overwrite: true
 
   package-editor:
     name: Package editor (${{ matrix.target }})
-    needs: native-release
+    needs: [validate, native-release, editor-tests]
     strategy:
       fail-fast: false
       matrix:
@@ -71,8 +130,13 @@ jobs:
           - target: linux-x64
             runner: ubuntu-24.04
     runs-on: ${{ matrix.runner }}
+    env:
+      EDITOR_VERSION: ${{ needs.validate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -99,12 +163,20 @@ jobs:
           ./gradlew.bat createDistributable packageExe --console=plain -PslePackageNativeLibrary=../../native/windows-x64/sle_editor_native.dll -PslePackageWindowsRuntimeBundle=../../native/windows-x64/runtime -PslePackageLinuxRuntimeBundle=../../native/linux-x64/runtime
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python packaging/check-editor-image.py 'build/compose/binaries/main/app/SLE Editor' build/packaged-resources windows-x64
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python packaging/release.py package --host windows-x64 --version "$env:EDITOR_VERSION" --image 'build/compose/binaries/main/app/SLE Editor' --installer-dir build/compose/binaries/main/exe --output build/release-assets
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $archive = "build/release-assets/SLE-Editor-$env:EDITOR_VERSION-windows-x64.zip"
+          $extracted = Join-Path $env:RUNNER_TEMP 'extracted-windows-editor'
+          Expand-Archive -LiteralPath $archive -DestinationPath $extracted
+          python packaging/check-editor-image.py (Join-Path $extracted 'SLE Editor') build/packaged-resources windows-x64
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Install Linux packaging tools
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y squashfs-tools
-      - name: Build and verify the Linux editor, AppImage and portable archive
+          sudo apt-get install -y squashfs-tools unzip
+      - name: Build and verify the Linux editor, AppImage and portable archives
         if: runner.os == 'Linux'
         working-directory: tools/editor
         shell: bash
@@ -113,22 +185,76 @@ jobs:
             -PslePackageNativeLibrary=../../native/linux-x64/libsle_editor_native.so \
             -PslePackageWindowsRuntimeBundle=../../native/windows-x64/runtime \
             -PslePackageLinuxRuntimeBundle=../../native/linux-x64/runtime
+          test -x 'build/compose/binaries/main/app/SLE Editor/lib/app/resources/runtime/linux-x64/engine_app'
           curl --fail --location --retry 3 -o "$RUNNER_TEMP/appimagetool" \
             https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
           chmod +x "$RUNNER_TEMP/appimagetool"
           bash packaging/package-linux.sh 'build/compose/binaries/main/app/SLE Editor' build/editor-artifacts "$RUNNER_TEMP/appimagetool"
-          mkdir "$RUNNER_TEMP/extracted-appimage" "$RUNNER_TEMP/extracted-portable"
-          appimage="$(realpath build/editor-artifacts/SLE-Editor-linux-x64.AppImage)"
+          python packaging/release.py package --host linux-x64 --version "$EDITOR_VERSION" \
+            --image 'build/compose/binaries/main/app/SLE Editor' \
+            --linux-packages build/editor-artifacts --output build/release-assets
+          mkdir "$RUNNER_TEMP/extracted-appimage" "$RUNNER_TEMP/extracted-portable" "$RUNNER_TEMP/extracted-linux-zip"
+          appimage="$(realpath "build/release-assets/SLE-Editor-$EDITOR_VERSION-linux-x64.AppImage")"
           (cd "$RUNNER_TEMP/extracted-appimage" && "$appimage" --appimage-extract > /dev/null)
-          tar -xzf build/editor-artifacts/SLE-Editor-linux-x64.tar.gz -C "$RUNNER_TEMP/extracted-portable"
-          for image in "$RUNNER_TEMP/extracted-appimage/squashfs-root" "$RUNNER_TEMP/extracted-portable/SLE Editor"; do
+          tar -xzf "build/release-assets/SLE-Editor-$EDITOR_VERSION-linux-x64.tar.gz" -C "$RUNNER_TEMP/extracted-portable"
+          unzip -q "build/release-assets/SLE-Editor-$EDITOR_VERSION-linux-x64.zip" -d "$RUNNER_TEMP/extracted-linux-zip"
+          for image in "$RUNNER_TEMP/extracted-appimage/squashfs-root" "$RUNNER_TEMP/extracted-portable/SLE Editor" "$RUNNER_TEMP/extracted-linux-zip/SLE Editor"; do
             python packaging/check-editor-image.py "$image" build/packaged-resources linux-x64
+            test -x "$image/bin/SLE Editor"
             test -x "$image/lib/app/resources/runtime/linux-x64/engine_app"
           done
       - uses: actions/upload-artifact@v4
         with:
           name: sle-editor-${{ matrix.target }}-${{ github.sha }}
-          path: |
-            tools/editor/build/compose/binaries/main/exe/*.exe
-            tools/editor/build/editor-artifacts/*
+          path: tools/editor/build/release-assets/*
           if-no-files-found: error
+          overwrite: true
+      - name: Summarize downloads
+        shell: bash
+        run: |
+          echo '## Editor downloads' >> "$GITHUB_STEP_SUMMARY"
+          for file in tools/editor/build/release-assets/*; do
+            printf -- '- `%s`\n' "$(basename "$file")" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  publish:
+    name: Attach application downloads to the GitHub release
+    if: github.event_name == 'release'
+    needs: [validate, package-editor]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      EDITOR_VERSION: ${{ needs.validate.outputs.version }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sle-editor-*-${{ github.sha }}
+          path: release-assets
+          merge-multiple: true
+      - name: Validate all five downloads and generate checksums
+        run: python tools/editor/packaging/release.py checksums --directory release-assets --version "$EDITOR_VERSION"
+      - name: Confirm the release still points at the built commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          actual_sha="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)"
+          test "$actual_sha" = "$GITHUB_SHA" || { echo 'Release tag changed after the build; refusing upload.' >&2; exit 1; }
+          gh release view "$RELEASE_TAG" --repo "$GH_REPO" --json tagName,isDraft,url
+      - name: Upload downloads and checksums without changing release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Upload checksums last so a failed retry never pairs new sums with old downloads.
+          gh release upload "$RELEASE_TAG" release-assets/SLE-Editor-* --repo "$GH_REPO" --clobber
+          gh release upload "$RELEASE_TAG" release-assets/SHA256SUMS.txt --repo "$GH_REPO" --clobber
+          printf 'Downloads attached to release `%s`.\n' "$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"

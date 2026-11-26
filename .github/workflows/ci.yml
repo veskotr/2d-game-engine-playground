@@ -29,6 +29,9 @@ jobs:
       - name: Test Lua API maintenance tooling
         run: python -m unittest discover -s EngineModules/Scripting/tools/tests
 
+      - name: Test release packaging tools
+        run: python -m unittest discover -s tools/editor/packaging/tests -p 'test_*.py'
+
       - name: Validate Lua API manifest and generated stub
         run: python EngineModules/Scripting/tools/generate_lua_api_stub.py --check
 

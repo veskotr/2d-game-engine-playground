@@ -548,9 +548,65 @@ Use `-PslePackageNativeLibrary=<path>` if the Release bridge is outside the
 default CMake build directory.
 
 The [Editor distribution workflow](../../.github/workflows/editor-distribution.yml)
-builds both native payloads for one revision and packages the Windows EXE, Linux
-AppImage, and portable TAR.GZ as workflow artifacts. The clean desktop support
-matrix is tracked in the [distribution plan](../../docs/plans/cross-platform-distribution.md).
+builds both native payloads from the same source commit and verifies that each
+editor contains its Java runtime, native bridge, engine assets, and both game
+export runtimes. Manual **Actions → Editor distribution → Run workflow** runs
+produce downloadable preview artifacts without publishing a release. The clean
+desktop support matrix is tracked in the
+[distribution plan](../../docs/plans/cross-platform-distribution.md).
+
+### Publish a GitHub release
+
+1. Commit and push the intended source, including the release workflow. Set the
+   editor `version` in `tools/editor/build.gradle.kts` to the version being
+   released. Engine versioning in the root `CMakeLists.txt` stays independent.
+2. In GitHub, open **Releases → Draft a new release**. Under **Choose a tag**,
+   type `v<editor-version>` (for example, `v0.34.1`) and choose **Create new tag**.
+   Select the branch or commit containing that version and the workflow.
+3. Enter the release title and notes, or use GitHub's **Generate release notes**.
+   Optionally mark it as a prerelease, then click **Publish release**. GitHub
+   creates the new tag. The workflow builds the tagged commit, runs the editor
+   tests, verifies both platform packages, and attaches the application downloads.
+   Your title and notes are preserved. Downloads appear after Actions finishes.
+
+A release has these six assets (replace `<version>` with the editor version):
+
+| Download | Use |
+|---|---|
+| `SLE-Editor-<version>-windows-x64-setup.exe` | Windows installer |
+| `SLE-Editor-<version>-windows-x64.zip` | Portable Windows app; extract the complete folder and run `SLE Editor.exe` |
+| `SLE-Editor-<version>-linux-x64.AppImage` | Linux app; make executable, then run |
+| `SLE-Editor-<version>-linux-x64.zip` | Portable Linux app; extract with Unix permissions preserved and run `SLE Editor/bin/SLE Editor` |
+| `SLE-Editor-<version>-linux-x64.tar.gz` | Portable Linux app with executable modes preserved |
+| `SHA256SUMS.txt` | SHA-256 checksums of all five downloads |
+
+The ZIP and TAR.GZ downloads contain the application and its Java runtime. They
+are separate from GitHub's automatic **Source code** archives, which contain the
+repository sources. Keep the complete extracted app folder together. Projects
+and exports belong in a writable folder outside the installation. Release builds
+use Windows 2022 and Ubuntu 24.04 CI runners; the existing desktop/graphics
+requirements still apply. The Windows installer uses the current unsigned
+configuration.
+
+If a build fails, inspect **Actions → Editor distribution**, correct the failure,
+and use **Re-run failed jobs** when the same tagged source can succeed. All five
+assets must be present before the upload job runs; it also verifies the tag still
+points at the built commit. A rerun replaces same-named release assets and keeps
+the release notes. Source changes need a new version/tag rather than moving an
+already published tag. You can edit release notes later without rebuilding.
+
+The workflow uses GitHub's built-in token; only the final upload job requests
+`contents: write`. No personal access token is needed. Repository policy must
+allow Actions to write release assets. Keep **immutable releases** disabled for
+this publish-then-attach flow; an immutable release needs assets attached before
+publication instead. See GitHub's [release instructions](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository)
+and [published-event behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#release).
+
+For packaging-tool regression tests, run from the repository root:
+
+```bash
+python -m unittest discover -s tools/editor/packaging/tests -p 'test_*.py'
+```
 
 Packaged editors read the engine library and assets from
 `compose.application.resources.dir`. The native process uses that directory as

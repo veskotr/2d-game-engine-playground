@@ -437,7 +437,10 @@ Each runnable folder includes the launcher, runtime files, `config.json`,
 manifests. Both targets share identical config and package bytes. Copy the
 runnable folder or extract the archive, then launch from any working directory.
 Extract the Linux archive on Linux to restore the launcher's executable mode
-when transferring an export from Windows.
+when transferring an export from Windows. Test a release on its target OS
+by extracting into a fresh directory and invoking the launcher by absolute
+path from a different working directory. Check startup, scene changes,
+assets, and audio before sharing the archive.
 
 Move or share the complete delivery folder. The launcher discovers its adjacent
 config and starts the saved startup scene. Explicit `--project` and `--config`

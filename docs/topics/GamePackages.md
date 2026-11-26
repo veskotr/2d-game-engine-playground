@@ -42,7 +42,9 @@ and prompts for the others. Both builds share identical config and package
 bytes. Each target has its own release inventory with its target and runtime
 hash. The numbered export directory contains the runnable folders and their
 ZIP (Windows) or TAR.GZ (Linux) archives. Extract the Linux archive on Linux
-to preserve the launcher's executable mode. See [runnable export](Projects.md#export-a-runnable-game).
+with `tar -xzf linux-x64.tar.gz` to preserve the launcher's executable mode,
+including when the archive came from a Windows editor. Keep the entire
+extracted directory together when relocating a game. See [runnable export](Projects.md#export-a-runnable-game).
 
 A saved scene gets a package named for its UUID. That filename and package ID
 survive scene renames. An asset reached by exactly one scene normally goes into

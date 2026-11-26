@@ -54,6 +54,7 @@
           <li>Open <code>Exports/First Room</code>. Repeat exports use a suffix such as <code>First Room-2</code>. The export contains a runnable <code>windows-x64/</code> or <code>linux-x64/</code> folder for each selected target, alongside its ZIP or TAR.GZ archive.</li>
           <li>Copy the runnable folder or extract its archive on the target OS. Open <code>First Room.exe</code> on Windows or run <code>"./First Room"</code> on Linux. The game reads the adjacent config and packages. Check the movement, wall, and HUD.</li>
         </ol>
+        <p>With both runtimes bundled, the packaged editor can export Both offline. Transfer each archive to its target OS before extracting it. On Linux, run <code>tar -xzf linux-x64.tar.gz</code> to preserve the launcher’s executable mode.</p>
         <p>From an unrelated working directory, run the executable by its absolute path.</p>
         <pre tabindex="0"><code>&amp; "C:/Deliveries/windows-x64/First Room.exe" --frames 120</code></pre>
         <p>See the <a href="../topics/GamePackages.md">package layout and compatibility details</a>.</p>

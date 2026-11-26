@@ -1,6 +1,6 @@
 # Cross-platform distribution implementation plan
 
-**Status** — Sessions 1 and 2 verified on both development hosts. Session 3 editor packaging is implemented and builds locally. Windows installer lifecycle, clean native Linux desktop acceptance, and the Linux release baseline remain open.
+**Status** — Sessions 1 and 2 verified on both development hosts. Session 3 editor packaging is implemented and builds locally. Session 4 development-host transfers pass for all four host/target combinations. Windows installer lifecycle, clean native Linux desktop acceptance, and the Linux release baseline remain open.
 
 **Goal** — Ship installable SLE Editor builds for Windows x64 and Linux x64. On either host, creators can export Windows x64, Linux x64, or both from the same saved project, offline and without a compiler.
 
@@ -42,7 +42,7 @@
 
 - [ ] On each packaged editor host, open and save a sample project with multiple scenes and shared assets, disconnect network access, and export Both. Transfer each archive to a clean machine running its target OS. Extract, relocate, and launch it from an unrelated working directory with no checkout, JDK, or compiler present.
 - [ ] Confirm that the Linux launcher extracted from a Windows-created TAR.GZ is executable, and that both Windows ZIPs launch after extraction. Verify startup scene, scene changes, assets, and audio in the exported games. Run the Windows content-update regression.
-- [ ] Update `tools/editor/README.md`, `docs/topics/GamePackages.md`, `docs/topics/Projects.md`, and `docs/guide/run-and-export.html` alongside the delivered behavior. Record artifact names and hashes, signing status, commands actually run, and results for Windows→Windows, Windows→Linux, Linux→Windows, and Linux→Linux. List any checks that remain pending.
+- [x] Update `tools/editor/README.md`, `docs/topics/GamePackages.md`, `docs/topics/Projects.md`, and `docs/guide/run-and-export.html` alongside the delivered behavior. Record artifact names and hashes, signing status, commands actually run, and results for Windows→Windows, Windows→Linux, Linux→Windows, and Linux→Linux. List any checks that remain pending.
 
 ## Progress and next-session handoff
 
@@ -281,3 +281,71 @@ Local development artifacts and SHA-256 digests:
 | `build/editor-session3-windows/compose/binaries/main/exe/SLE Editor-0.34.0.exe` | `a5b790d157ca9498620093265a4fe4b16d2a01a2109dada1a0452d2338babf94` |
 | `build/editor-session3-linux/SLE-Editor-linux-x64.AppImage` | `bf9cefa73d18f4cc015d617ee8960993c5da038e5cc21a9e4330fae414469ac0` |
 | `build/editor-session3-linux/SLE-Editor-linux-x64.tar.gz` | `0e27498b8432e1785d8f816b22ffd8886dc7e826d2a4f79f300fd69226321e73` |
+
+### Session 4 acceptance progress — 2026-11-26
+
+Session 4 remains open for clean-machine acceptance. The packaged Windows app
+image and Linux AppImage generated fresh Both exports using bundled runtimes.
+Both emitted PROJECT_DISTRIBUTION_SMOKE_PASS and PROJECT_RUNTIME_SMOKE_PASS.
+The checks covered saved documents, shared assets, tilemap scenes, content
+updates, base preservation, archive extraction and relocated launch.
+
+Commands and evidence are retained under `build/cross-session4/`.
+
+- Windows ran `powershell.exe -NoProfile -ExecutionPolicy Bypass -File build/cross-session4/windows/run.ps1`
+  and exited 0. The driver launches the packaged app image with
+  `--project-distribution-smoke`, a system-only PATH and empty JAVA_HOME.
+  Windows networking remained connected.
+- Linux AppImage ran with `timeout 120 unshare -Un --map-current-user`,
+  `APPIMAGE_EXTRACT_AND_RUN=1`, isolated Java preferences, and
+  `--project-distribution-smoke`. It exited 0. Runtime selection overrides
+  were unset. This tested offline export in an isolated network namespace.
+  The output is `linux/appimage.log`.
+- Fresh archives were extracted into directories with spaces. Windows used
+  `Expand-Archive` through `check-windows.ps1 -EditorHost windows` and
+  `-EditorHost linux`. Linux used `tar -xzf` and verified launcher mode 755
+  with `stat -c %a`. All four launchers exited 0 after `--frames 8`, reached
+  second-scene, initialized audio and logged no engine errors. Linux launches
+  unset LD_LIBRARY_PATH and LD_PRELOAD. Logs are `windows-to-windows.log`,
+  `windows-to-linux.log`, `linux-to-windows.log` and `linux-to-linux.log`.
+- The editor README, project/package topics and guide now describe offline
+  bundled export, archive transfer and executable-mode preservation.
+  `python3 docs/guide/check_links.py` passed 573 references across 13 pages.
+  `git -c core.whitespace=cr-at-eol diff --check` passed.
+
+Fresh archives and SHA-256 digests follow. Paths are relative to
+`build/cross-session4/`.
+
+| Editor host | Target | Archive | SHA-256 |
+| --- | --- | --- | --- |
+| Windows | Windows | `windows-editor-windows-x64.zip` | `0fdf78c8b70edde3e306c229dca86ef4797d58fdaa76b870ddc2e456d0e83267` |
+| Windows | Linux | `windows-editor-linux-x64.tar.gz` | `3f2f165bd8a44f118c41c92a8d1d766c29199fef8a6dc2a3553d1b89478760a5` |
+| Linux | Windows | `linux-editor-windows-x64.zip` | `6e4433c8edc8bf27c1ae095fd720edd78bbbeff6ef9bd80f4fa3f9acc425a59c` |
+| Linux | Linux | `linux-editor-linux-x64.tar.gz` | `d94d2c02930bd80a265d1695c1927c86e66efd79de8e5e6dc560a075ae2adfae` |
+
+The editor artifacts retain the Session 3 names and hashes above. The Windows
+EXE remains unsigned. This session used the app image directly. Installer
+install/upgrade/uninstall acceptance remains open.
+
+Remaining acceptance and environment limitations follow.
+
+- These launches used the Windows development host and Ubuntu 26.04 WSLg.
+  Linux used llvmpipe with XDG_SESSION_TYPE=x11 and
+  MESA_GL_VERSION_OVERRIDE=4.6. Skiko fell back after GL context creation.
+  A checkout and development tools remain present on both systems.
+  Separate clean Windows and native Linux desktop acceptance remains pending.
+- Windows offline export, native Linux graphics without the Mesa override,
+  native FUSE AppImage launch, the distro/driver matrix and the oldest
+  supported Linux ABI baseline remain pending.
+- Audio initialization passed. Audible playback and visual asset acceptance
+  still require a desktop walkthrough.
+- The initial portable run mapped root in its namespace, preventing Java
+  preferences access and failing startup-settings validation. Retrying with
+  current-user mapping and isolated preferences resolved that access problem.
+  The retry then encountered a full 7.7 GiB /tmp filesystem. This session's
+  reports were moved to the workspace. A final portable retry redirects Java
+  temporary files into the workspace. That run exited 0 and emitted both
+  distribution and project-runtime pass markers. Its command used the portable
+  launcher with `timeout 120 unshare -Un --map-current-user` and
+  `JAVA_TOOL_OPTIONS` setting java.util.prefs.userRoot and java.io.tmpdir to
+  workspace directories. Evidence is in `linux/portable-final.log`.

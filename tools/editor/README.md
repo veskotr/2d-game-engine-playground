@@ -696,7 +696,10 @@ Each numbered export contains a runnable subfolder and archive for each target.
 Copy `windows-x64/` or extract `windows-x64.zip` on Windows. Copy `linux-x64/`
 or extract `linux-x64.tar.gz` on Linux. Each delivery includes the game launcher,
 runtime files, config, packages, and manifests. Both targets use the same
-saved-content packages.
+saved-content packages. A packaged editor with both bundled runtimes can
+export Both offline. Transfer the archive to its target OS before extraction,
+then keep the extracted launcher with its adjacent files. On Linux, use
+`tar -xzf linux-x64.tar.gz` to preserve the executable mode.
 
 **File → Export Content Update…** uses a clean earlier Windows x64 delivery
 from the same project and exact runtime as its baseline. **File → Apply Content

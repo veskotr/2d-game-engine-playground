@@ -47,6 +47,17 @@ internal fun InspectorGallery() {
                   ]
                 }}
             """).getValue("SpriteRenderer"),
+            "BoxCollider" to decodeComponentCatalog("""
+                {"BoxCollider":{
+                  "defaults":{"size":{"x":32,"y":32},"offset":{"x":0,"y":0},
+                    "friction":0.4000000059604645,"categoryBits":1,"maskBits":65535,"enabled":true},
+                  "enums":{},
+                  "fields":[
+                    {"path":["categoryBits"],"type":"integer"},
+                    {"path":["maskBits"],"type":"integer"}
+                  ]
+                }}
+            """).getValue("BoxCollider"),
             "Script" to ComponentDefinition(
                 Json.parseToJsonElement("""{"variables":{"speed":3,"enabled":true}}""").jsonObject,
                 JsonObject(emptyMap()),
@@ -68,7 +79,10 @@ internal fun InspectorGallery() {
             val owner = checkNotNull(selected)
             owner.addComponent("Camera2D")
             owner.addComponent("Script")
+            owner.addComponent("BoxCollider")
             owner.inspectorSections.setExpanded(owner.document.key, "Transform", false)
+            owner.inspectorSections.setExpanded(owner.document.key, "Camera2D", false)
+            owner.inspectorSections.setExpanded(owner.document.key, "Script", false)
         }
     }
     Row(horizontalArrangement=Arrangement.spacedBy(LocalEditorMetrics.current.gap)) {

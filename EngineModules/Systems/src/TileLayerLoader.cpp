@@ -76,6 +76,70 @@ std::string name(const Json& value)
     return text;
 }
 
+bool validMetadataName(std::string_view text)
+{
+    if (text.size() > 256) return false;
+    // JSON parsing has validated UTF-8. Match the editor's Kotlin whitespace rules.
+    while (!text.empty()) {
+        const auto first = static_cast<unsigned char>(text.front());
+        char32_t codePoint = first;
+        if (first < 0x80) {
+            text.remove_prefix(1);
+        } else if (first < 0xE0) {
+            codePoint = ((first & 0x1F) << 6) | (static_cast<unsigned char>(text[1]) & 0x3F);
+            text.remove_prefix(2);
+        } else if (first < 0xF0) {
+            codePoint = ((first & 0x0F) << 12) | ((static_cast<unsigned char>(text[1]) & 0x3F) << 6) |
+                (static_cast<unsigned char>(text[2]) & 0x3F);
+            text.remove_prefix(3);
+        } else {
+            return true; // No whitespace code points need four UTF-8 bytes.
+        }
+        const bool whitespace = (codePoint >= 0x09 && codePoint <= 0x0D) ||
+            (codePoint >= 0x1C && codePoint <= 0x20) || codePoint == 0xA0 || codePoint == 0x1680 ||
+            (codePoint >= 0x2000 && codePoint <= 0x200A) || codePoint == 0x2028 || codePoint == 0x2029 ||
+            codePoint == 0x202F || codePoint == 0x205F || codePoint == 0x3000;
+        if (!whitespace) return true;
+    }
+    return false;
+}
+
+void validateGrid(const Json& grid)
+{
+    fields(grid, {"margin", "spacing", "columns"});
+    for (const auto* field : {"margin", "spacing"}) {
+        const auto& pair = grid.at(field);
+        require(pair.is_array() && pair.size() == 2, std::string("Tileset grid ") + field + " requires two axes");
+        for (const auto& axis : pair) integer(axis, 0);
+    }
+    integer(grid.at("columns"), 1);
+}
+
+void validateTileMetadata(const Json& tile)
+{
+    require(validMetadataName(tile.at("name").get_ref<const std::string&>()), "Invalid tilemap name");
+    if (tile.contains("tags")) {
+        const auto& tags = tile.at("tags");
+        require(tags.is_array() && tags.size() <= 256, "Expected a tile tags array with at most 256 entries");
+        std::set<std::string_view> names;
+        for (const auto& tag : tags) {
+            const auto& text = tag.get_ref<const std::string&>();
+            require(validMetadataName(text), "Invalid tile tag");
+            require(names.insert(text).second, "Duplicate tile tag: " + text);
+        }
+    }
+    if (tile.contains("properties")) {
+        const auto& properties = tile.at("properties");
+        require(properties.is_object() && properties.size() <= 256, "Expected a tile properties object with at most 256 entries");
+        for (const auto& [key, value] : properties.items()) {
+            require(validMetadataName(key), "Invalid tile property name");
+            require(value.is_boolean() || (value.is_number() && std::isfinite(value.get<double>())) ||
+                (value.is_string() && value.get_ref<const std::string&>().size() <= 4096), "Invalid tile property: " + key);
+        }
+    }
+    require(!tile.contains("animation") || tile.at("animation").is_null(), "Tile animation is reserved and must be null");
+}
+
 using CollisionPolygon = std::vector<glm::dvec2>;
 
 std::vector<CollisionPolygon> readCollision(const Json& value)
@@ -157,16 +221,27 @@ Tileset readTileset(const std::string& ref, const SceneLoader::AssetLookup& reso
         "Missing or oversized tileset: " + path);
     std::ifstream file(path);
     const auto json = Json::parse(file);
-    fields(json, {"format", "version", "spritesheet", "tileWidth", "tileHeight", "tiles"});
-    require(json.at("format") == "sle-tileset" && integer(json.at("version"), 1) == 1, "Unsupported tileset format/version");
+    const auto version = integer(json.at("version"), 1);
+    require(json.at("format") == "sle-tileset" && (version == 1 || version == 2), "Unsupported tileset format/version");
+    if (version == 2) {
+        fields(json, {"format", "version", "spritesheet", "tileWidth", "tileHeight", "grid", "tiles"});
+        validateGrid(json.at("grid"));
+    } else {
+        fields(json, {"format", "version", "spritesheet", "tileWidth", "tileHeight", "tiles"});
+    }
     Tileset set;
     set.spritesheet = asset(json.at("spritesheet"));
     set.cellPixels = {integer(json.at("tileWidth"), 1), integer(json.at("tileHeight"), 1)};
     const auto& tiles = json.at("tiles");
     require(tiles.is_array() && tiles.size() <= 4096, "Expected a tiles array with at most 4096 entries");
     for (const auto& tile : tiles) {
-        fields(tile, {"id", "name", "region", "collision"});
-        name(tile.at("name"));
+        if (version == 2) {
+            fields(tile, {"id", "name", "region", "collision", "tags", "properties", "animation"});
+            validateTileMetadata(tile);
+        } else {
+            fields(tile, {"id", "name", "region", "collision"});
+            name(tile.at("name"));
+        }
         const auto tileId = id(tile.at("id"));
         require(set.regionsByTile.emplace(tileId, id(tile.at("region"))).second, "Duplicate tile UUID " + tileId);
         if (tile.contains("collision")) {
@@ -247,7 +322,7 @@ Json canonicalTileLayers(const Json& data)
 }
 
 std::vector<entity::TileLayer> loadTileLayers(const Json& data, const SceneLoader::AssetLookup& resolve,
-    const SceneLoader::TextureFilterLookup& filter, bool allowMissing, bool uploadTextures)
+    const SceneLoader::TextureFilterLookup& filter, bool allowMissing, bool uploadTextures, glm::vec2 gridPixels, int chunkCells)
 {
     uploadTextures = uploadTextures && glGetString && glGetString(GL_VERSION);
     std::vector<entity::TileLayer> layers;
@@ -284,7 +359,8 @@ std::vector<entity::TileLayer> loadTileLayers(const Json& data, const SceneLoade
                 report(error.what());
             }
         }
-        layer.cellSize = glm::vec2(set.cellPixels) / layer.pixelsPerUnit;
+        layer.cellSize = (gridPixels.x > 0 ? gridPixels : glm::vec2(set.cellPixels)) / layer.pixelsPerUnit;
+        layer.chunkCells = chunkCells;
         for (const auto& [tileId, collision] : set.collisionByTile) {
             const auto* region = set.findRegion(set.regionsByTile.at(tileId));
             if (!region) continue;
@@ -334,7 +410,8 @@ std::vector<entity::TileLayer> loadTileLayers(const Json& data, const SceneLoade
                     report(tile == set.regionsByTile.end() ? "Missing tile UUID " + cell.tileId :
                         "Tile " + cell.tileId + " has missing or invalid region " + tile->second + " in " + set.spritesheet);
             }
-            auto& chunk = layer.chunks[{entity::tileChunkIndex(x), entity::tileChunkIndex(y)}];
+            const auto chunkIndex = [chunkCells](int value) { return value / chunkCells - (value % chunkCells < 0 ? 1 : 0); };
+            auto& chunk = layer.chunks[{chunkIndex(x), chunkIndex(y)}];
             const auto collision = layer.collisionByTile.find(cell.tileId);
             const auto boundsSize = collision != layer.collisionByTile.end() && collision->second.fullCell ?
                 glm::max(cell.size, layer.cellSize) : cell.size;

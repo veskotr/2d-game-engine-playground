@@ -76,7 +76,7 @@ internal fun SceneWorkspaceState.treeSelect(key: String?,click: TreeClick,visibl
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun SceneTree(state: SceneWorkspaceState,modifier: Modifier=Modifier,
-    onEntityBounds: (String,Rect)->Unit={_,_->},editable: Boolean=true,onEditEntity: ((String)->Unit)?=null) {
+    onEntityBounds: (String,Rect)->Unit={_,_->},editable: Boolean=true,onEditEntity: ((String)->Unit)?=null, editableNow: () -> Boolean = { editable }) {
     val root=sceneTree(state.document())
     // A tooltip cannot show during a drag, so the refusal goes to the status bar.
     val notices=LocalEditorNotices.current
@@ -116,11 +116,12 @@ internal fun SceneTree(state: SceneWorkspaceState,modifier: Modifier=Modifier,
             else -> false
         }
     }
-    Column(modifier.then(keys).editorContextMenu { sceneCreationMenu(state,editable,onEditEntity) }) {
+    val tileLayers=LocalTileLayerCreation.current
+    Column(modifier.then(keys).editorContextMenu { sceneCreationMenu(state,editable,onEditEntity,editableNow=editableNow,tileLayers=tileLayers) }) {
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             item(key=root.id) {
                 EditorTreeRow(root.label,state.selectedKey==null,{choose(null)},
-                    Modifier.editorContextMenu(beforeOpen={state.select(null)},node=true) { sceneCreationMenu(state,editable,onEditEntity) },
+                    Modifier.editorContextMenu(beforeOpen={state.select(null)},node=true) { sceneCreationMenu(state,editable,onEditEntity,editableNow=editableNow,tileLayers=tileLayers) },
                     help=root.label,leading={ TreeExpander(expanded,true) { expanded=!expanded };TreeIcon("Scene") })
             }
             if(expanded) items(rows,key={it.first.id}) { (node,depth) ->
@@ -128,7 +129,7 @@ internal fun SceneTree(state: SceneWorkspaceState,modifier: Modifier=Modifier,
                 EditorTreeRow(node.label+(if(state.entities.firstOrNull { it.document.key==node.entityKey }?.fieldErrors?.isNotEmpty()==true) " !" else ""),
                     selected,{choose(node.entityKey)},
                     // Right-clicking a selected row keeps the selection, so the menu acts on the set.
-                    Modifier.editorContextMenu(beforeOpen={ if(node.entityKey in state.selection) state.activate(node.entityKey!!) else state.select(node.entityKey) },node=true) { sceneCreationMenu(state,editable,onEditEntity) }
+                    Modifier.editorContextMenu(beforeOpen={ if(node.entityKey in state.selection) state.activate(node.entityKey!!) else state.select(node.entityKey) },node=true) { sceneCreationMenu(state,editable,onEditEntity,editableNow=editableNow,tileLayers=tileLayers) }
                         .onPointerEvent(PointerEventType.Press,PointerEventPass.Initial) { event ->
                             if(event.buttons.isPrimaryPressed) press.click=treeClick(event.keyboardModifiers.isCtrlPressed || event.keyboardModifiers.isMetaPressed,event.keyboardModifiers.isShiftPressed)
                         }

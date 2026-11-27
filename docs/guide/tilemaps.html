@@ -40,19 +40,23 @@
         <p>Import <code>Room.png</code>, set Texture filter to Nearest and open the spritesheet dialog. In Grid mode enter cell size 16 × 16, margins 0 × 0 and spacing 0 × 0. Add grid regions creates Slice 1–4, in order Solid, Slope, Perforated and Decoration.</p>
         <h3 id="save-region">Save region</h3>
         <p>For a single custom slice, select its pixel bounds in the spritesheet dialog and use Save region. Use the saved region ID to reference it from a sprite or tileset entry.</p>
-        <h3 id="tile-layer-loading">Tile layer loading</h3>
-        <p>For a fresh project, copy <a href="../../examples/tilemap_room/Assets/Room.tileset.json">Room.tileset.json</a> into Assets. Set <code>spritesheet</code> to <code>project-asset://</code> plus the imported image UUID and replace each <code>region</code> with the corresponding slice UUID. Keep tile IDs stable and refresh Assets. The <a href="../topics/Scenes.md#native-project-tile-layers">native scene schema</a> explains layer order, chunks and cells.</p>
+        <h3 id="tile-layer-loading">Create a tileset</h3>
+        <p>Select the imported image and click <strong>New Tileset…</strong> in its details, or click <strong>New Tileset…</strong> in the Assets toolbar and choose an image. In the slicer’s Grid mode, set the cell size, margins and spacing, then click <strong>Create Tileset…</strong>. The editor adds missing grid regions, saves a version 2 <code>&lt;image&gt;.tileset.json</code> next to the image, and opens the Tileset Editor. It can also open existing version 1 tilesets. See the <a href="../topics/Scenes.md#native-project-tile-layers">native scene and tileset formats</a>.</p>
+        <h3 id="tileset-editor">Tileset Editor</h3>
+        <p>Double-click a tileset in Assets or choose <strong>Open Tileset Editor…</strong> in its details. Zoom in on the atlas, click a tile or drag to select a rectangle. Edit the selection’s name. Enter tags as a comma-separated list or a JSON string array, and enter custom properties as a JSON object with string, number or boolean values. The Tags field displays applied tags as a JSON array. Click <strong>Apply metadata</strong> to stage those changes for every selected tile. Use the Windows menu to focus, detach or move the Tileset Editor.</p>
+        <h3 id="tileset-reslice">Reslice a tileset</h3>
+        <p>Adjust the grid’s tile size, margin and spacing, then choose <strong>Reslice</strong>. Tiles at matching grid positions keep their UUIDs and metadata. Use <strong>Add tile…</strong> to add an existing spritesheet region. <strong>Remove tiles…</strong> removes the selected tiles and can leave missing UUIDs in scenes that use them.</p>
         <h3 id="tile-palette">Tile Palette</h3>
-        <p>In an editable project scene, click <strong>Tile Palette</strong> in the Scene toolbar. Choose a tileset and a tile in the Tile Palette. The palette also controls layer selection, paint mode and clipboard operations.</p>
+        <p>Choose <strong>Create → Tilemap → New Tilemap…</strong> and save the map beneath Assets. The same entry is in the Scene view and Hierarchy context menus. The editor creates a placing entity, selects the Tiles tool and opens the Tile Palette beside Details. Use <strong>Place Existing Tilemap…</strong> to reuse a map in this or another scene. Every placement edits the same shared asset. Choose a tile in the palette; its layer, paint mode and clipboard controls work in map-local coordinates.</p>
         <figure>
           <img src="images/tiles-and-collision.png" alt="The Tile Palette below Scene shows Room.tileset.json, the current layer, paint modes, and four tile thumbnails.">
           <figcaption>Tilemap Room’s Tile Palette shows the layer controls and choices for Solid, Slope, Perforated, and Decoration.</figcaption>
         </figure>
 
         <h3 id="tiles-tool">Tiles Tool</h3>
-        <p>Use Tools → Tiles Tool or press <kbd>T</kbd> with Scene or Hierarchy focused in an editable project scene. Click <strong>Tile Palette</strong> in the Scene toolbar to access the palette and layers.</p>
+        <p>Use Tools → Tiles Tool, the Tiles icon next to the Scene tools, or press <kbd>T</kbd> with Scene or Hierarchy focused in an editable project scene. Each of these also opens the Tile Palette.</p>
         <h3 id="tile-layers">Tile layers</h3>
-        <p>Choose the imported tileset and click Add Tile Layer. Paint terrain on one layer and add a second layer for decoration with Collision cleared. Use the visibility and lock controls to hide or protect a layer, and use Move Up or Move Down to change draw order.</p>
+        <p>To add another layer, select the map entity, choose a tileset in the palette and click Add Tile Layer. Use Add Tileset to include another tileset in the same map; its qualified tiles can be painted on the same layer. Paint terrain on one layer and add a second layer for decoration with Collision cleared. Only the map entity moves: every layer starts at (0, 0) relative to it. Use the entity’s Transform position or Move tool; rotation and scale are locked. Use the visibility and lock controls to hide or protect a layer, and use Move Up or Move Down to change draw order.</p>
         <h2>Paint and edit</h2>
         <h3 id="tile-brush">Tile Brush</h3>
         <p>With the Tiles tool active and Scene focused, press <kbd>1</kbd> or choose Brush. Click or drag on an editable layer with a tile or stamp selected.</p>
@@ -79,31 +83,26 @@
         <h3 id="clear-selection">Clear Selection</h3>
         <p>Click Clear Selection in the palette to dismiss the active layer’s cell selection.</p>
         <h3 id="tile-save-and-export">Save, reopen, and export a tile scene</h3>
-        <p>Undo and redo a stroke, save the scene and reopen it to check the cells and layers. Set the startup scene and frame the terrain with its gameplay camera. Use Play to test it, then <a href="run-and-export.html#export-game">export the project</a>. Move the entire delivery folder and launch it from a different working directory.</p>
+        <p>Undo and redo a stroke, save the scene and reopen it to check the cells and layers. Scene Save also saves dirty referenced map assets, checking for external changes first. The Map row’s Reload button explicitly discards the draft and reads the saved asset; map reload participates in Undo. For old inline layers, choose Create → Tilemap → Convert Legacy Tile Layers…. Conversion preserves aligned layouts on one grid and explains incompatible grids or offsets without changing the scene. Set the startup scene and frame the terrain with its gameplay camera. Use Play to test it, then <a href="run-and-export.html#export-game">export the project</a>. Move the entire delivery folder and launch it from a different working directory.</p>
         <h2>Collision authoring and runtime</h2>
-        <h3 id="tile-collision">Tile Collision…</h3>
-        <p>Select the tileset in Assets and choose Tile Collision…. Pick the tile to edit. Changes are staged in the dialog until Apply.</p>
-        <figure>
-          <img src="images/tile-collision-preview.png" alt="The Tile Collision dialog shows the Slope tile with a straight triangular collider over its stepped pixels.">
-          <figcaption>Select Slope to compare its triangular collider with the stepped tile artwork.</figcaption>
-        </figure>
-
+        <h3 id="tile-collision">Tile collision</h3>
+        <p>In the tileset’s asset details, choose Tile Collision… to open the Tileset Editor. Select the tiles in the atlas. The collision controls stage shapes for the selection, and the preview shows the active tile’s shape.</p>
         <h3 id="none">None</h3>
         <p>Choose None for Decoration so that this tile contributes no fixtures.</p>
         <h3 id="full-cell">Full Cell</h3>
         <p>Choose Full Cell for Solid to fill the tile’s full cell with collision.</p>
-        <h3 id="generate-from-alpha">Generate from Alpha</h3>
-        <p>Select Perforated, choose Generate from Alpha, set threshold 128 and simplification 0, and inspect the opening in the preview. For Slope, compare the generated stepped outline with the example’s smooth triangular collider.</p>
-        <h3 id="preview-vertices">Preview vertices</h3>
-        <p>Inspect Preview vertices and adjust the staged shape before applying. Keep the intended opening or slope visible in the preview.</p>
-        <h3 id="apply">Apply</h3>
-        <p>Click Apply after checking the preview. The staged geometry is saved to the tileset asset.</p>
-        <h3 id="discard-preview">Discard preview</h3>
-        <p>Use Discard preview to clear the uncommitted vertex preview.</p>
-        <h3 id="collision-undo">Collision Undo</h3>
-        <p>Use Undo inside Tile Collision… to reverse a staged collision edit. Scene strokes have their own undo history.</p>
-        <h3 id="collision-redo">Collision Redo</h3>
-        <p>Use Redo inside Tile Collision… to restore a staged collision edit after Undo.</p>
+        <h3 id="generate-from-alpha">From Alpha</h3>
+        <p>Select Perforated, set Alpha threshold to 128 and Simplification to 0, then choose From Alpha. Inspect the opening in the preview. On Slope, compare the generated stepped outline with the example’s smooth triangular collider.</p>
+        <h3 id="preview-vertices">Adjust vertices</h3>
+        <p>To adjust a custom shape, select one tile and drag a vertex handle in the collision preview. The editor checks collision shapes when staging edits and when saving, using the scales of the project scene layers that reference the tileset. A rejected drag leaves the previous shape in place.</p>
+        <h3 id="apply">Save</h3>
+        <p>Click Save in the Tileset Editor to write staged metadata, grid and collision edits to the project.</p>
+        <h3 id="discard-preview">Revert</h3>
+        <p>Use Revert to reload the tileset from disk.</p>
+        <h3 id="collision-undo">Undo</h3>
+        <p>Use Undo in the Tileset Editor to reverse a staged edit. Scene strokes have their own undo history.</p>
+        <h3 id="collision-redo">Redo</h3>
+        <p>Use Redo in the Tileset Editor to restore an edit after Undo.</p>
         <h3 id="tile-collision-generation">Tile collision generation</h3>
         <p>Enable Collision on the terrain tile layer. At runtime the collision system generates static fixtures for active terrain chunks, merging full-cell runs into rectangles. Add a dynamic body above the floor or slope and use Play to observe it land. Check a perforation with a body small enough to fit. Enable the runtime fixture overlay from Lua with <code>Engine.Physics.setDebugEnabled(true)</code> to see the generated outlines.</p>
         <h3 id="tiled-map-loading">Tiled map loading</h3>

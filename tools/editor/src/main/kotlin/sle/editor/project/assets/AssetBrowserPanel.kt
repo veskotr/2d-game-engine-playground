@@ -98,14 +98,9 @@ internal fun AssetBrowserPanel(
                     SpriteRegionControls(selected.path, snapshot.spriteRegions[selected.path].orEmpty(), commands, ::measured)
                 }
                 if (commands != null && selected.kind == AssetKind.File && selected.path.endsWith(".tileset.json", true)) {
-                    var collisionOpen by remember(commands.projectRoot, selected.path) { mutableStateOf(false) }
-                    EditorButton("Tile Collision…", { collisionOpen = true }, enabled = !commands.busy)
-                    val id = snapshot?.idsByPath?.get(selected.path)
-                    if (collisionOpen) TilesetCollisionDialog(selected.path, commands,
-                        id?.let(tileLayerScales).orEmpty()) {
-                        collisionOpen = false
-                        state.refresh()
-                    }
+                    EditorButton("Open Tileset Editor…", { commands.openTileset(selected.path) },
+                        enabled = !commands.busy, modifier = measured("AssetOpenTilesetEditor"))
+                    EditorButton("Tile Collision…", { commands.openTileset(selected.path) }, enabled = !commands.busy)
                 }
                 if(commands!=null && selected.kind!=AssetKind.Link) {
                     EditorButton("Reveal in Explorer",onClick=commands.reveal,enabled=!commands.busy,style=EditorButtonStyle.Ghost)
@@ -133,6 +128,8 @@ internal fun AssetBrowserPanel(
                 if(commands!=null) EditorButton(if(commands.busy) "Working…" else "Import…",onClick=commands.importFiles,enabled=!commands.busy,modifier=measured("AssetImport"))
                 if(commands!=null) {
                     EditorButton("New Folder…",onClick=commands.createFolder,enabled=!commands.busy,modifier=measured("AssetNewFolder"))
+                    if(commands.createTileset!=null) EditorButton("New Tileset…",onClick=commands.newTileset,enabled=!commands.busy,
+                        help="Slice the selected texture, or choose one, into a tileset",modifier=measured("AssetToolbarNewTileset"))
                     EditorButton("Recover Deleted…",onClick=commands.recover,enabled=!commands.busy,modifier=measured("AssetRecover"),style=EditorButtonStyle.Ghost)
                 }
                 EditorToolbarDivider()
@@ -202,7 +199,10 @@ internal fun AssetBrowserPanel(
                                         onDragCancel={ sle.editor.ui.AssetDrag.cancel() },
                                     ) { change,_ -> change.consume() }
                                 } else Modifier)
-                                .combinedClickable(onClick={state.select(entry.path)},onDoubleClick={if(entry.kind==AssetKind.Directory) state.navigate(entry.path) else if(entry.kind==AssetKind.File) onOpen(entry.path)})
+                                .combinedClickable(onClick={state.select(entry.path)},onDoubleClick={if(entry.kind==AssetKind.Directory) state.navigate(entry.path) else if(entry.kind==AssetKind.File) {
+                                    if(entry.path.endsWith(".tileset.json",true) && commands!=null) commands.openTileset(entry.path)
+                                    else onOpen(entry.path)
+                                }})
                                 .heightIn(min=metrics.treeRow).padding(horizontal=metrics.panelPadding,vertical=metrics.gap/2),verticalAlignment=Alignment.CenterVertically) {
                                 if (entry.kind == AssetKind.File && isTextureAsset(entry.path) && state.thumbnailCache != null) {
                                     AssetThumbnail(state.thumbnailCache, entry, snapshot?.textureFilters?.get(entry.path),

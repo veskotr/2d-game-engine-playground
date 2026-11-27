@@ -30,6 +30,7 @@ import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import sle.editor.ui.dialog.EditorPrompts
 import sle.editor.ui.EditorTheme
 import sle.editor.ui.controls.*
 import sle.editor.ui.theme.*
@@ -64,8 +65,21 @@ internal fun SpritesheetDialog(
                 val loaded = source
                 val image = loaded?.getOrNull()
                 if (image != null) {
+                    val createTileset = commands.createTileset?.let { create ->
+                        { cells: List<SpriteRectangle>, tileWidth: Int, tileHeight: Int, grid: sle.editor.model.TilesetGrid ->
+                            val relative = EditorPrompts.input("Create Tileset", "Path",
+                                defaultTilesetPath(path, commands.snapshot), "Relative to the project asset folder.",
+                                confirm = "Create") { if (it.isBlank()) "Enter a path" else null }?.trim()
+                            if (!relative.isNullOrEmpty()) {
+                                submitted = true
+                                create(path, cells, tileWidth, tileHeight,
+                                    if (relative.endsWith(".tileset.json", ignoreCase = true)) relative
+                                    else relative.removeSuffix(".json") + ".tileset.json", grid)
+                            }
+                        }
+                    }
                     SpritesheetEditor(image, regions, !commands.busy, commands.message.takeIf { submitted },
-                        measured, onClose) { edit ->
+                        measured, onClose, createTileset) { edit ->
                         submitted = true
                         commands.editRegions(path, edit)
                     }
@@ -87,6 +101,8 @@ private fun SpritesheetEditor(
     message: String?,
     measured: (String) -> Modifier,
     onClose: () -> Unit,
+    /** Create Tileset…: (grid cells, tile width, tile height); null when the project cannot create files. */
+    createTileset: ((List<SpriteRectangle>, Int, Int, sle.editor.model.TilesetGrid) -> Unit)?,
     save: ((List<SpriteRegion>) -> List<SpriteRegion>) -> Unit,
 ) {
     val metrics = LocalEditorMetrics.current
@@ -132,12 +148,18 @@ private fun SpritesheetEditor(
     Row(Modifier.fillMaxSize().padding(metrics.panelPadding), horizontalArrangement = Arrangement.spacedBy(metrics.gap)) {
         Column(Modifier.width(305.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(metrics.gap)) {
-            EditorSelect("Mode", mode, modes, onSelect = { mode = it }, modifier = measured("SpritesheetMode"))
-            EditorSelect("Zoom", zoom, listOf("25%", "50%", "100%", "200%", "400%"), onSelect = { zoom = it })
+            EditorFormRow("Mode") {
+                EditorSelect("Mode", mode, modes, onSelect = { mode = it }, modifier = Modifier.weight(1f).then(measured("SpritesheetMode")),
+                    showLabel = false)
+            }
+            EditorFormRow("Zoom") {
+                EditorSelect("Zoom", zoom, listOf("25%", "50%", "100%", "200%", "400%"), onSelect = { zoom = it },
+                    modifier = Modifier.weight(1f), showLabel = false)
+            }
             if (gridMode) {
-                SpritesheetField(cellText, { cellText = it }, "Cell width, height", modifier = measured("SpritesheetCell"))
-                SpritesheetField(marginText, { marginText = it }, "Margins X, Y", modifier = measured("SpritesheetMargin"))
-                SpritesheetField(spacingText, { spacingText = it }, "Spacing X, Y", modifier = measured("SpritesheetSpacing"))
+                SpritesheetField(cellText, { cellText = it }, "Cell size", "Cell width, height in pixels", modifier = measured("SpritesheetCell"))
+                SpritesheetField(marginText, { marginText = it }, "Margins", "Margin X, Y in pixels", modifier = measured("SpritesheetMargin"))
+                SpritesheetField(spacingText, { spacingText = it }, "Spacing", "Spacing X, Y in pixels", modifier = measured("SpritesheetSpacing"))
                 EditorCheckBox("Skip fully transparent cells", skipTransparent, { skipTransparent = it })
                 val pending = remember(cells, regions) {
                     val saved = regions.mapTo(mutableSetOf()) { it.rectangle() }
@@ -145,15 +167,32 @@ private fun SpritesheetEditor(
                 }
                 val error = grid?.exceptionOrNull()?.message
                 EditorLabel(error ?: if (grid == null) "Calculating grid…" else "$pending new regions")
-                EditorButton("Add grid regions", { save { appendGridRegions(it, cells) } },
-                    enabled = enabled && pending > 0, primary = true, modifier = measured("SpritesheetAdd"))
+                Row(horizontalArrangement = Arrangement.spacedBy(metrics.gap)) {
+                    EditorButton("Add grid regions", { save { appendGridRegions(it, cells) } },
+                        enabled = enabled && pending > 0, modifier = measured("SpritesheetAdd"))
+                    if (createTileset != null) {
+                        val size = runCatching { parseRegionIntegers(cellText.text, 2) }.getOrNull()
+                        EditorButton("Create Tileset…", { size?.let { (width, height) ->
+                            val (mx,my) = parseRegionIntegers(marginText.text,2)
+                            val (sx,sy) = parseRegionIntegers(spacingText.text,2)
+                            val columns = ((image.width.toLong()-2L*mx+sx)/(width.toLong()+sx)).toInt()
+                            createTileset(cells, width, height, sle.editor.model.TilesetGrid(mx,my,sx,sy,columns))
+                        } },
+                            enabled = enabled && size != null && cells.isNotEmpty(), primary = true,
+                            help = "Add the grid regions, then save a tileset with one tile per cell",
+                            modifier = measured("SpritesheetCreateTileset"))
+                    }
+                }
             } else {
                 val labels = regions.associateBy { it.caption() }
                 val newRegion = "New region"
-                EditorSelect("Region", selected?.caption() ?: newRegion, listOf(newRegion) + labels.keys,
-                    onSelect = { selectedId = labels[it]?.id }, modifier = measured("SpritesheetRegion"))
-                SpritesheetField(name, { name = it }, "Name", modifier = measured("SpritesheetName"))
-                SpritesheetField(rectangleText, { rectangleText = it }, "Left, top, width, height")
+                EditorFormRow("Region") {
+                    EditorSelect("Region", selected?.caption() ?: newRegion, listOf(newRegion) + labels.keys,
+                        onSelect = { selectedId = labels[it]?.id }, modifier = Modifier.weight(1f).then(measured("SpritesheetRegion")),
+                        showLabel = false)
+                }
+                SpritesheetField(name, { name = it }, "Name", "Region name", modifier = measured("SpritesheetName"))
+                SpritesheetField(rectangleText, { rectangleText = it }, "Rectangle", "Left, top, width, height in pixels")
                 EditorLabel("Drag on the image to set the rectangle.")
                 if (rectangleText.text.isNotBlank()) rectangle.exceptionOrNull()?.message?.let { EditorLabel(it) }
                 EditorButton("Save region", {
@@ -191,11 +230,11 @@ private fun SpritesheetField(
     value: TextFieldValue,
     update: (TextFieldValue) -> Unit,
     label: String,
+    help: String,
     modifier: Modifier = Modifier,
 ) {
-    Column {
-        EditorLabel(label)
-        EditorTextField(value, update, label, modifier = modifier)
+    EditorFormRow(label, help = help) {
+        EditorTextField(value, update, label, modifier = Modifier.weight(1f).then(modifier), help = help, placeholder = help)
     }
 }
 

@@ -136,13 +136,9 @@ internal suspend fun runProjectSmoke(
     commands.openPath(movedFile)
     scene.addEntity();scene.selected!!.rename("Keep this new edit")
     val dismiss=Timer(150,null)
-    fun findPane(component: Component): JOptionPane? {
-        if(component is JOptionPane) return component
-        return (component as? Container)?.components?.firstNotNullOfOrNull(::findPane)
-    }
     dismiss.addActionListener {
-        Window.getWindows().filter { it.isShowing }.firstNotNullOfOrNull(::findPane)?.let {
-            it.value=JOptionPane.NO_OPTION;dismiss.stop()
+        sle.editor.ui.dialog.EditorPrompts.current?.takeIf { promptWindow(it)!=null }?.let {
+            it.answer(1);dismiss.stop()
         }
     }
     dismiss.start()

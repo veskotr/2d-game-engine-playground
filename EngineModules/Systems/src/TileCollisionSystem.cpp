@@ -1,6 +1,7 @@
 #include <sle/engine/TileCollisionSystem.hpp>
 
 #include "CameraViewBounds.hpp"
+#include "TilemapPlacement.hpp"
 
 #include <sle/physics/PhysicsWorld.hpp>
 
@@ -67,23 +68,42 @@ void TileCollisionSystem::clear()
 
 void TileCollisionSystem::update(std::span<const entity::TileLayer> layers, const core::Camera2D& camera)
 {
+    std::vector<detail::TileLayerView> views;
+    for (const auto& layer : layers) views.push_back({&layer, {}, "legacy:" + layer.id, layer.drawOrder, false});
+    updateViews(views, camera);
+}
+
+void TileCollisionSystem::update(entity::Scene& scene, const core::Camera2D& camera)
+{
+    std::vector<detail::TileLayerView> views;
+    detail::visitTileLayers(scene, [&](auto view) { views.push_back(std::move(view)); });
+    updateViews(views, camera);
+}
+
+void TileCollisionSystem::updateViews(std::span<const detail::TileLayerView> layers, const core::Camera2D& camera)
+{
     const auto view = viewBounds(camera);
     std::set<Key> active;
-    for (const auto& layer : layers) {
-        if (!layer.collisionEnabled || layer.collisionByTile.empty()) continue;
-        const auto margin = static_cast<float>(entity::TileChunkSize) * layer.cellSize;
+    for (const auto& placed : layers) {
+        const auto& layer = *placed.layer;
+        if (!placed.collision || !layer.collisionEnabled || layer.collisionByTile.empty()) continue;
+        const auto margin = static_cast<float>(layer.chunkCells) * layer.cellSize;
         for (const auto& [coordinate, chunk] : layer.chunks) {
-            if (!view.intersects(chunk.lowerLeft - margin, chunk.upperRight + margin)) continue;
+            if (!placed.always && !view.intersects(chunk.lowerLeft + placed.translation - margin, chunk.upperRight + placed.translation + margin)) continue;
 
             auto polygons = chunkPolygons(layer, chunk);
             if (polygons.empty()) continue;
-            auto key = Key{layer.id, coordinate};
+            auto key = Key{placed.identity, coordinate};
             active.insert(key);
             auto& group = groups_[key];
-            if (group.origin == chunk.lowerLeft && group.polygons == polygons) continue;
-
+            const auto origin = chunk.lowerLeft + placed.translation;
+            if (group.body && group.polygons == polygons) {
+                if (group.origin != origin) world_.setBodyTransform(group.body, origin, 0);
+                group.origin = origin;
+                continue;
+            }
             world_.destroyBody(group.body);
-            group.origin = chunk.lowerLeft;
+            group.origin = origin;
             group.polygons = std::move(polygons);
             components::RigidBodyComponent settings;
             settings.bodyType = components::BodyType::Static;

@@ -54,10 +54,16 @@ internal class ProjectAssetOperations(private val project: OpenedProject) {
             require(Files.size(file) <= 4 * 1024 * 1024) { "Oversized tileset: ${entry.path}" }
             val tileset = Json.parseToJsonElement(Files.readString(file)).jsonObject
             require(tileset["format"] == JsonPrimitive("sle-tileset") &&
-                tileset["version"]?.jsonPrimitive?.intOrNull == 1) { "Unsupported tileset: ${entry.path}" }
+                tileset["version"]?.jsonPrimitive?.intOrNull in 1..2) { "Unsupported tileset: ${entry.path}" }
             val sheet = tileset.getValue("spritesheet").jsonPrimitive.content
             require(sheet.startsWith("project-asset://")) { "Tileset spritesheet must use a UUID: ${entry.path}" }
             result.add(AssetReference(entry.path, sheet.removePrefix("project-asset://"), documentPath = null))
+        }
+        for (entry in snapshot.entries.filter { it.kind == AssetKind.File && it.path.endsWith(".tilemap.json", true) }) {
+            val file = path(entry.path)
+            require(Files.size(file) <= 16 * 1024 * 1024) { "Oversized tilemap: ${entry.path}" }
+            val map = sle.editor.model.TilemapDocument.parse(Files.readString(file))
+            map.tilesets.values.forEach { result.add(AssetReference(entry.path, it.removePrefix("project-asset://"), documentPath = null)) }
         }
         return result.distinct()
     }

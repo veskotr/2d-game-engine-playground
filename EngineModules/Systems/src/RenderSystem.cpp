@@ -1,4 +1,6 @@
+#include "PhysicsGeometry.hpp"
 #include "CameraViewBounds.hpp"
+#include "TilemapPlacement.hpp"
 #include <sle/engine/RenderSystem.hpp>
 #include <sle/scene/ChunkActivity.hpp>
 #include <sle/physics/PhysicsWorld.hpp>
@@ -74,17 +76,20 @@ void submitBoxOutline(
 {
     const glm::vec2 half = size * 0.5f;
 
-    const glm::vec2 p0 = transformLocalPoint(world, {offset.x - half.x, offset.y - half.y});
-    const glm::vec2 p1 = transformLocalPoint(world, {offset.x + half.x, offset.y - half.y});
-    const glm::vec2 p2 = transformLocalPoint(world, {offset.x + half.x, offset.y + half.y});
-    const glm::vec2 p3 = transformLocalPoint(world, {offset.x - half.x, offset.y + half.y});
+    auto dimensions = world;
+    dimensions.scale = glm::abs(world.scale);
+    const auto center = transformLocalPoint(world, offset);
+    dimensions.position = center;
+    const glm::vec2 p0 = transformLocalPoint(dimensions, {-half.x, -half.y});
+    const glm::vec2 p1 = transformLocalPoint(dimensions, {half.x, -half.y});
+    const glm::vec2 p2 = transformLocalPoint(dimensions, {half.x, half.y});
+    const glm::vec2 p3 = transformLocalPoint(dimensions, {-half.x, half.y});
 
     renderer.submit(renderer::LineCommand{p0, p1, color, 1.5f, 0.0f, layer});
     renderer.submit(renderer::LineCommand{p1, p2, color, 1.5f, 0.0f, layer});
     renderer.submit(renderer::LineCommand{p2, p3, color, 1.5f, 0.0f, layer});
     renderer.submit(renderer::LineCommand{p3, p0, color, 1.5f, 0.0f, layer});
 
-    const glm::vec2 center = transformLocalPoint(world, offset);
     renderer.submit(renderer::PointCommand{center, color, 4.0f, 0.0f, layer});
 }
 
@@ -96,20 +101,15 @@ void submitCircleOutline(
     const glm::vec4& color,
     uint32_t layer)
 {
-    constexpr int kSegments = 24;
+    const glm::vec2 radii = radius * glm::abs(world.scale);
+    const int segments = radii.x == radii.y ? 24 : 8;
     const glm::vec2 center = transformLocalPoint(world, offset);
-    const float scaleMax = std::max(std::abs(world.scale.x), std::abs(world.scale.y));
-    const float r = radius * std::max(0.0001f, scaleMax);
-
-    for (int i = 0; i < kSegments; ++i)
-    {
-        const float t0 = (static_cast<float>(i) / static_cast<float>(kSegments)) * glm::two_pi<float>();
-        const float t1 = (static_cast<float>(i + 1) / static_cast<float>(kSegments)) * glm::two_pi<float>();
-
-        const glm::vec2 a = {center.x + std::cos(t0) * r, center.y + std::sin(t0) * r};
-        const glm::vec2 b = {center.x + std::cos(t1) * r, center.y + std::sin(t1) * r};
-        renderer.submit(renderer::LineCommand{a, b, color, 1.5f, 0.0f, layer});
-    }
+    auto point = [&](int index) {
+        const float angle = static_cast<float>(index) * (glm::two_pi<float>() / segments);
+        return center + entity::transformMath::rotate(radii * glm::vec2(std::cos(angle), std::sin(angle)), world.rotation);
+    };
+    for (int i = 0; i < segments; ++i)
+        renderer.submit(renderer::LineCommand{point(i), point(i + 1), color, 1.5f, 0.0f, layer});
 
     renderer.submit(renderer::PointCommand{center, color, 4.0f, 0.0f, layer});
 }
@@ -119,29 +119,30 @@ void submitCircleOutline(
 void RenderSystem::update(Context& ctx)
 {
     const auto view = viewBounds(ctx.camera);
-    for (const auto& layer : ctx.scene.getTileLayers()) {
-        if (!layer.visible) continue;
+    detail::visitTileLayers(ctx.scene, [&](const auto& placed) {
+        const auto& layer = *placed.layer;
+        if (!layer.visible || !placed.rendering) return;
         for (const auto& [coordinate, chunk] : layer.chunks) {
-            if (!view.intersects(chunk.lowerLeft, chunk.upperRight)) continue;
+            if (!view.intersects(chunk.lowerLeft + placed.translation, chunk.upperRight + placed.translation)) continue;
             for (const auto& cell : chunk.cells) {
-                if (!view.intersects(cell.lowerLeft, cell.lowerLeft + cell.size)) continue;
+                if (!view.intersects(cell.lowerLeft + placed.translation, cell.lowerLeft + placed.translation + cell.size)) continue;
                 const auto texture = cell.missing ? missingTileTextureID :
                     (cell.region.texture ? cell.region.texture->getID() : 0);
                 if (!texture) continue;
                 renderer::QuadCommand cmd;
                 components::WorldTransformComponent world;
-                world.position = cell.lowerLeft + cell.size * 0.5f;
+                world.position = placed.translation + cell.lowerLeft + cell.size * 0.5f;
                 world.scale = cell.size;
                 cmd.modelMatrix = buildModelMatrix(world);
                 cmd.color = glm::vec4(1);
                 cmd.uvRect = cell.region.uv;
                 cmd.texture_id = texture;
                 cmd.shader_id = defaultShaderID;
-                cmd.layer = layer.drawOrder;
+                cmd.layer = placed.drawOrder;
                 ctx.renderer.submit(cmd);
             }
         }
-    }
+    });
 
     ctx.registry.view<components::WorldTransformComponent, components::SpriteRenderer>(
         [this, &renderer = ctx.renderer, &view, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::SpriteRenderer& sprite)
@@ -165,7 +166,7 @@ void RenderSystem::update(Context& ctx)
             renderer.submit(cmd);
         });
 
-    if (!physicsDebugEnabled)
+    if (!physicsDebugEnabled || !ctx.physicsWorld)
         return;
 
     if (ctx.physicsWorld) {
@@ -175,34 +176,50 @@ void RenderSystem::update(Context& ctx)
     }
 
     ctx.registry.view<components::WorldTransformComponent, components::BoxColliderComponent>(
-        [&renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::BoxColliderComponent& box)
+        [&ctx, &renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent&, components::BoxColliderComponent& box)
         {
             if (!box.enabled || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Collision) || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Physics))
                 return;
+            if (!usablePhysicsPose(ctx, entity)) return;
+            if (const auto* body = registry.getComponent<components::RigidBodyComponent>(entity); body && !body->enabled) return;
+            auto world = entity::transformMath::currentWorld(ctx.scene, entity);
+            world.scale = entity::transformMath::currentParentWorld(ctx.scene, entity).scale;
             submitBoxOutline(renderer, world, box.offset, box.size, {0.20f, 0.85f, 1.00f, 1.0f}, 100000);
         });
 
     ctx.registry.view<components::WorldTransformComponent, components::CircleColliderComponent>(
-        [&renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::CircleColliderComponent& circle)
+        [&ctx, &renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent&, components::CircleColliderComponent& circle)
         {
             if (!circle.enabled || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Collision) || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Physics))
                 return;
+            if (!usablePhysicsPose(ctx, entity)) return;
+            if (const auto* body = registry.getComponent<components::RigidBodyComponent>(entity); body && !body->enabled) return;
+            auto world = entity::transformMath::currentWorld(ctx.scene, entity);
+            world.scale = entity::transformMath::currentParentWorld(ctx.scene, entity).scale;
             submitCircleOutline(renderer, world, circle.offset, circle.radius, {0.20f, 0.85f, 1.00f, 1.0f}, 100000);
         });
 
     ctx.registry.view<components::WorldTransformComponent, components::BoxZoneComponent>(
-        [&renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::BoxZoneComponent& boxZone)
+        [&ctx, &renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent&, components::BoxZoneComponent& boxZone)
         {
             if (!boxZone.enabled || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Zones) || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Physics))
                 return;
+            if (!usablePhysicsPose(ctx, entity)) return;
+            if (const auto* body = registry.getComponent<components::RigidBodyComponent>(entity); body && !body->enabled) return;
+            auto world = entity::transformMath::currentWorld(ctx.scene, entity);
+            world.scale = entity::transformMath::currentParentWorld(ctx.scene, entity).scale;
             submitBoxOutline(renderer, world, boxZone.offset, boxZone.size, {1.00f, 0.80f, 0.20f, 1.0f}, 100001);
         });
 
     ctx.registry.view<components::WorldTransformComponent, components::CircleZoneComponent>(
-        [&renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent& world, components::CircleZoneComponent& circleZone)
+        [&ctx, &renderer = ctx.renderer, &registry = ctx.registry](entity::Entity entity, components::WorldTransformComponent&, components::CircleZoneComponent& circleZone)
         {
             if (!circleZone.enabled || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Zones) || !entity::isChunkActive(registry, entity, components::ChunkSubsystem::Physics))
                 return;
+            if (!usablePhysicsPose(ctx, entity)) return;
+            if (const auto* body = registry.getComponent<components::RigidBodyComponent>(entity); body && !body->enabled) return;
+            auto world = entity::transformMath::currentWorld(ctx.scene, entity);
+            world.scale = entity::transformMath::currentParentWorld(ctx.scene, entity).scale;
             submitCircleOutline(renderer, world, circleZone.offset, circleZone.radius, {1.00f, 0.80f, 0.20f, 1.0f}, 100001);
         });
 }

@@ -1,6 +1,6 @@
 package sle.editor.project
 
-import sle.editor.ui.EditorDialogs
+import sle.editor.ui.dialog.EditorPrompts
 import sle.editor.ui.EditorFileChooser
 import sle.editor.ui.EditorNotices
 import sle.editor.ui.NoticeLevel
@@ -9,7 +9,6 @@ import kotlinx.coroutines.*
 import sle.editor.bridge.PackagedEngine
 import java.nio.file.Path
 import javax.swing.JFileChooser
-import javax.swing.JOptionPane
 
 internal data class ProjectDistributionCommands(
     val exportGame: () -> Unit,
@@ -84,10 +83,9 @@ internal fun projectDistributionControls(
         if (dirty) {
             val saved = "Export Saved Versions"
             val save = "Save and Export"
-            val options = if (saveDirty == null) arrayOf(saved, "Cancel") else arrayOf(save, saved, "Cancel")
-            val selected = EditorDialogs.showOptionDialog(null,
-                "Some documents have unsaved changes. Export Saved Versions uses the files on disk.",
-                if (update) "Export Content Update" else "Export Game", JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, saved)
+            val options = if (saveDirty == null) listOf(saved) else listOf(saved, save)
+            val selected = EditorPrompts.choose(if (update) "Export Content Update" else "Export Game",
+                "Some documents have unsaved changes. Export Saved Versions uses the files on disk.", options, default = 0)
             when (options.getOrNull(selected)) {
                 save -> saveFirst = true
                 saved -> Unit
@@ -95,10 +93,9 @@ internal fun projectDistributionControls(
             }
         }
         val targets = if (update) listOf(GameTarget.Windows) else {
-            val options = arrayOf(GameTarget.Windows.label, GameTarget.Linux.label, "Both", "Cancel")
-            val default = if (System.getProperty("os.name").startsWith("Windows")) options[0] else options[1]
-            when (EditorDialogs.showOptionDialog(null, "Choose the game export targets.",
-                "Export Game", JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, default)) {
+            val options = listOf(GameTarget.Windows.label, GameTarget.Linux.label, "Both")
+            val default = if (System.getProperty("os.name").startsWith("Windows")) 0 else 1
+            when (EditorPrompts.choose("Export Game", "Choose the game export targets.", options, default)) {
                 0 -> listOf(GameTarget.Windows)
                 1 -> listOf(GameTarget.Linux)
                 2 -> GameTarget.entries

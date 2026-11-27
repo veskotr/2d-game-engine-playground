@@ -104,9 +104,10 @@ class KeymapTest {
         assertEquals(listOf("Ctrl+V"), rows["Paste Tiles"])
         // Unbound commands are not listed.
         assertNull(rows["Apply Changes to Entity Template"])
-        val html = keyboardShortcutsHtml()
-        assertTrue("Ctrl+Shift+S" in html && "Mouse" in html && "Middle-drag" in html)
-        assertTrue("Right-click its heading in Details" in html)
+        val table = keyboardShortcutTable().toMap()
+        assertTrue(table.values.flatten().any { it.second == "Ctrl+Shift+S" })
+        assertTrue(table.getValue("Mouse").any { "Middle-drag" in it.second })
+        assertTrue(table.getValue("Mouse").any { it.second == "Right-click its heading in Details" })
         // A user override changes Help with no other edits.
         val moved = standardKeymap.withOverrides(mapOf(DocumentCommands.save.id to listOf(KeyChord.ctrl(KeyEvent.VK_W))))
         assertEquals(listOf("Ctrl+W"), keyboardShortcutSections(moved).flatMap { it.rows }.single { it.label == "Save" }.chords.map(KeyChord::display))

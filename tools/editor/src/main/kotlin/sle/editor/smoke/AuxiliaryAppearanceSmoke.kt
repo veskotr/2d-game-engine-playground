@@ -53,24 +53,37 @@ internal suspend fun runAuxiliaryAppearanceSmoke(owner: Window, appearance: Edit
             } catch(t: Throwable) { failure=t;dialog.dispose() }
         }
     }.apply { isRepeats=false;start() }
-    answer("unsaved") { d -> descendants(d).filterIsInstance<JOptionPane>().single().value=JOptionPane.NO_OPTION }
-    check(EditorDialogs.showConfirmDialog(null,"Discard unsaved scene changes?","Unsaved scene",JOptionPane.YES_NO_OPTION)==JOptionPane.NO_OPTION)
+    // Editor prompts: the Compose dialog shell, answered through its handle once it is on screen.
+    fun prompt(name: String,respond: (sle.editor.ui.dialog.PromptHandle)->Unit): Timer = Timer(1000) {
+        val handle=sle.editor.ui.dialog.EditorPrompts.current
+        val dialog=handle?.let(::promptWindow)
+        if(handle!=null && dialog!=null) {
+            try {
+                check(appearance.value==expected && EditorDialogAppearance.appearance==expected) { "$name changed the editor appearance" }
+                check((dialog as Dialog).owner===owner) { "$name prompt is not owned by the editor window: ${dialog.owner}" }
+                EditorWindowChrome.darkCaption(dialog)?.let { dark ->
+                    check(dark==(mode==EditorThemeMode.Dark)) { "$name caption is not themed for $mode" }
+                }
+                ImageIO.write(robot.createScreenCapture(Rectangle(dialog.locationOnScreen,dialog.size)),"png",report.resolve("session5-${mode.name.lowercase()}-$name.png").toFile())
+                val surface=Color(editorColors(mode).surface.toArgb())
+                val insets=dialog.insets
+                val sample=robot.getPixelColor(dialog.locationOnScreen.x+insets.left+4,dialog.locationOnScreen.y+insets.top+4)
+                check(sample==surface) { "$name prompt background $sample is not the $mode surface $surface" }
+                respond(handle)
+            } catch(t: Throwable) { failure=t;handle.answer(-1) }
+        }
+    }.apply { isRepeats=false;start() }
+    prompt("unsaved") { it.answer("Cancel") }
+    check(!sle.editor.ui.dialog.EditorPrompts.confirm("Unsaved Scene","Discard unsaved scene changes?","Discard",danger=true))
     failure?.let { throw it }
-    answer("collision") { d ->
-        val pane=descendants(d).filterIsInstance<JOptionPane>().single()
-        check(pane.icon is EditorActionIcon) { "Message icon is the system icon" }
-        pane.value="Rename"
-    }
-    check(EditorDialogs.showOptionDialog(null,"tree.png already exists. Replace retains existing asset IDs.","Import name conflict",JOptionPane.DEFAULT_OPTION,JOptionPane.QUESTION_MESSAGE,null,arrayOf("Rename","Skip","Replace"),"Rename")==0)
+    prompt("collision") { it.answer("Rename") }
+    check(sle.editor.ui.dialog.EditorPrompts.choose("Import name conflict","tree.png already exists. Replace retains existing asset IDs.",listOf("Rename","Skip","Replace"),cancel=null)==0)
     failure?.let { throw it }
-    answer("input") { d ->
-        descendants(d).filterIsInstance<JTextField>().single().text="new-folder"
-        descendants(d).filterIsInstance<JButton>().first { it.text=="OK" }.doClick()
-    }
-    check(EditorDialogs.showInputDialog(null,"New folder name")=="new-folder")
+    prompt("input") { it.answer("Create","new-folder") }
+    check(sle.editor.ui.dialog.EditorPrompts.input("New Folder","Name",confirm="Create")=="new-folder")
     failure?.let { throw it }
-    answer("input-cancel") { d -> descendants(d).filterIsInstance<JButton>().first { it.text=="Cancel" }.doClick() }
-    check(EditorDialogs.showInputDialog(null,"New folder name")==null)
+    prompt("input-cancel") { it.answer("Cancel") }
+    check(sle.editor.ui.dialog.EditorPrompts.input("New Folder","Name",confirm="Create")==null)
     failure?.let { throw it }
     answer("file-chooser") { d ->
         val chooser=descendants(d).filterIsInstance<JFileChooser>().single()

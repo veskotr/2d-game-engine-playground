@@ -300,7 +300,7 @@ namespace sle
         }
         auto& displayCamera=editorView ? editorCamera : camera;
         if (embeddedPaused && renderSystem.isPhysicsDebugEnabled())
-            tileCollisionSystem->update(scene.getTileLayers(), entityPreview ? displayCamera : camera);
+            tileCollisionSystem->update(scene, entityPreview ? displayCamera : camera);
         renderer.setCamera(&displayCamera);
         configureRenderViewport();
         Context ctx{scene, scene.getRegistry(), scene.getEventBus(), globalBus_, renderer, displayCamera, physicsWorld.get(), 0.0f};
@@ -815,10 +815,10 @@ namespace sle
         stateMachineSystem.update(scene, dt, &scriptEngine);
 
         // Consume dirty local transforms, step physics, and write back results.
-        if (!scene.getTileLayers().empty()) {
+        if (!scene.getTileLayers().empty() || !scene.getTilemapPlacements().empty()) {
             auto terrainCamera = camera;
             CameraSystem::updateFromAuthoredTransforms(scene, terrainCamera);
-            tileCollisionSystem->update(scene.getTileLayers(), terrainCamera);
+            tileCollisionSystem->update(scene, terrainCamera);
         } else {
             tileCollisionSystem->clear();
         }

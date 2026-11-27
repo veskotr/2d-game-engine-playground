@@ -19,8 +19,11 @@ internal object ScenePicking {
         } }) return ScenePick(selected.document.key,"Entity")
         data class Hit(val pick: ScenePick,val layer: Int)
         val hits=scene.entities.asReversed().mapNotNull { entity ->
-            (if(cameraOutlineHit(scene.worldDocument(entity.document.key),camera,point)) "Camera2D" else GizmoMath.pick(scene.worldDocument(entity.document.key),camera,point,entity.selectedTarget))?.let { target ->
-                val layer=if(target!="SpriteRenderer") Int.MAX_VALUE else
+            (if (scene.worldDocument(entity.document.key).tilemapWorldBounds?.let { bounds ->
+                val world = camera.world(point)
+                world.x in bounds.min.x..bounds.max.x && world.y in bounds.min.y..bounds.max.y
+            } == true) "Tilemap" else if(cameraOutlineHit(scene.worldDocument(entity.document.key),camera,point)) "Camera2D" else GizmoMath.pick(scene.worldDocument(entity.document.key),camera,point,entity.selectedTarget))?.let { target ->
+                val layer=if(target == "Tilemap") Int.MIN_VALUE else if(target!="SpriteRenderer") Int.MAX_VALUE else
                     (entity.document.components["SpriteRenderer"]?.jsonObject?.get("layer")?.jsonPrimitive?.intOrNull ?: 0).coerceAtLeast(0)
                 Hit(ScenePick(entity.document.key,"Entity"),layer)
             }

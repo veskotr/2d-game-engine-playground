@@ -29,18 +29,39 @@ internal data class GizmoHandle(val kind: String, val local: Vec2, val x: Int = 
 internal data class GizmoShape(val target: String, val position: Vec2, val rotation: Double, val scale: Vec2,
     val offset: Vec2, val size: Vec2, val radius: Double) {
     val circle get() = target.startsWith("Circle")
-    val editable get() = abs(scale.x) > 1e-8 && abs(scale.y) > 1e-8
+    val editable get() = listOf(position.x,position.y,rotation,scale.x,scale.y,offset.x,offset.y).all { it.isFinite() } &&
+        abs(scale.x) > 1e-6 && abs(scale.y) > 1e-6 &&
+        (target == "Entity" || if(circle) radius.isFinite() && radius > 0 else
+            size.x.isFinite() && size.y.isFinite() && size.x > 0 && size.y > 0)
     fun world(local: Vec2) = position + Vec2(local.x*scale.x, local.y*scale.y).rotate(rotation)
     fun local(world: Vec2): Vec2 {
         val rotated = (world-position).rotate(-rotation)
         return Vec2(rotated.x/scale.x, rotated.y/scale.y)
     }
     val center get() = world(offset)
-    val radiusScale get() = max(0.0001,max(abs(scale.x),abs(scale.y)))
-    val worldRadius get() = radius * radiusScale
+    /** Physics uses an eight-vertex polygon for nonuniformly scaled circles. */
+    fun outline(): List<Vec2> {
+        if(!editable) return emptyList()
+        if(circle) {
+            val segments=if(abs(scale.x)==abs(scale.y)) 64 else 8
+            return (0..segments).map { i ->
+                val angle=i*2*PI/segments
+                center+Vec2(cos(angle)*radius*abs(scale.x),sin(angle)*radius*abs(scale.y)).rotate(rotation)
+            }
+        }
+        return listOf(-1 to -1,1 to -1,1 to 1,-1 to 1,-1 to -1).map { (x,y) ->
+            world(offset+Vec2(size.x*x/2,size.y*y/2))
+        }
+    }
     fun contains(world: Vec2): Boolean {
         if (!editable) return false
-        if (circle) return (world-center).length() <= worldRadius
+        if(circle) {
+            if(abs(scale.x)==abs(scale.y)) return (local(world)-offset).length() <= radius
+            return outline().zipWithNext().all { (a,b) ->
+                val edge=b-a;val delta=world-a
+                edge.x*delta.y-edge.y*delta.x >= -1e-10
+            }
+        }
         val local = local(world)-offset
         return abs(local.x) <= size.x/2 && abs(local.y) <= size.y/2
     }
@@ -56,7 +77,7 @@ internal data class GizmoShape(val target: String, val position: Vec2, val rotat
             } ?: fallback
             val values = doc.components[target] as? JsonObject ?: JsonObject(emptyMap())
             return GizmoShape(target, transform.vector("position", Vec2(0.0,0.0)), transform.number("rotation",0.0),
-                transform.vector("scale",Vec2(1.0,1.0)), values.vector("offset",Vec2(0.0,0.0)),
+                if(target=="Entity" || target=="SpriteRenderer") transform.vector("scale",Vec2(1.0,1.0)) else doc.parentWorldScale, values.vector("offset",Vec2(0.0,0.0)),
                 values.vector("size",Vec2(1.0,1.0)), values.number("radius",1.0))
         }
     }
@@ -76,11 +97,7 @@ internal object GizmoMath {
             if (doc.components[target]?.jsonObject?.get("enabled")?.jsonPrimitive?.booleanOrNull == false) continue
             val shape=GizmoShape.from(doc,target) ?: continue
             if (!shape.editable) continue
-            val polygon=if (shape.circle) (0..64).map { i ->
-                camera.screen(shape.center+Vec2(cos(i*PI/32),sin(i*PI/32))*shape.worldRadius)
-            } else listOf(-1 to -1,1 to -1,1 to 1,-1 to 1,-1 to -1).map { (x,y) ->
-                camera.screen(shape.world(shape.offset+Vec2(shape.size.x*x/2,shape.size.y*y/2)))
-            }
+            val polygon=shape.outline().map(camera::screen)
             if (polygon.zipWithNext().any { (a,b) -> distance(a,b)<=6.0 }) return target
         }
         val sprite=GizmoShape.from(doc,"SpriteRenderer")
@@ -99,7 +116,7 @@ internal object GizmoMath {
         }
     }
     fun handleWorld(shape: GizmoShape, handle: GizmoHandle) = if (handle.kind == "radius")
-        shape.center + Vec2(handle.x*shape.worldRadius,handle.y*shape.worldRadius) else shape.world(handle.local)
+        shape.world(shape.offset+Vec2(handle.x*shape.radius,handle.y*shape.radius)) else shape.world(handle.local)
 
     /**
      * [snap] is the move step while snapping applies (null: free). [axis] keeps a move on one world
@@ -132,7 +149,7 @@ internal object GizmoMath {
         // grabbed the handle so the first drag event cannot jump its geometry.
         val endpoint = handleWorld(shape,handle) + end - start
         if (handle.kind == "radius") {
-            val radius = max(0.001,precise((endpoint-shape.center).length()/shape.radiusScale))
+            val radius = max(0.001,precise((shape.local(endpoint)-shape.offset).length()))
             if (!radius.isFinite() || radius>1e9) return doc
             return doc.setValue(target,listOf("radius"),JsonPrimitive(radius))
         }

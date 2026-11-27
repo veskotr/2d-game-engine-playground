@@ -1,3 +1,4 @@
+#include "PhysicsGeometry.hpp"
 #include <sle/engine/PhysicsSystem.hpp>
 #include <sle/scene/ChunkActivity.hpp>
 #include <sle/engine/Context.hpp>
@@ -17,28 +18,7 @@
 
 namespace sle {
 
-namespace {
-bool usablePose(const Context& ctx, sle::entity::Entity entity)
-{
-    using namespace sle::entity::transformMath;
-    const auto parent = currentParentWorld(ctx.scene, entity);
-    if (!ctx.registry.getComponent<sle::components::TransformComponent>(entity) ||
-        !invertible(parent) || !finite(currentWorld(ctx.scene, entity))) return false;
-    using Subsystem = sle::components::ChunkSubsystem;
-    auto boxSafe = [&](const auto* shape, Subsystem subsystem) {
-        return !shape || !shape->enabled || !sle::entity::isChunkActive(ctx.registry, entity, subsystem) ||
-            ctx.physicsWorld->isBoxGeometryValid(shape->size * glm::abs(parent.scale), shape->offset * parent.scale);
-    };
-    auto circleSafe = [&](const auto* shape, Subsystem subsystem) {
-        return !shape || !shape->enabled || !sle::entity::isChunkActive(ctx.registry, entity, subsystem) ||
-            ctx.physicsWorld->isCircleGeometryValid(shape->radius, shape->offset, parent.scale);
-    };
-    return boxSafe(ctx.registry.getComponent<sle::components::BoxColliderComponent>(entity), Subsystem::Collision) &&
-        boxSafe(ctx.registry.getComponent<sle::components::BoxZoneComponent>(entity), Subsystem::Zones) &&
-        circleSafe(ctx.registry.getComponent<sle::components::CircleColliderComponent>(entity), Subsystem::Collision) &&
-        circleSafe(ctx.registry.getComponent<sle::components::CircleZoneComponent>(entity), Subsystem::Zones);
-}
-}
+
 
 
 void PhysicsSystem::releaseEntity(sle::entity::Scene& scene, sle::physics::PhysicsWorld* world, sle::entity::Entity entity)
@@ -109,7 +89,7 @@ void PhysicsSystem::createNewPhysicsBodies(const Context& ctx)
             if (!transform)
                 return;
 
-            if (!usablePose(ctx, entity)) return;
+            if (!usablePhysicsPose(ctx, entity)) return;
             const auto pose = sle::entity::transformMath::currentWorld(ctx.scene, entity);
             glm::vec2 position = pose.position;
 
@@ -138,7 +118,7 @@ void PhysicsSystem::syncActivationAndFixtures(const Context& ctx)
             if (body.box2dBodyId == 0)
                 return;
             using Subsystem = sle::components::ChunkSubsystem;
-            const bool active = body.enabled && usablePose(ctx, entity) && sle::entity::isChunkActive(ctx.registry, entity, Subsystem::Physics);
+            const bool active = body.enabled && usablePhysicsPose(ctx, entity) && sle::entity::isChunkActive(ctx.registry, entity, Subsystem::Physics);
             const bool changed = ctx.physicsWorld->setBodyEnabled(body.box2dBodyId, active);
             if (!active)
                 return; // Keep fixtures/velocity intact while the whole body is suspended.
@@ -193,7 +173,7 @@ void PhysicsSystem::syncTransformToPhysics(const Context& ctx)
     ctx.registry.view<sle::components::RigidBodyComponent, sle::components::TransformComponent>(
         [&ctx, this](sle::entity::Entity entity, sle::components::RigidBodyComponent& body, sle::components::TransformComponent&)
         {
-            if (!body.box2dBodyId || !body.enabled || !usablePose(ctx, entity) ||
+            if (!body.box2dBodyId || !body.enabled || !usablePhysicsPose(ctx, entity) ||
                 !sle::entity::isChunkActive(ctx.registry, entity, sle::components::ChunkSubsystem::Physics)) return;
             const auto pose = sle::entity::transformMath::currentWorld(ctx.scene, entity);
             const auto previous = authoredPoses_.find(entity.getID());
@@ -217,7 +197,7 @@ void PhysicsSystem::syncPhysicsToTransform(const Context& ctx)
     // ancestor and child are independent world bodies, regardless of view order.
     std::unordered_map<uint32_t, WorldTransformComponent> simulated;
     ctx.registry.view<sle::components::RigidBodyComponent>([&](sle::entity::Entity entity, auto& body) {
-        if (!body.box2dBodyId || !body.enabled || !usablePose(ctx, entity) ||
+        if (!body.box2dBodyId || !body.enabled || !usablePhysicsPose(ctx, entity) ||
             !sle::entity::isChunkActive(ctx.registry, entity, sle::components::ChunkSubsystem::Physics)) return;
         auto& pose = simulated[entity.getID()];
         ctx.physicsWorld->getBodyTransform(body.box2dBodyId, pose.position, pose.rotation);

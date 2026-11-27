@@ -6,6 +6,7 @@
 #include "ProjectSettings.hpp"
 #include "PrefabExpansion.hpp"
 #include "TileLayerLoader.hpp"
+#include "TilemapLoader.hpp"
 #include <fstream>
 #include <algorithm>
 #include <cctype>
@@ -274,6 +275,11 @@ void ProjectRuntime::index(bool validateTileAssets) {
             (void)detail::loadTileLayers(document.at("tileLayers"),
                 [&project](const auto& ref) { return project.resolveAsset(ref); }, {}, false, false);
         }
+        if (validateTileAssets) for (const auto& entity : document.at("entities")) {
+            const auto& components = entity.at("components");
+            if (components.contains("Tilemap")) (void)detail::loadTilemap(components["Tilemap"].at("asset").get<std::string>(),
+                [&project](const auto& ref) { return project.resolveAsset(ref); }, {}, false, false);
+        }
         const auto id=identity(read(fs::path(path.string()+".slemeta")).at("id").get<std::string>());
         const auto key=document.at("key").get<std::string>();
         require(key==id || !project.paths.contains(key),"Scene key conflicts with a project UUID: "+key);
@@ -392,6 +398,14 @@ nlohmann::json ProjectRuntime::resolveComponentAssets(const Json& components,boo
         }
         return value;
     };
-    return visit(components,"");
+    auto result = visit(components, "");
+    if (result.contains("Tilemap") && result["Tilemap"].contains("asset")) {
+        const auto asset = result["Tilemap"]["asset"].get<std::string>();
+        if (!asset.empty()) {
+            require(!portable || asset.starts_with("project-asset://"), "Project tilemap must use a UUID reference");
+            result["Tilemap"]["asset"] = resolveAsset(asset);
+        }
+    }
+    return result;
 }
 }

@@ -28,6 +28,8 @@ internal data class MenuAppearance(
     /** Same body role and size as Compose text. [scale] is the UI scale only: Java2D already applies OS DPI to Swing. */
     val font: Font = editorAwtFont(density,scale)
     val secondaryFont: Font = editorAwtFont(density,scale,EditorAwtRole.Secondary)
+    /** Vertical padding of a menu row: tight, but Comfortable density keeps more room. */
+    val rowPadding: Int get() = ((if(density==EditorDensity.Compact) 4 else 6)*scale).roundToInt()
     companion object {
         /** The only mapping from editor tokens to Swing menu colors. */
         fun of(mode: EditorThemeMode, density: EditorDensity, scale: Float): MenuAppearance {
@@ -70,7 +72,7 @@ internal class EditorMenuItemUI(private val theme: MenuAppearance) : BasicMenuIt
 internal class EditorMenuSeparator(theme: MenuAppearance) : javax.swing.JPopupMenu.Separator() {
     var theme: MenuAppearance=theme
         set(value) { field=value;repaint() }
-    override fun getPreferredSize()=Dimension(0,(9*theme.scale).roundToInt().coerceAtLeast(5))
+    override fun getPreferredSize()=Dimension(0,(7*theme.scale).roundToInt().coerceAtLeast(5))
     override fun paintComponent(graphics: Graphics) {
         graphics.color=theme.surface;graphics.fillRect(0,0,width,height)
         graphics.color=theme.separator;graphics.fillRect(0,height/2,width,1)

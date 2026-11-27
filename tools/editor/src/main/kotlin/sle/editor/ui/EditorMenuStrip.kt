@@ -9,6 +9,12 @@ import androidx.compose.ui.platform.LocalDensity
 import java.awt.Color
 import javax.swing.*
 import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.unit.dp
 import javax.swing.event.MenuEvent
 import javax.swing.event.MenuListener
 import javax.swing.plaf.basic.BasicMenuBarUI
@@ -102,11 +108,14 @@ internal fun editorApplicationMenus(
     onTheme: (sle.editor.ui.theme.EditorThemeMode)->Unit = {},
     onDensity: (sle.editor.ui.theme.EditorDensity)->Unit = {},
     keymap: Keymap = standardKeymap,
+    liveContext: () -> CommandContext = { ctx },
+    tileLayers: TileLayerCreation? = null,
 ): List<Pair<String,List<EditorMenuEntry>>> {
     fun entry(command: EditorCommand) = command.menuEntry(ctx,keymap)
     val entityMode=ctx.mode==sle.editor.viewport.ViewportMode.Entity
     val scene=ctx.scene;val entity=ctx.entity
-    val creation=if(entityMode) entity?.let { entityCreationMenu(it,ctx.linked,projectAssets) } ?: emptyList() else scene?.let { sceneCreationMenu(it,ctx.editable,onEditEntity=ctx.actions::editEntity) } ?: emptyList()
+    val editableNow = { liveContext().let { it.editable && !it.gameRunning && !it.projectBusy && !it.modalOpen && it.entity === entity && it.scene === scene && it.mode == ctx.mode && it.projectGeneration == ctx.projectGeneration } }
+    val creation=if(entityMode) entity?.let { entityCreationMenu(it,ctx.linked,projectAssets,editableNow) } ?: emptyList() else scene?.let { sceneCreationMenu(it,ctx.editable,onEditEntity=ctx.actions::editEntity,editableNow=editableNow,tileLayers=tileLayers) } ?: emptyList()
     val files=ctx.editable && !ctx.projectBusy
     return listOf(
         "File" to projectEntries + listOf(
@@ -149,12 +158,31 @@ internal fun editorApplicationMenus(
         ),
         "Help" to listOf(
             entry(ViewCommands.keyboardShortcuts),
-            EditorMenuEntry("About SLE Editor…") { EditorDialogs.showMessageDialog(null,"SLE Editor\nKotlin Compose Desktop · SLE native renderer\nScene and entity template authoring", "About",JOptionPane.INFORMATION_MESSAGE) },
+            EditorMenuEntry("About SLE Editor…") { sle.editor.ui.dialog.EditorPrompts.message("About SLE Editor","SLE Editor\nKotlin Compose Desktop · SLE native renderer\nScene and entity template authoring") },
         ),
     )
 }
 
 /** Help → Keyboard Shortcuts, generated from the command registry. */
 internal fun showKeyboardShortcuts(keymap: Keymap = standardKeymap) {
-    EditorDialogs.showMessageDialog(null,JLabel(keyboardShortcutsHtml(keymap)).apply { toolTipText="Editor keyboard shortcuts" },"Keyboard Shortcuts",JOptionPane.PLAIN_MESSAGE)
+    val table=keyboardShortcutTable(keymap)
+    sle.editor.ui.dialog.EditorPrompts.message("Keyboard Shortcuts",GAME_KEYS_NOTE) { KeyboardShortcutTable(table) }
+}
+
+@Composable
+private fun KeyboardShortcutTable(table: List<Pair<String, List<Pair<String, String>>>>) {
+    val metrics=sle.editor.ui.theme.LocalEditorMetrics.current
+    val colors=sle.editor.ui.theme.LocalEditorColors.current
+    androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.heightIn(max=420.dp)
+        .verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+        table.forEach { (title,rows) ->
+            sle.editor.ui.controls.EditorSectionHeader(title)
+            rows.forEach { (label,keys) ->
+                androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.fillMaxWidth().padding(vertical=metrics.gap/4)) {
+                    sle.editor.ui.controls.EditorLabel(label,androidx.compose.ui.Modifier.width(200.dp),color=colors.textSecondary)
+                    sle.editor.ui.controls.EditorLabel(keys,androidx.compose.ui.Modifier.weight(1f))
+                }
+            }
+        }
+    }
 }

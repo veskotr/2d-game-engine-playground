@@ -153,3 +153,8 @@ Scene/Project Play passes `allowDebugInput=false` so Game F3 cannot toggle the
 editor debug HUD. The default remains true for Sandbox/legacy hosted callers;
 standalone input policy is unchanged. Docking and presenter lifetime are editor
 responsibilities; see the [workspace guide](../topics/EditorWorkspace.md).
+
+`TilemapLoader` validates shared map assets and resolves their tileset-qualified
+cells into local runtime partitions. Placement views apply current entity
+translation consistently to rendering, preview bounds, and terrain collision;
+see [tilemap placement](../topics/Scenes.md#tilemap-assets-and-placement).

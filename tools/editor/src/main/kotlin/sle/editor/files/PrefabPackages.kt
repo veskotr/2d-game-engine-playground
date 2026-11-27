@@ -144,6 +144,10 @@ internal object PrefabPackages {
         saveDocument(document.serialize(), assets, path, "sle-prefab", "entity.json", validate)
 
     fun saveScene(source: String, assets: Map<Path, String>, path: Path, validate: (String) -> Unit) {
+        val authored = Json.parseToJsonElement(source).jsonObject
+        require(authored["entities"]?.jsonArray.orEmpty().none { "Tilemap" in it.jsonObject["components"]?.jsonObject.orEmpty() }) {
+            "Save tilemap placements inside a project and use Export Game to package their dependencies"
+        }
         val tileLayers = Json.parseToJsonElement(source).jsonObject["tileLayers"]?.jsonArray
         require(tileLayers.isNullOrEmpty()) { "Save scenes with native tile layers inside a project and use Export Game to package them" }
         saveDocument(source, assets, path, "sle-scene", "scene.json", validate)
@@ -151,6 +155,10 @@ internal object PrefabPackages {
 
     private fun saveDocument(source: String, assets: Map<Path, String>, path: Path, format: String,
         documentEntry: String, validate: (String) -> Unit) {
+        val authored = Json.parseToJsonElement(source).jsonObject
+        require(authored["entities"]?.jsonArray.orEmpty().none { "Tilemap" in it.jsonObject["components"]?.jsonObject.orEmpty() }) {
+            "Save tilemap placements inside a project and use Export Game to package their dependencies"
+        }
         validate(source)
         val bundle = bundle(Json.parseToJsonElement(source).jsonObject, assets, format)
         val target = path.toAbsolutePath()

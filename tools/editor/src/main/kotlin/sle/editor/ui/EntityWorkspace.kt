@@ -15,17 +15,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.serialization.json.*
-import javax.swing.JOptionPane
 
 internal fun confirmDiscard(state: EntityWorkspaceState?): Boolean = state == null || !state.dirty ||
-    EditorDialogs.showConfirmDialog(null, "Discard unsaved entity changes?", "Unsaved entity", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION
+    sle.editor.ui.dialog.EditorPrompts.confirm("Unsaved Entity", "Discard unsaved entity changes?", "Discard", danger = true)
 
 @Composable
 internal fun EntityWorkspace(state: EntityWorkspaceState, embedded: Boolean = false, tags: Map<String, String> = emptyMap()) {
     val projectAssets=LocalProjectAssets.current
+    val editable = liveEntityEditable(state)
     var assetsExpanded by remember { mutableStateOf(false) }
     val m=sle.editor.ui.theme.LocalEditorMetrics.current
-    Column(Modifier.fillMaxSize().editorContextMenu { entityCreationMenu(state,embedded,projectAssets) }) {
+    Column(Modifier.fillMaxSize().editorContextMenu { entityCreationMenu(state,embedded,projectAssets,editable) }) {
         sle.editor.ui.controls.EditorPanelHeader("Entity Template")
         Column(Modifier.padding(horizontal=m.panelPadding,vertical=m.gap),verticalArrangement=Arrangement.spacedBy(m.gap/2)) {
             key(state,state.document.key) {
@@ -128,6 +128,7 @@ internal fun ComponentSections(state: EntityWorkspaceState, readOnly: Boolean = 
     scene: Boolean = false, tags: Map<String, String> = emptyMap(),
     extraActions: @Composable RowScope.(String) -> Unit = {}) {
     val m=sle.editor.ui.theme.LocalEditorMetrics.current
+    val editable = liveEntityEditable(state, readOnly)
     // Transform first, then components in authored order (saved files are sorted alphabetically).
     state.document.components.keys.filter(shown).sortedBy { if(it=="Transform") 0 else 1 }.forEach { component ->
         key(component) {
@@ -139,9 +140,9 @@ internal fun ComponentSections(state: EntityWorkspaceState, readOnly: Boolean = 
                         state.endGesture()
                         if(scene) state.sceneTarget=if(on) component else "Entity" else state.selectedTarget=if(on) component else "Entity"
                     },enabled=!readOnly,help="Show resize handles for this shape in the viewport",style=sle.editor.ui.controls.EditorButtonStyle.Ghost)
-                    if(component!="SpriteRenderer" && "SpriteRenderer" in state.document.components) sle.editor.ui.controls.EditorButton("Fit",{
-                        try { state.endGesture();fitShapeToSprite(state,component) } catch(failure: Exception) { state.error=failure.message }
-                    },enabled=!readOnly,help="Match the sprite's size and offset",style=sle.editor.ui.controls.EditorButtonStyle.Ghost)
+                    if(component!="SpriteRenderer" && "SpriteRenderer" in state.document.components) sle.editor.ui.controls.EditorButton("Fit",
+                        entityEditAction(state, editable) { fitShapeToSprite(state,component,editable) },
+                        enabled=editable(),help="Fit explicit collision dimensions to sprite size × own Transform scale; signed offsets follow mirrored scale. Circles enclose the scaled sprite. Parent scale is applied by physics.",style=sle.editor.ui.controls.EditorButtonStyle.Ghost)
                 }
                 if(component!="Transform") sle.editor.ui.controls.EditorButton("Remove",{state.removeComponent(component)},
                     enabled=!readOnly,help="Remove $component",style=sle.editor.ui.controls.EditorButtonStyle.Ghost)
@@ -162,10 +163,25 @@ internal fun ComponentSections(state: EntityWorkspaceState, readOnly: Boolean = 
 
 @Composable
 internal fun AddComponentButton(state: EntityWorkspaceState, modifier: Modifier = Modifier) {
-    val launcher=editorMenuLauncher { addComponentEntries(state) }
+    val editable = liveEntityEditable(state)
+    val launcher=editorMenuLauncher { addComponentEntries(state, editable) }
     val available=state.catalog.keys.any { it !in state.document.components }
     sle.editor.ui.controls.EditorButton("Add Component",{
         val pointer=java.awt.MouseInfo.getPointerInfo().location
         launcher(pointer.x,pointer.y)
-    },modifier.fillMaxWidth(),enabled=available,help="Attach a component to this entity",style=sle.editor.ui.controls.EditorButtonStyle.Primary)
+    },modifier.fillMaxWidth(),enabled=available && editable(),help="Attach a component to this entity",style=sle.editor.ui.controls.EditorButtonStyle.Primary)
+}
+
+/** Context is read again on invocation because popup and inspector actions can outlive their host. */
+@Composable
+internal fun liveEntityEditable(state: EntityWorkspaceState, readOnly: Boolean = false): () -> Boolean {
+    val currentReadOnly by rememberUpdatedState(readOnly)
+    val context by rememberUpdatedState(LocalDetailsContext.current)
+    val mounted = remember(state) { mutableStateOf(true) }
+    DisposableEffect(mounted) { onDispose { mounted.value = false } }
+    return {
+        val live = context?.invoke()
+        mounted.value && !currentReadOnly && (live == null || live.entity === state &&
+            live.editable && !live.gameRunning && !live.projectBusy && !live.modalOpen)
+    }
 }

@@ -152,7 +152,13 @@ internal class EntityWorkspaceState(val catalog: Map<String, ComponentDefinition
     private fun resetHistory() { editContextVersion++;gesture = null; gestureLabel = null; gestureToken = null; numberEditEpoch++; numberEdits.clear(); ownHistory.clear(); selectedTarget = "Entity"; selectedComponent = null }
     fun rename(name: String) = change("Rename ${historyName(document)}") { document = document.copy(name = name); error = null }
     /** Viewport edits; equal [mergeKey]s in quick succession (arrow nudges) merge into one step. */
-    fun applyGizmo(value: EntityDocument, mergeKey: Any? = null) = change(mergeKey = mergeKey) { applyStructure(value) }
+    fun applyGizmo(value: EntityDocument, mergeKey: Any? = null) = change(mergeKey = mergeKey) {
+        val before = ScenePose.from(document); val next = ScenePose.from(value)
+        require("Tilemap" !in document.components || (before.rotation == next.rotation && before.scale == next.scale)) {
+            "Tilemaps support translation only"
+        }
+        applyStructure(value)
+    }
 
     // Structural scene operations own their undo record; refresh only changed field drafts.
     fun applyStructure(value: EntityDocument) {

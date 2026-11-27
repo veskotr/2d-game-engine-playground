@@ -75,6 +75,8 @@ internal interface EditorActions {
     fun frameSelected() {}
     /** Opens the Configure Snap dialog. */
     fun configureSnap() {}
+    /** Shows and focuses the Tile Palette panel. */
+    fun openTilePalette() {}
     fun runProject() {}
     fun showKeyboardShortcuts() {}
     object None : EditorActions

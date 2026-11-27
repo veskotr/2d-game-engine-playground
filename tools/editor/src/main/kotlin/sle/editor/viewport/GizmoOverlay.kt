@@ -71,8 +71,7 @@ internal class GizmoOverlay {
                 bounds.zipWithNext().forEach { (a,b) -> lines.add(a);lines.add(b) }
             }
         } else if (shape.editable) {
-            val outline=if (shape.circle) (0..64).map { i -> camera.screen(shape.center + Vec2(cos(i*PI/32),sin(i*PI/32))*shape.worldRadius) }
-            else listOf(-1 to -1,1 to -1,1 to 1,-1 to 1,-1 to -1).map { (x,y) -> camera.screen(shape.world(shape.offset+Vec2(shape.size.x*x/2,shape.size.y*y/2))) }
+            val outline=shape.outline().map(camera::screen)
             outline.zipWithNext().forEach { (a,b) -> lines.add(a); lines.add(b) }
         }
         draw(GL11.GL_LINES,lines)

@@ -142,11 +142,8 @@ internal object EditorDialogAppearance {
             component.toolTipText = when (component) {
                 is AbstractButton -> component.text?.takeIf { it.isNotBlank() } ?: component.accessibleContext?.accessibleName
                 is JLabel -> component.text?.takeIf { it.isNotBlank() }
-                is JTextComponent, is JComboBox<*> -> {
-                    val prompt = (SwingUtilities.getAncestorOfClass(JOptionPane::class.java, component) as? JOptionPane)
-                        ?.takeIf { it.wantsInput }?.message as? String
-                    prompt ?: component.accessibleContext?.accessibleName?.takeIf { it.isNotBlank() } ?: "Input value"
-                }
+                is JTextComponent, is JComboBox<*> ->
+                    component.accessibleContext?.accessibleName?.takeIf { it.isNotBlank() } ?: "Input value"
                 else -> null
             }
         }
@@ -282,15 +279,6 @@ internal class EditorActionIcon(private val kind: Kind) : Icon {
             }
         } finally { g2.dispose() }
     }
-    companion object {
-        fun forMessage(type: Int): Icon? = when(type) {
-            JOptionPane.ERROR_MESSAGE -> EditorActionIcon(Kind.Error)
-            JOptionPane.WARNING_MESSAGE -> EditorActionIcon(Kind.Warning)
-            JOptionPane.INFORMATION_MESSAGE -> EditorActionIcon(Kind.Info)
-            JOptionPane.QUESTION_MESSAGE -> EditorActionIcon(Kind.Question)
-            else -> null
-        }
-    }
 }
 
 /** Slim thumb on the panel surface; no arrow buttons. */
@@ -318,41 +306,3 @@ internal class EditorScrollBarUI : javax.swing.plaf.basic.BasicScrollBarUI() {
     }
 }
 
-/** The same JOptionPane model and modal results, with scoped presentation. */
-internal object EditorDialogs {
-    private fun show(parent: Component?, title: String, pane: JOptionPane): Any? {
-        check(SwingUtilities.isEventDispatchThread())
-        if(pane.icon==null) pane.icon=EditorActionIcon.forMessage(pane.messageType)
-        val dialog=pane.createDialog(EditorDialogOwner.resolve(parent),title)
-        try {
-            EditorDialogAppearance.register(dialog.rootPane)
-            dialog.pack()
-            EditorWindowChrome.apply(dialog)
-            dialog.isVisible=true
-            return pane.value
-        } finally { dialog.dispose() }
-    }
-    fun showConfirmDialog(parent: Component?,message: Any?,title: String,optionType: Int,messageType: Int=JOptionPane.QUESTION_MESSAGE): Int =
-        (show(parent,title,JOptionPane(message,messageType,optionType)) as? Int) ?: JOptionPane.CLOSED_OPTION
-    fun showMessageDialog(parent: Component?,message: Any?,title: String,messageType: Int) {
-        show(parent,title,JOptionPane(message,messageType))
-    }
-    fun showOptionDialog(parent: Component?,message: Any?,title: String,optionType: Int,messageType: Int,icon: Icon?,options: Array<out Any>,initial: Any?): Int {
-        val selected=show(parent,title,JOptionPane(message,messageType,optionType,icon,options,initial))
-        return options.indexOfFirst { it==selected }
-    }
-    fun showInputDialog(parent: Component?,message: Any?): String? = showInputDialog(parent,message,"")
-    fun showInputDialog(parent: Component?,message: Any?,initial: Any?): String? =
-        input(parent,message,"Input",JOptionPane.QUESTION_MESSAGE,null,null,initial) as? String
-    fun showInputDialog(parent: Component?,message: Any?,title: String,messageType: Int): String? =
-        input(parent,message,title,messageType,null,null,null) as? String
-    fun showInputDialog(parent: Component?,message: Any?,title: String,messageType: Int,icon: Icon?,values: Array<out Any>,initial: Any?): Any? =
-        input(parent,message,title,messageType,icon,values,initial)
-    private fun input(parent: Component?,message: Any?,title: String,type: Int,icon: Icon?,values: Array<out Any>?,initial: Any?): Any? {
-        val pane=JOptionPane(message,type,JOptionPane.OK_CANCEL_OPTION,icon).apply {
-            wantsInput=true;selectionValues=values;initialSelectionValue=initial
-        }
-        show(parent,title,pane)
-        return pane.inputValue.takeUnless { it===JOptionPane.UNINITIALIZED_VALUE }
-    }
-}

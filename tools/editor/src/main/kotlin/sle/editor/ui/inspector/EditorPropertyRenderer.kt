@@ -26,11 +26,13 @@ internal fun EditorPropertyRenderer(state: EntityWorkspaceState, property: Edito
     label: String = property.displayLabel,
     onScalarEdit: ((JsonPrimitive) -> Unit)? = null,
     scalarNumberEdit: NumberEdit? = null,
+    compactLabel: Boolean = false,
 ) {
     val extension = if (onScalarEdit == null) projectDrawer(property, LocalProjectDrawers.current) else null
     val p = extension?.let { property.copy(projectDrawer = it) } ?: property
     val drawer = p.drawer
-    val readOnly = hostReadOnly || p.readOnly
+    val readOnly = hostReadOnly || p.readOnly || ("Tilemap" in state.document.components &&
+        p.component == "Transform" && p.path.firstOrNull() in listOf("rotation", "scale"))
     val canReplace = !readOnly && !p.hasReadOnlyDescendants
     val inputReadOnly = readOnly || (p.kind != PropertyKind.Vector && !canReplace)
     if (drawer == PropertyDrawer.Structured) {
@@ -47,11 +49,11 @@ internal fun EditorPropertyRenderer(state: EntityWorkspaceState, property: Edito
     key(state,state.document.key,p.id) {
         InspectorPropertyRow(p, inputReadOnly, p.id in state.fieldErrors, label = label,
             labelModifier = if (onScalarEdit == null) detailsPropertyMenu(state, p, !canReplace) else Modifier,
-            actions = actions, actionsReadOnly = !canReplace, overrideIndicator = overrideIndicator) { disabled ->
+            actions = actions, actionsReadOnly = !canReplace, overrideIndicator = overrideIndicator, compactLabel = compactLabel) { disabled ->
             when {
                 p.kind == PropertyKind.Vector -> {
-                    VectorPropertyFields(state, p) { axis, caption ->
-                        EditorPropertyRenderer(state, axis, disabled, actions = actions, label = caption)
+                    VectorPropertyFields(state, p) { axis, caption, compact ->
+                        EditorPropertyRenderer(state, axis, disabled, actions = actions, label = caption, compactLabel = compact)
                     }
                     if (p.isColor) ColorPickerRow(state, p, !canReplace)
                 }
@@ -73,9 +75,19 @@ internal fun EditorPropertyRenderer(state: EntityWorkspaceState, property: Edito
                 p.kind == PropertyKind.Integer && p.path.size == 1 &&
                     p.path.single() in setOf("categoryBits", "maskBits") &&
                     p.component in setOf("BoxCollider", "CircleCollider", "BoxZone", "CircleZone") -> {
-                    PropertyNumberField(state, p, disabled)
-                    CollisionMaskDrawer(p.label, p.value.jsonPrimitive.int, !disabled) {
-                        state.setValue(p.component, p.path, JsonPrimitive(it))
+                    val m = sle.editor.ui.theme.LocalEditorMetrics.current
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val input: @Composable () -> Unit = { PropertyNumberField(state, p, disabled) }
+                        val layers: @Composable () -> Unit = {
+                            CollisionMaskDrawer(p.label, p.value.jsonPrimitive.int, !disabled) {
+                                state.setValue(p.component, p.path, JsonPrimitive(it))
+                            }
+                        }
+                        if (maxWidth >= m.field * 7) Row(horizontalArrangement = Arrangement.spacedBy(m.gap),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) { input() }
+                            layers()
+                        } else Column(verticalArrangement = Arrangement.spacedBy(m.gap)) { input(); layers() }
                     }
                 }
                 else -> when (p.kind) {
@@ -113,6 +125,7 @@ private fun InspectorPropertyRow(
     actionsReadOnly: Boolean = readOnly,
     labelModifier: Modifier = Modifier,
     overrideIndicator: (@Composable () -> Unit)? = null,
+    compactLabel: Boolean = false,
     content: @Composable (Boolean) -> Unit,
 ) {
     val help = listOfNotNull(property.descriptor?.help ?: "${property.component}.${property.label}",
@@ -122,7 +135,7 @@ private fun InspectorPropertyRow(
                 bounds.max?.let { "Maximum $it${if (bounds.maxExclusive) " (exclusive)" else ""}" },
             ).joinToString(". ").ifEmpty { null }
         }).joinToString(". ")
-    EditorPropertyRow(label, help = help, labelModifier = labelModifier) {
+    val value: @Composable RowScope.() -> Unit = {
         Column(Modifier.weight(1f)) {
             content(readOnly)
             if (invalid) EditorLabel(
@@ -133,16 +146,33 @@ private fun InspectorPropertyRow(
         overrideIndicator?.invoke()
         actions?.invoke(property, actionsReadOnly)
     }
+    if (compactLabel) {
+        val m = sle.editor.ui.theme.LocalEditorMetrics.current
+        Column {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(m.gap),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                EditorLabel(label, labelModifier, help = help,
+                    style = sle.editor.ui.theme.LocalEditorTypography.current.secondary,
+                    color = LocalEditorColors.current.textSecondary)
+                Column(Modifier.weight(1f)) { content(readOnly) }
+            }
+            if (invalid) EditorLabel("Enter a valid number.", color = LocalEditorColors.current.error,
+                style = sle.editor.ui.theme.LocalEditorTypography.current.secondary)
+            actions?.invoke(property, actionsReadOnly)
+            overrideIndicator?.invoke()
+        }
+    } else EditorPropertyRow(label, help = help, labelModifier = labelModifier, content = value)
 }
 
 @Composable
 private fun PropertyNumberField(state: EntityWorkspaceState, property: EditorPropertyDefinition, readOnly: Boolean) {
     val descriptor = property.descriptor
     val presentation = remember(descriptor, property.kind) {
-        descriptor?.ui?.let { NumberPresentation(it, descriptor.hard, property.kind == PropertyKind.Integer) }
+        NumberPresentation(descriptor?.ui ?: sle.editor.model.NumericPresentation(null, null, null, null, null, false),
+            descriptor?.hard, property.kind == PropertyKind.Integer)
     }
     EditorNumberField(state.numberEdit(property.component, property.path), property.label,
-        readOnly = readOnly, presentation = presentation, authoredValue = property.value.jsonPrimitive.double)
+        modifier = Modifier.fillMaxWidth(), readOnly = readOnly, presentation = presentation, authoredValue = property.value.jsonPrimitive.double)
 }
 
 /** Preserve caret locally; drafts and validity remain in the workspace across remounts. */

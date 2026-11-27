@@ -25,10 +25,12 @@ data class EditorMetrics(
     val assetTypeWidth: Dp = 90.dp, val assetSizeWidth: Dp = 70.dp,
     val assetBreadcrumbWidth: Dp = 320.dp,
     val propertyStackThreshold: Dp = 240.dp, val propertyLabelFraction: Float = 0.36f,
+    /** Fixed label column of [sle.editor.ui.controls.EditorFormRow], so labels and fields align down a form. */
+    val formLabel: Dp = 112.dp,
 )
 fun editorMetrics(density: EditorDensity) = when(density) {
     EditorDensity.Compact -> EditorMetrics(28.dp,26.dp,26.dp,24.dp,28.dp,26.dp,8.dp,4.dp,16.dp,13.sp,12.sp,heading=13.sp)
     EditorDensity.Comfortable -> EditorMetrics(34.dp,32.dp,30.dp,28.dp,34.dp,30.dp,10.dp,6.dp,18.dp,14.sp,13.sp,heading=14.sp,brand=22.sp,
-        controlPadding=10.dp,controlVerticalPadding=3.dp,treeIndent=16.dp,statusBar=28.dp)
+        controlPadding=10.dp,controlVerticalPadding=3.dp,treeIndent=16.dp,statusBar=28.dp,formLabel=128.dp)
 }
 val LocalEditorMetrics=staticCompositionLocalOf { editorMetrics(EditorDensity.Compact) }

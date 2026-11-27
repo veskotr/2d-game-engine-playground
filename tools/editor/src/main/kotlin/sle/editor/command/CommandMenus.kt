@@ -51,15 +51,10 @@ internal val mouseGestureHelp: List<Pair<String, String>> = listOf(
     "Game input" to "Click the Game view while playing",
 )
 
-internal fun keyboardShortcutsHtml(keymap: Keymap = standardKeymap): String = buildString {
-    fun escape(text: String) = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    append("<html><body style='width:420px'>")
-    for(section in keyboardShortcutSections(keymap) + ShortcutSection("Mouse", emptyList())) {
-        append("<p style='margin-top:6px'><b>").append(escape(section.title)).append("</b></p><table cellspacing='0' cellpadding='2'>")
-        val rows = if(section.title == "Mouse") mouseGestureHelp else section.rows.map { it.label to it.chords.joinToString(" or ") { chord -> chord.display() } }
-        rows.forEach { (label, keys) -> append("<tr><td width='190'>").append(escape(label)).append("</td><td>").append(escape(keys)).append("</td></tr>") }
-        append("</table>")
-    }
-    append("<p style='margin-top:6px'>While the Game view has focus and the game runs or is paused, every other key goes to the game.</p>")
-    append("</body></html>")
-}
+/** Help → Keyboard Shortcuts as (section, rows of action → keys), ending with the mouse gestures. */
+internal fun keyboardShortcutTable(keymap: Keymap = standardKeymap): List<Pair<String, List<Pair<String, String>>>> =
+    keyboardShortcutSections(keymap).map { section ->
+        section.title to section.rows.map { it.label to it.chords.joinToString(" or ") { chord -> chord.display() } }
+    } + ("Mouse" to mouseGestureHelp)
+
+internal const val GAME_KEYS_NOTE = "While the Game view has focus and the game runs or is paused, every other key goes to the game."

@@ -9,11 +9,12 @@ import androidx.compose.foundation.layout.*
 import sle.editor.ui.controls.EditorLabel
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import kotlinx.serialization.json.*
 import sle.editor.model.EntityWorkspaceState
-import sle.editor.ui.EditorDialogs
+import sle.editor.ui.dialog.EditorPrompts
 import sle.editor.ui.controls.*
 import sle.editor.ui.theme.LocalEditorColors
 
@@ -58,7 +59,7 @@ internal fun resolvePropertyDrawer(property: EditorPropertyDefinition): Property
 internal fun VectorPropertyFields(
     state: EntityWorkspaceState,
     property: EditorPropertyDefinition,
-    renderAxis: @Composable (EditorPropertyDefinition, String) -> Unit,
+    renderAxis: @Composable (EditorPropertyDefinition, String, Boolean) -> Unit,
 ) {
     val captions = property.axes.map { axis ->
         val key = axis.path.last()
@@ -66,8 +67,32 @@ internal fun VectorPropertyFields(
         axis.path to (caption ?: property.axisCaption(key).uppercase())
     }.toMap()
     val blocks = groupInspectorProperties(property.axes, state.catalog[property.component])
-    InspectorGroups(state, property.component, blocks) { axis ->
-        renderAxis(axis, captions.getValue(axis.path))
+    val compact = blocks.all { it.group == null } && property.axes.all {
+        it.kind in setOf(PropertyKind.Number, PropertyKind.Integer) &&
+            it.drawer == null && sle.editor.scripts.projectDrawer(it, sle.editor.scripts.LocalProjectDrawers.current) == null
+    }
+    if (!compact) {
+        InspectorGroups(state, property.component, blocks) { axis ->
+            renderAxis(axis, captions.getValue(axis.path), false)
+        }
+        return
+    }
+    val m = sle.editor.ui.theme.LocalEditorMetrics.current
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Reserve room for the caption plus an editable number in each cell.
+        val longestCaption = captions.values.maxOfOrNull { it.length } ?: 1
+        val minimum = m.field * 3 + m.gap * (longestCaption + 2)
+        val columns = if (maxWidth >= minimum * 2 + m.gap) 2 else 1
+        Column(verticalArrangement = Arrangement.spacedBy(m.gap)) {
+            for (axes in blocks.flatMap { it.properties }.chunked(columns)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(m.gap)) {
+                    for (axis in axes) key(axis.path) {
+                        Box(Modifier.weight(1f)) { renderAxis(axis, captions.getValue(axis.path), true) }
+                    }
+                    if (axes.size < columns) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
     }
 }
 
@@ -107,9 +132,9 @@ internal fun ResourceDrawer(
             property.value.jsonPrimitive.content.isBlank()) {
             EditorButton("Create Definition…", enabled = !projectAssets.busy, onClick = {
                 val original = state.document
-                val relative = EditorDialogs.showInputDialog(null,
-                    "State Machine definition path relative to the project asset folder",
-                    "StateMachines/Behavior.statemachine.json")?.trim()
+                val relative = EditorPrompts.input("Create State Machine Definition", "Path",
+                    "StateMachines/Behavior.statemachine.json", "Relative to the project asset folder.",
+                    confirm = "Create") { if (it.isBlank()) "Enter a path" else null }?.trim()
                 fun targetIsCurrent() = state.document === original && context().let { it.editable && it.entity === state }
                 if (!relative.isNullOrEmpty() && targetIsCurrent()) create(relative) { path ->
                     if (targetIsCurrent()) {

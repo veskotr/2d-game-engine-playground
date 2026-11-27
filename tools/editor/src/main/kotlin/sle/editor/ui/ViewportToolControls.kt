@@ -27,7 +27,7 @@ import androidx.compose.ui.window.rememberDialogState
 
 private fun ViewportToolId.glyph() = when(this) {
     ViewportToolId.Select -> EditorGlyph.ToolSelect; ViewportToolId.Move -> EditorGlyph.ToolMove
-    ViewportToolId.Tiles -> error("Tiles uses a labeled button")
+    ViewportToolId.Tiles -> EditorGlyph.ToolTiles
     ViewportToolId.Rotate -> EditorGlyph.ToolRotate; ViewportToolId.Scale -> EditorGlyph.ToolScale
 }
 private fun PivotMode.glyph() = if(this == PivotMode.Pivot) EditorGlyph.PivotActive else EditorGlyph.PivotCenter
@@ -41,7 +41,9 @@ private fun PivotMode.help() = if(this == PivotMode.Pivot) "Pivot: Rotate and Sc
 @Composable
 internal fun ViewportToolControls(tools: ViewportToolState?, snap: SnapService, onConfigure: () -> Unit,
     onToolBounds: (ViewportToolId, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
-    onPivotBounds: (PivotMode, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> }) {
+    onPivotBounds: (PivotMode, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
+    /** Runs the Tiles command (tool plus palette); null hides the Tiles tool, e.g. with no project scene. */
+    tiles: (() -> Unit)? = null, tilesEnabled: Boolean = true) {
     val m = LocalEditorMetrics.current
     Row(horizontalArrangement = Arrangement.spacedBy(m.borderWidth), verticalAlignment = Alignment.CenterVertically) {
         if(tools != null) {
@@ -49,6 +51,12 @@ internal fun ViewportToolControls(tools: ViewportToolState?, snap: SnapService, 
                 EditorIconToggle(id.label, id.glyph(), tools.active == id, { tools.activate(id) },
                     Modifier.onGloballyPositioned { onToolBounds(id, it.boundsInWindow()) },
                     help = standardKeymap.hint(ToolCommands.command(id).id, "${id.label} tool"))
+            }
+            if (tiles != null) {
+                val id = ViewportToolId.Tiles
+                EditorIconToggle(id.label, id.glyph(), tools.active == id, { tiles() },
+                    Modifier.onGloballyPositioned { onToolBounds(id, it.boundsInWindow()) }, enabled = tilesEnabled,
+                    help = standardKeymap.hint(ToolCommands.tiles.id, "Tiles tool: paint with the Tile Palette"))
             }
             EditorToolbarDivider()
             PivotMode.entries.forEach { mode ->
@@ -77,26 +85,22 @@ internal fun SnapSettingsDialog(current: SnapSettings, onDismiss: () -> Unit, on
     DialogWindow(onCloseRequest = onDismiss, title = "Configure Snap", resizable = true, state = rememberDialogState(width = 400.dp, height = 330.dp)) {
         EditorTheme(appearance) {
             val metrics = LocalEditorMetrics.current
-            Surface(Modifier.fillMaxSize()) {
-                Column(Modifier.padding(metrics.panelPadding), verticalArrangement = Arrangement.spacedBy(metrics.gap)) {
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(metrics.gap)) {
-                        EditorCheckBox("Snap while dragging and nudging", enabled, { enabled = it })
-                        StepField("Move step", move, { move = it }, "World units; the Scene grid follows this step")
-                        StepField("Rotate step (°)", rotate, { rotate = it }, "Degrees, for the Rotate tool")
-                        StepField("Scale step", scale, { scale = it }, "For the Scale tool")
-                        EditorLabel("Hold Ctrl during a drag or nudge to invert snapping for that gesture.", style = LocalEditorTypography.current.secondary,
-                            color = LocalEditorColors.current.textSecondary)
-                        formError?.let { EditorLabel(it, color = LocalEditorColors.current.error) }
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(metrics.gap, Alignment.End)) {
-                        EditorButton("Cancel", onDismiss)
-                        EditorButton("Save", {
-                            try {
-                                fun number(text: String, label: String) = text.trim().toDoubleOrNull() ?: throw IllegalArgumentException("$label must be a number")
-                                onSave(SnapSettings(enabled, number(move, "Move step"), number(rotate, "Rotate step"), number(scale, "Scale step")))
-                            } catch(failure: IllegalArgumentException) { formError = failure.message ?: "Enter valid steps" }
-                        }, primary = true)
-                    }
+            Surface(Modifier.fillMaxSize(), color = LocalEditorColors.current.surface) {
+                val save = sle.editor.ui.dialog.DialogAction("Save", sle.editor.ui.dialog.DialogActionRole.Default) {
+                    try {
+                        fun number(text: String, label: String) = text.trim().toDoubleOrNull() ?: throw IllegalArgumentException("$label must be a number")
+                        onSave(SnapSettings(enabled, number(move, "Move step"), number(rotate, "Rotate step"), number(scale, "Scale step")))
+                    } catch(failure: IllegalArgumentException) { formError = failure.message ?: "Enter valid steps" }
+                }
+                val cancel = sle.editor.ui.dialog.DialogAction("Cancel", sle.editor.ui.dialog.DialogActionRole.Cancel, run = onDismiss)
+                sle.editor.ui.dialog.EditorDialogLayout(listOf(save, cancel), Modifier.fillMaxSize()) {
+                    EditorCheckBox("Snap while dragging and nudging", enabled, { enabled = it })
+                    StepField("Move step", move, { move = it }, "World units; the Scene grid follows this step")
+                    StepField("Rotate step (°)", rotate, { rotate = it }, "Degrees, for the Rotate tool")
+                    StepField("Scale step", scale, { scale = it }, "For the Scale tool")
+                    EditorLabel("Hold Ctrl during a drag or nudge to invert snapping for that gesture.", style = LocalEditorTypography.current.secondary,
+                        color = LocalEditorColors.current.textSecondary)
+                    formError?.let { EditorLabel(it, color = LocalEditorColors.current.error) }
                 }
             }
         }
@@ -107,7 +111,7 @@ internal fun SnapSettingsDialog(current: SnapSettings, onDismiss: () -> Unit, on
 private fun StepField(label: String, value: String, change: (String) -> Unit, help: String) {
     var field by remember { mutableStateOf(TextFieldValue(value)) }
     if(field.text != value) field = field.copy(text = value)
-    EditorPropertyRow(label, help = help) {
+    EditorFormRow(label, help = help) {
         EditorTextField(field, { field = it;change(it.text) }, label, Modifier.weight(1f), numeric = true, help = help)
     }
 }

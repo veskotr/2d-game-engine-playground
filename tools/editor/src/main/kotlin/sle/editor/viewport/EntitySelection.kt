@@ -19,17 +19,14 @@ internal data class Bounds(val min: Vec2, val max: Vec2) {
 /** World-space points of an entity's visible geometry: its position, camera view, and enabled shapes (rotated corners). */
 internal fun entityWorldPoints(document: EntityDocument): List<Vec2> {
     val points=mutableListOf<Vec2>()
+    document.tilemapWorldBounds?.let { points.add(it.min); points.add(it.max) }
     points.addAll(cameraOutline(document))
     GizmoShape.from(document,"Entity")?.let { points.add(it.position) }
     for(target in GizmoShape.available(document).filter { it!="Entity" }) {
         val fields=document.components.getValue(target).jsonObject
         if(fields["enabled"]?.jsonPrimitive?.booleanOrNull==false || fields["visible"]?.jsonPrimitive?.booleanOrNull==false) continue
         val shape=GizmoShape.from(document,target) ?: continue
-        if(shape.circle) {
-            points.add(shape.center+Vec2(-shape.worldRadius,-shape.worldRadius))
-            points.add(shape.center+Vec2(shape.worldRadius,shape.worldRadius))
-        } else for((x,y) in listOf(-1 to -1,1 to -1,1 to 1,-1 to 1))
-            points.add(shape.world(shape.offset+Vec2(shape.size.x*x/2,shape.size.y*y/2)))
+        points.addAll(shape.outline())
     }
     return points.filter { it.x.isFinite() && it.y.isFinite() }
 }

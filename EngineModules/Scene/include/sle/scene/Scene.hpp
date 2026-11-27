@@ -44,6 +44,8 @@ public:
     Registry& getRegistry() { return registry; }
     const Registry& getRegistry() const { return registry; }
 
+    std::vector<TilemapPlacement>& getTilemapPlacements() { return tilemapPlacements; }
+    const std::vector<TilemapPlacement>& getTilemapPlacements() const { return tilemapPlacements; }
     std::vector<TileLayer>& getTileLayers() { return tileLayers; }
     const std::vector<TileLayer>& getTileLayers() const { return tileLayers; }
 
@@ -86,6 +88,7 @@ private:
     std::unordered_map<uint32_t, std::vector<Entity>> childrenMap;     // entityID -> children
     std::vector<Entity> roots;
     std::vector<TileLayer> tileLayers;
+    std::vector<TilemapPlacement> tilemapPlacements;
 
     inline static const std::vector<Entity> emptyChildren{};
 };

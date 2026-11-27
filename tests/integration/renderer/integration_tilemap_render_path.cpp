@@ -7,8 +7,10 @@
 #include <sle/scene/components/Transform.hpp>
 
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -97,10 +99,29 @@ try {
     glfwMakeContextCurrent(host.get());
     check(gladLoadGL(glfwGetProcAddress) != 0, "Could not initialize OpenGL in the embedded host");
     {
+        const auto v2Assets = fs::temp_directory_path() / ("sle-tilemap-render-v2-" +
+            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        struct Cleanup {
+            fs::path path;
+            ~Cleanup() { std::error_code error; fs::remove_all(path, error); }
+        } cleanup{v2Assets};
+        fs::copy(project.value().assetRoot(), v2Assets, fs::copy_options::recursive);
+        const auto v2Path = v2Assets / "Colors.tileset.json";
+        auto v2 = nlohmann::json::parse(std::ifstream(v2Path));
+        v2["version"] = 2;
+        v2["grid"] = {{"margin", {0, 0}}, {"spacing", {0, 0}}, {"columns", 1}};
+        v2["tiles"][0]["tags"] = {"terrain"};
+        v2["tiles"][0]["properties"] = {{"friction", 0.0}};
+        {
+            std::ofstream file(v2Path);
+            file << v2;
+            file.close();
+            check(static_cast<bool>(file), "Could not write the version 2 render fixture");
+        }
         sle::Runtime editor(config);
         const auto initialized = editor.initEmbedded(false);
         check(initialized.ok(), initialized.error());
-        editor.setEditorAssetRoot(project.value().assetRoot());
+        editor.setEditorAssetRoot(v2Assets);
         auto source = project.value().sceneDocument(project.value().startupScene());
         const auto started = editor.startScenePlay(source);
         check(started.ok(), started.error());
@@ -110,8 +131,8 @@ try {
             check(drawn.ok(), drawn.error());
         };
         draw();
-        check(pixel(12, 20) == standaloneForeground, "Foreground must match standalone over the negative-X tile");
-        check(pixel(20, 20) == standaloneBackdrop, "Backdrop must match standalone in the adjacent chunk");
+        check(pixel(12, 20) == standaloneForeground, "V2 foreground must match V1 over the negative-X tile");
+        check(pixel(20, 20) == standaloneBackdrop, "V2 backdrop must match V1 in the adjacent chunk");
 
         auto& foreground = editor.getScene().getTileLayers().at(1);
         foreground.visible = false;
@@ -120,6 +141,34 @@ try {
         foreground.visible = true;
         draw();
         check(pixel(12, 20) == green, "Showing the foreground must restore the tile");
+
+        // The same tiles in a shared map render through an ordinary movable entity.
+        nlohmann::json map = {{"format", "sle-tilemap"}, {"version", 1}, {"name", "World"},
+            {"grid", {{"cellWidth", v2["tileWidth"]}, {"cellHeight", v2["tileHeight"]}, {"pixelsPerUnit", 1}}},
+            {"streaming", {{"mode", "always"}, {"chunkCells", 32}, {"loadRadius", 2}, {"unloadRadius", 3}}},
+            {"tilesets", nlohmann::json::array({{{"key", 0}, {"asset", source["tileLayers"][0]["tileset"]}}})},
+            {"layers", nlohmann::json::array()}};
+        for (const auto& layer : source["tileLayers"]) {
+            auto cells = layer["cells"];
+            for (auto& cell : cells) cell["set"] = 0;
+            map["layers"].push_back({{"id", layer["id"]}, {"name", layer["name"]}, {"drawOrder", layer["drawOrder"]},
+                {"visible", layer["visible"]}, {"locked", layer["locked"]}, {"collision", layer["collisionEnabled"]}, {"cells", cells}});
+        }
+        const auto mapPath = v2Assets / "World.tilemap.json";
+        { std::ofstream file(mapPath); file << map; }
+        auto placedSource = source;
+        placedSource.erase("tileLayers");
+        placedSource["entities"].push_back({{"key", "world"}, {"components", {
+            {"Transform", {{"position", {16, 16}}}}, {"Tilemap", {{"asset", mapPath.generic_string()}, {"sortingOffset", 0}}}
+        }}});
+        const auto mapStarted = editor.startScenePlay(placedSource);
+        check(mapStarted.ok(), mapStarted.error());
+        draw();
+        check(pixel(12, 20) == green && pixel(20, 20) == red, "Native map placement changed layer rendering");
+        const auto mapEntity = editor.getScene().findEntityByKey("world");
+        editor.getScene().getRegistry().getComponent<sle::components::TransformComponent>(mapEntity)->setPosition({24, 16});
+        draw();
+        check(pixel(20, 20) == green, "Moving a native map did not move its rendered layers together");
 
         source["tileLayers"][1]["cells"][0]["tile"] = "ffffffff-ffff-ffff-ffff-ffffffffffff";
         const auto missing = editor.startScenePlay(source);

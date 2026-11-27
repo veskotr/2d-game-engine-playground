@@ -33,6 +33,13 @@ fixtures. Resume synchronizes the latest composed hierarchy pose; see [Chunks](C
   signed offsets). The body's own Transform scale remains visual dimensions and
   does not multiply explicit collider units, preserving root-body compatibility.
   Scale changes rebuild fixtures while preserving the native body and velocity.
+- Physics debug outlines and editor collider handles use these same explicit units:
+  body world position/rotation and ancestor scale, including mirrored offsets.
+  Own Transform scale still affects sprites. Fit to Sprite explicitly copies the
+  sprite's dimensions and offset with its own signed scale into collider units;
+  existing authored colliders are unchanged until edited or fitted. Debug outlines
+  honor gameplay/chunk gates and disappear while invalid active geometry suspends
+  the body; fixing the geometry restores them.
 - Uniformly scaled circles stay native circles. Nonuniform circles and circle
   sensors use an inscribed convex eight-vertex ellipse approximation. Rotation
   follows the engine's additive TRS contract; hierarchy composition does not

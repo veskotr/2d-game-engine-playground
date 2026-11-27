@@ -5,6 +5,54 @@ import sle.editor.model.*
 import kotlin.test.*
 
 class NumberEditTest {
+    @Test fun idleFormattingNeverChangesTheEditableTokenOrHistory() {
+        val state = state()
+        val edit = number(state)
+        edit.updateText("0.4000000059604645", true); edit.commit()
+        val display = NumberPresentation(NumericPresentation(null, null, null, null, null, false), null, false)
+        assertEquals("0.4", display.displayText(edit.text, focused = false))
+        edit.focus()
+        assertEquals("0.4000000059604645", display.displayText(edit.text, focused = true))
+        edit.blur()
+        assertEquals("0.4000000059604645", edit.text)
+        state.undo(); assertEquals(0.0, value(state)); assertFalse(state.canUndo)
+        state.redo(); assertEquals("0.4", display.displayText(edit.text, false))
+        edit.focus(); edit.input("1e"); edit.blur()
+        assertEquals("1e", display.displayText(edit.text, false))
+        edit.focus(); edit.input("7.123456789012345"); edit.cancel()
+        assertEquals("1e", edit.text)
+    }
+
+    @Test fun untouchedFocusAndExternalValuesNeverWritePresentationBack() {
+        val state = state()
+        val edit = number(state)
+        val display = NumberPresentation(NumericPresentation(null, null, null, null, null, false), null, false)
+        val original = state.document.serialize()
+        edit.focus(); edit.blur()
+        assertEquals(original, state.document.serialize())
+        assertTrue(state.drafts.isEmpty()); assertFalse(state.canUndo)
+        state.setValue("Transform", listOf("rotation"), JsonPrimitive(0.4000000059604645))
+        assertEquals("0.4", display.displayText(edit.text, false))
+        assertEquals("0.4000000059604645", edit.text)
+        edit.focus(); edit.input("7.123456789012345"); edit.commit()
+        val loaded = EntityDocument.parse(state.document.serialize())
+        assertEquals("7.123456789012345", loaded.components.getValue("Transform").jsonObject.getValue("rotation").jsonPrimitive.content)
+        assertEquals("7.12346", display.displayText(edit.text, false))
+    }
+
+    @Test fun idleFormattingKeepsExtremeValuesAndIntegerMasksReadable() {
+        val display = NumberPresentation(NumericPresentation(null, null, null, null, null, false), null, false)
+        assertEquals("1.23457E-20", display.displayText("1.23456789e-20", false))
+        assertEquals("1.23457E+30", display.displayText("1.23456789e30", false))
+        assertEquals("0", display.displayText("-0.0", false))
+        val precise = NumberPresentation(NumericPresentation(null, null, null, 2, null, false), null, false)
+        assertEquals("1.23", precise.displayText("1.23456789", false))
+        assertEquals("1E-20", precise.displayText("1e-20", false))
+        val integer = NumberPresentation(NumericPresentation(null, null, null, null, null, false), null, true)
+        assertEquals("4294967295", integer.displayText("4294967295", false))
+        assertEquals("-2.500E+2", display.displayText("-2.500E+2", true))
+    }
+
     private fun state() = EntityWorkspaceState(mapOf("Transform" to ComponentDefinition(
         buildJsonObject { put("rotation", 0.0) }, JsonObject(emptyMap()))))
     private fun number(state: EntityWorkspaceState) = state.numberEdit("Transform", listOf("rotation"))

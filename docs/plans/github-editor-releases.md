@@ -77,7 +77,7 @@ Findings and decisions:
 Remaining limitations:
 
 - shellcheck is not installed, so actionlint skipped its shell-script pass. `bash -n` covers syntax only.
-- All three workflows still use the Node 20 majors of `actions/*`. The 2026-11-26 CI run shows GitHub forcing them onto Node 24 with deprecation warnings, so they run today. Upgrading them is separate repository-wide maintenance.
+- All `actions/*` steps now use Node 24 majors: checkout v7, setup-python v7, setup-java v6, upload-artifact v7, download-artifact v8, upload-pages-artifact v5, deploy-pages v5. After the bump, `actionlint .github/workflows/*.yml` reports no findings. download-artifact v8 extracts a single pattern match without nesting it. The native download always matches both targets and publish uses `merge-multiple`, so paths are unchanged. These versions have not yet run on GitHub.
 - `appimagetool` was not available locally, so the AppImage was reused from an earlier local build rather than regenerated.
 - A hosted end-to-end release can only run once the workflow is on GitHub.
 - Review suggestions not taken:

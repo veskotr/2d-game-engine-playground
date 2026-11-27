@@ -3,6 +3,7 @@ package sle.editor.project
 import java.nio.file.Files
 import java.util.UUID
 import kotlin.test.*
+import kotlinx.serialization.json.*
 import sle.editor.project.assets.AssetIdentity
 
 class PackagePlannerTest {
@@ -54,6 +55,44 @@ class PackagePlannerTest {
         assertEquals(PackageOwner.Shared, promoted.owners["prop"])
         val oneConsumer = PackagePlanner.plan(assets, scenes, promoted.owners)
         assertEquals(PackageOwner.Shared, oneConsumer.owners["prop"])
+    }
+
+    @Test
+    fun sharedMapsPullVersionTwoTilesetsAndTexturesIntoSharedPackage() {
+        val root = Files.createTempDirectory("sle-map-package-").toRealPath()
+        try {
+            fun id(n: Long) = UUID(0, n).toString()
+            fun save(path: String, n: Long, text: String) {
+                Files.writeString(root.resolve(path), text)
+                Files.writeString(root.resolve("$path.slemeta"), AssetIdentity.encode(id(n)))
+            }
+            for (n in listOf(1L, 2L)) save("Scene$n.scene.json", n, """
+                {"format":"sle-project-scene","version":1,"document":{"entities":[
+                  {"key":"map","components":{"Tilemap":{"asset":"project-asset://${id(3)}","sortingOffset":0}}}
+                ]},"assets":[]}
+            """.trimIndent())
+            val map = sle.editor.model.TilemapDocument.empty("World").addTileset("project-asset://${id(4)}")
+            save("World.tilemap.json", 3, map.serialize())
+            save("Terrain.tileset.json", 4, """{"format":"sle-tileset","version":2,"spritesheet":"project-asset://${id(5)}"}""")
+            save("Terrain.png", 5, "")
+            val inventory = SavedPackageInventory.read(root)
+            val plan = PackagePlanner.plan(inventory.assets, inventory.scenes)
+            assertTrue(plan.errors.isEmpty())
+            for (n in listOf(3L, 4L, 5L)) assertEquals(PackageOwner.Shared, plan.owners[id(n)])
+        } finally { ProjectDistribution.removeTree(root) }
+    }
+
+    @Test
+    fun tilemapAssetTraversalDoesNotRewriteDataNamedAsset() {
+        val source = kotlinx.serialization.json.Json.parseToJsonElement("""{"entities":[{"components":{
+            "Tilemap":{"asset":"map","sortingOffset":0},"Script":{"variables":{"asset":"data"}}
+        }}],"prefabs":[{"file":"prefab","overrides":{"key":{"Tilemap":{"asset":"override"}}}}]}""").jsonObject
+        val resolved = projectDocumentAssetFields(source) { "resolved:$it" }
+        val components = resolved.getValue("entities").jsonArray.single().jsonObject.getValue("components").jsonObject
+        assertEquals("resolved:map", components.getValue("Tilemap").jsonObject.getValue("asset").jsonPrimitive.content)
+        assertEquals("data", components.getValue("Script").jsonObject.getValue("variables").jsonObject.getValue("asset").jsonPrimitive.content)
+        val override = resolved.getValue("prefabs").jsonArray.single().jsonObject.getValue("overrides").jsonObject.getValue("key").jsonObject.getValue("Tilemap").jsonObject
+        assertEquals("resolved:override", override.getValue("asset").jsonPrimitive.content)
     }
 
     @Test

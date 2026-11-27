@@ -3,6 +3,7 @@
 #include <sle/engine/ProjectRuntime.hpp>
 #include <sle/engine/SceneLoader.hpp>
 #include <sle/scene/Scene.hpp>
+#include <sle/scene/components/TilemapComponent.hpp>
 #include <sle/physics/PhysicsWorld.hpp>
 
 #include <box2d/box2d.h>
@@ -106,12 +107,51 @@ void checkOpening()
     if (position.y < 17) throw std::runtime_error("The solid side of the opening did not support the body");
 }
 
+void checkMovablePlacements()
+{
+    sle::entity::Scene scene;
+    auto first = scene.createEntity(); auto second = scene.createEntity();
+    auto parent = scene.createEntity();
+    auto& registry = scene.getRegistry();
+    registry.addComponent<sle::components::TransformComponent>(parent).setPosition({100, 200});
+    registry.addComponent<sle::components::TransformComponent>(first).setPosition({10, 20});
+    registry.addComponent<sle::components::TransformComponent>(second).setPosition({40, 50});
+    if (!scene.setParent(first, parent)) throw std::runtime_error("Could not parent map");
+    for (const auto e : {first, second}) registry.addComponent<sle::components::TilemapComponent>(e, "shared", 0);
+    sle::entity::TileLayer layer; layer.id = "ground:0"; layer.cellSize = {16, 16};
+    layer.collisionByTile["tile"].fullCell = true;
+    auto& chunk = layer.chunks[{0, 0}]; chunk.upperRight = {16, 16};
+    sle::entity::TileCell cell; cell.tileId = "tile"; cell.size = {16, 16}; chunk.cells.push_back(cell);
+    for (const auto e : {first, second}) scene.getTilemapPlacements().push_back({e.getID(), "shared", {layer}});
+    sle::physics::PhysicsWorld world; sle::TileCollisionSystem collision(world);
+    sle::core::Camera2D camera(10, 10); camera.setPosition({-10000, -10000});
+    collision.update(scene, camera);
+    if (world.getRawWorld()->GetBodyCount() != 2) throw std::runtime_error("Repeated off-camera map placements lost collision bodies");
+    b2Body* retained = nullptr;
+    for (auto* b = world.getRawWorld()->GetBodyList(); b; b = b->GetNext())
+        if (glm::length(glm::vec2(b->GetPosition().x, b->GetPosition().y) - world.worldToPhysicsVec2({110, 220})) < 0.0001f) retained = b;
+    if (!retained) throw std::runtime_error("Map collision missed parented translation");
+    registry.getComponent<sle::components::TransformComponent>(first)->setPosition({30, 60});
+    registry.getComponent<sle::components::TransformComponent>(first)->setRotation(0.75f);
+    registry.getComponent<sle::components::TransformComponent>(first)->setScale({3, 4});
+    collision.update(scene, camera);
+    if (glm::length(glm::vec2(retained->GetPosition().x, retained->GetPosition().y) - world.worldToPhysicsVec2({130, 260})) > 0.0001f || retained->GetAngle() != 0 || world.getRawWorld()->GetBodyCount() != 2)
+        throw std::runtime_error("Map movement rebuilt, rotated, or scaled its terrain body");
+    scene.destroyEntity(second); collision.update(scene, camera);
+    if (world.getRawWorld()->GetBodyCount() != 1) throw std::runtime_error("Deleting one placement affected another placement");
+    registry.removeComponent<sle::components::TilemapComponent>(first); collision.update(scene, camera);
+    if (world.getRawWorld()->GetBodyCount() != 0) throw std::runtime_error("Removing Tilemap left terrain collision behind");
+    scene.destroy();
+    if (!scene.getTilemapPlacements().empty()) throw std::runtime_error("Scene teardown retained map resources");
+}
+
 } // namespace
 
 int main()
 try {
     checkAuthoredSlope();
     checkOpening();
+    checkMovablePlacements();
     sle::physics::PhysicsWorld world;
     sle::core::Camera2D camera(100, 100);
     sle::entity::TileLayer layer;

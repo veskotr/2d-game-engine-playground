@@ -49,7 +49,12 @@ void addCatalogMetadata(const std::string& component, Json& entry)
         return result;
     };
 
-    if (component == "Animator") setEnum("loopMode", "loop");
+    if (component == "Tilemap")
+    {
+        field("asset", "resource");
+        integer("sortingOffset", signedIntegerMinimum, signedIntegerMaximum);
+    }
+    else if (component == "Animator") setEnum("loopMode", "loop");
     else if (component == "UI")
     {
         setEnum("spaceMode", "space");

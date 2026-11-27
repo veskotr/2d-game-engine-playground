@@ -17,17 +17,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.unit.dp
-import javax.swing.JOptionPane
 
 internal fun confirmDiscardScene(state: SceneWorkspaceState?): Boolean = state==null || !state.dirty ||
-    EditorDialogs.showConfirmDialog(null,"Discard unsaved scene changes?","Unsaved scene",JOptionPane.YES_NO_OPTION)==JOptionPane.YES_OPTION
+    sle.editor.ui.dialog.EditorPrompts.confirm("Unsaved Scene","Discard unsaved scene changes?","Discard",danger=true)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SceneWorkspace(state: SceneWorkspaceState, onEditEntity: (String)->Unit = {},
-    onEntityBounds: (String,Rect)->Unit = {_,_->},editable: Boolean=true) {
+    onEntityBounds: (String,Rect)->Unit = {_,_->},editable: Boolean=true, editableNow: () -> Boolean = { editable }) {
     fun attempt(action: ()->Unit) { try { state.selected?.endGesture();action() } catch(failure: Exception) { state.error=failure.message ?: "Scene operation failed" } }
-    Column(Modifier.fillMaxSize().editorContextMenu { sceneCreationMenu(state,editable,onEditEntity) }) {
+    val tileLayers=LocalTileLayerCreation.current
+    Column(Modifier.fillMaxSize().editorContextMenu { sceneCreationMenu(state,editable,onEditEntity,editableNow=editableNow,tileLayers=tileLayers) }) {
         EditorToolbar {
             EditorButton("+ Entity",{attempt { state.addEntity() }},enabled=editable,help="Add an empty entity at the scene root")
             EditorButton("+ Child",{attempt { state.addChild() }},enabled=editable && state.selected!=null,help="Add an entity under the selection",style=EditorButtonStyle.Ghost)
@@ -36,7 +36,7 @@ internal fun SceneWorkspace(state: SceneWorkspaceState, onEditEntity: (String)->
         }
         EditorSeparator()
         // Scene results and failures are reported in the status bar (EditorNotices).
-        SceneTree(state,Modifier.weight(1f).fillMaxWidth(),onEntityBounds,editable,onEditEntity)
+        SceneTree(state,Modifier.weight(1f).fillMaxWidth(),onEntityBounds,editable,onEditEntity,editableNow)
     }
 }
 

@@ -660,3 +660,11 @@ sle_add_integration_test(
     "editor;scripting"
     LINK_LIBS sle::scripting
 )
+
+sle_add_integration_test(
+    integration_physics_debug_geometry_path
+    systems/integration_physics_debug_geometry_path.cpp
+    "systems;physics;renderer"
+    LINK_LIBS sle::engine
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)

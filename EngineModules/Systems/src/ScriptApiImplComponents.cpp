@@ -4,6 +4,8 @@
 #include <map>
 #include <functional>
 #include "ComponentRegistry.hpp"
+#include "TilemapLoader.hpp"
+#include <optional>
 namespace sle {
 namespace {
 using namespace componentdata;
@@ -27,9 +29,24 @@ bool ScriptApiImpl::setComponent(Ref ref,const std::string& name,const Json& pat
   const auto normalized=normalizePatch(name,runtime.resolveProjectComponents({{name,patch}}).at(name));
   const Json candidate=it->second.validate(r,e,normalized);
   if(it->second.get(r,e)==candidate) return true;
+  std::optional<entity::TilemapPlacement> map;
+  if (name == "Tilemap") {
+   const auto asset = candidate.at("asset").get<std::string>();
+   const auto& placements = runtime.getScene().getTilemapPlacements();
+   const bool loaded = std::any_of(placements.begin(), placements.end(), [&](const auto& placement) {
+    return placement.entityId == ref.id && placement.asset == asset;
+   });
+   if (!loaded) map = entity::TilemapPlacement{ref.id, asset, detail::loadTilemap(asset,
+    [&](const std::string& reference) { return runtime.resolveTileAsset(reference, false); }, {}, false, true)};
+  }
   runtime.prepareComponentMutation(ref.id,name,normalized,false);
   if(!r.hasEntity(e)) throw std::invalid_argument("Entity was destroyed during component teardown");
   it->second.set(r,e,normalized);
+  if (map) {
+   auto& placements = runtime.getScene().getTilemapPlacements();
+   std::erase_if(placements, [&](const auto& placement) { return placement.entityId == ref.id; });
+   placements.push_back(std::move(*map));
+  }
   // Teardown may recursively edit Script before this outer write commits.
   // Reconcile against committed ECS data so removed siblings cannot survive.
   if(name=="Script") runtime.synchronizeScriptBehaviours(ref.id);
@@ -43,6 +60,8 @@ bool ScriptApiImpl::removeComponent(Ref ref,const std::string& name,std::string&
  if(it->second.get(r,e).is_null()) { error="Entity does not have component: "+name; return false; }
  runtime.prepareComponentMutation(ref.id,name,Json::object(),true);
  if(!r.hasEntity(e)) { error="Entity was destroyed during component teardown"; return false; }
- it->second.remove(r,e); if(name=="Script") runtime.synchronizeScriptBehaviours(ref.id); return true;
+ it->second.remove(r,e);
+ if (name == "Tilemap") std::erase_if(runtime.getScene().getTilemapPlacements(), [&](const auto& placement) { return placement.entityId == ref.id; });
+ if(name=="Script") runtime.synchronizeScriptBehaviours(ref.id); return true;
 }
 } // namespace sle

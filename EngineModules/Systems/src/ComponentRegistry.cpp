@@ -15,6 +15,7 @@
 #include "lua/components/UIBindings.hpp"
 #include "lua/components/ChunkActivationBindings.hpp"
 #include "lua/components/TagsBindings.hpp"
+#include "lua/components/TilemapBindings.hpp"
 #include "lua/components/WorldTransformBindings.hpp"
 #include "lua/components/ChunkMapBindings.hpp"
 
@@ -60,6 +61,7 @@ const std::map<std::string,Descriptor>& descriptors() {
   {"UI",descriptor<UIComponent>()},
   {"ChunkActivation",descriptor<ChunkActivationComponent>()},
   {"Tags",descriptor<TagsComponent>()},
+  {"Tilemap",descriptor<TilemapComponent>()},
   {"WorldTransform",descriptor<WorldTransformComponent,false>()},
   {"ChunkMap",descriptor<ChunkMapComponent,false>()},
  }; return table; }

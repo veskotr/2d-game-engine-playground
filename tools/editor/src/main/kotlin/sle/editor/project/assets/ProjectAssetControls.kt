@@ -1,6 +1,6 @@
 package sle.editor.project.assets
 
-import sle.editor.ui.EditorDialogs
+import sle.editor.ui.dialog.EditorPrompts
 import sle.editor.ui.EditorFileChooser
 import androidx.compose.runtime.*
 import kotlinx.coroutines.*
@@ -8,9 +8,6 @@ import sle.editor.project.ProjectWorkspaceState
 import java.awt.Desktop
 import java.nio.file.*
 import javax.swing.JFileChooser
-import javax.swing.JList
-import javax.swing.JScrollPane
-import javax.swing.JOptionPane
 
 internal data class ProjectAssetCommands(
     val importFiles: ()->Unit,
@@ -27,7 +24,35 @@ internal data class ProjectAssetCommands(
     val assetRoot: Path? = null,
     val editRegions: (String, (List<SpriteRegion>) -> List<SpriteRegion>) -> Unit = { _, _ -> },
     val setTextureFilter: (String, AssetTextureFilter?) -> Unit = { _, _ -> },
+    /**
+     * Adds any missing grid regions to the texture, then writes a v2 tileset at the
+     * asset-relative path with one tile per grid cell: (texture, cells, tile width, tile height, path).
+     */
+    val createTileset: ((String, List<SpriteRectangle>, Int, Int, String, sle.editor.model.TilesetGrid) -> Unit)? = null,
+    val openTileset: (String) -> Unit = {},
+    /** Starts New Tileset…: slices the selected texture, or asks for one (which can import) first. */
+    val newTileset: () -> Unit = {},
+    /** Texture whose slicer New Tileset… opened; the window hosts that dialog while it is set. */
+    val tilesetTexture: String? = null,
+    val closeTileset: () -> Unit = {},
 )
+
+/** Default path for a new tileset: next to the texture, named after it, unused in [snapshot]. */
+internal fun defaultTilesetPath(texture: String, snapshot: AssetSnapshot?): String {
+    val folder = texture.substringBeforeLast('/', "")
+    val stem = texture.substringAfterLast('/').substringBeforeLast('.')
+    fun candidate(index: Int) = (if (folder.isEmpty()) "" else "$folder/") +
+        (if (index == 1) stem else "$stem $index") + ".tileset.json"
+    var index = 1
+    while (snapshot?.byPath?.containsKey(candidate(index)) == true) index++
+    return candidate(index)
+}
+
+/** Regions for a tileset's tiles: one per grid cell, the first region that covers it. */
+internal fun tilesetRegions(regions: List<SpriteRegion>, cells: List<SpriteRectangle>): List<SpriteRegion> {
+    val wanted = cells.toSet()
+    return regions.filter { it.rectangle() in wanted }.distinctBy { it.rectangle() }
+}
 internal val LocalProjectAssets=staticCompositionLocalOf<ProjectAssetCommands?> { null }
 
 @Composable
@@ -35,6 +60,9 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
     onTextureFilterChanged: () -> Unit = {},
     openDocument: (Path) -> Unit = {},
     openProjectSettings: () -> Unit = {},
+    /** A tileset was created at this asset-relative path. */
+    onTilesetCreated: (String) -> Unit = {},
+    openTileset: (String) -> Unit = {},
 ): ProjectAssetCommands? {
     val opened=project.opened ?: return null
     val assetRoot=opened.root.resolve(opened.document.assetRoot)
@@ -59,10 +87,9 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
         try { return withContext(Dispatchers.IO) { store.importAsset(path,folder) } }
         catch(failure: IllegalArgumentException) {
             if(failure.message?.startsWith("Name conflict:")!=true) throw failure
-            val choice=EditorDialogs.showOptionDialog(null,
-                "${path.fileName} already exists in $folder. Replace merges folders and retains existing asset IDs.",
-                "Import name conflict",JOptionPane.DEFAULT_OPTION,JOptionPane.QUESTION_MESSAGE,null,
-                arrayOf("Rename","Skip","Replace"),"Rename")
+            val choice=EditorPrompts.choose("Import name conflict",
+                "${path.fileName} already exists in ${folder.ifEmpty { "Assets" }}. Replace merges folders and retains existing asset IDs.",
+                listOf("Rename","Skip","Replace"),default=0,cancel=null)
             if(choice<0 || choice==1) return AssetImportResult(null)
             return withContext(Dispatchers.IO) { store.importAsset(path,folder,if(choice==0) ImportCollision.Rename else ImportCollision.Replace) }
         }
@@ -93,15 +120,73 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
         val selected=browser?.selected ?: return
         if(busy || project.busy) return
         val initial=if(rename) selected.substringAfterLast('/') else selected
-        val input=EditorDialogs.showInputDialog(null,if(rename) "New name" else "Destination path beneath Assets (including the name)",initial) ?: return
+        val input=(if(rename) EditorPrompts.input("Rename Asset","New name",initial,confirm="Rename") { if(it.isBlank()) "Enter a name" else null }
+            else EditorPrompts.input("Move Asset","Destination",initial,"Path beneath Assets, including the name.",confirm="Move") { if(it.isBlank()) "Enter a path" else null })?.trim() ?: return
         val destination=if(rename) selected.substringBeforeLast('/',"").let { if(it.isEmpty()) input else "$it/$input" } else input
-        if(EditorDialogs.showConfirmDialog(null,
+        if(!EditorPrompts.confirm("Move Project Asset",
             "Move $selected to $destination? UUID references stay valid. Lua require, dynamic paths and nested XML/animation links are not rewritten; update those yourself.",
-            "Move project asset",JOptionPane.OK_CANCEL_OPTION)!=JOptionPane.OK_OPTION) return
+            "Move")) return
         managed { store -> withContext(Dispatchers.IO) { store.move(selected,destination) };"Moved to $destination" }
     }
+    val browse: (String,Boolean,(Path)->Unit)->Unit = { _,imageOnly,accept ->
+        val chosen=sle.editor.ui.EditorFilePicker.open(if(imageOnly) "Choose Project Texture or Import Image" else "Choose Project Asset or Import File",
+            assetRoot.toFile(),if(imageOnly) sle.editor.ui.EditorFilePicker.images else null)
+        if(chosen!=null) {
+            val selected=chosen.toPath()
+            val folder=if(imageOnly) "Textures" else if(selected.fileName.toString().endsWith(".lua",true)) "Scripts" else browser?.folder.orEmpty()
+            run {
+                val destination=withContext(Dispatchers.IO) {
+                    // Default folders are organizational: a project may remove them.
+                    if(Files.isDirectory(assetRoot.resolve(folder))) folder else ""
+                }
+                val imported=importOne(selected,destination)
+                if(current?.file==opened.file) imported.path?.let(accept)
+                null
+            }
+        }
+    }
+    var tilesetTexture by remember(opened.file) { mutableStateOf<String?>(null) }
     return ProjectAssetCommands(
         projectRoot = opened.root, assetRoot = assetRoot,
+        openTileset = openTileset,
+        createTileset = { texture, cells, tileWidth, tileHeight, relative, grid ->
+            run {
+                check(project.activationRevision == activation && current?.assets == assetRoot) {
+                    "The project changed."
+                }
+                require(relative.endsWith(".tileset.json", ignoreCase = true)) {
+                    "Use a filename ending in .tileset.json"
+                }
+                require(cells.isNotEmpty()) { "The grid has no cells to turn into tiles" }
+                withContext(Dispatchers.IO) {
+                    var regions = emptyList<SpriteRegion>()
+                    AssetIdentity.editRegions(opened.root, assetRoot, texture) { existing ->
+                        appendGridRegions(existing, cells).also { regions = it }
+                    }
+                    val textureId = AssetIdentity.ensure(assetPath(opened.root, assetRoot, texture))
+                    ProjectAssetOperations(opened).createFile(relative,
+                        sle.editor.model.writeTileset(textureId, tileWidth, tileHeight, tilesetRegions(regions, cells), grid = grid))
+                }
+                if (project.activationRevision == activation && current?.assets == assetRoot) {
+                    onTextureFilterChanged()
+                    onTilesetCreated(relative)
+                    tilesetTexture = null
+                    browser?.refresh()
+                }
+                "Created $relative · open the Tile Palette to paint"
+            }
+        },
+        newTileset = {
+            val selected = browser?.selected?.takeIf { isTextureAsset(it) && browser.snapshot?.idsByPath?.containsKey(it) == true }
+            if (selected != null) tilesetTexture = selected
+            else browse("", true) { path ->
+                val relative = if (path.startsWith(assetRoot)) assetRoot.relativize(path)
+                    else assetRoot.toRealPath().relativize(path.toRealPath())
+                tilesetTexture = relative.toString().replace('\\', '/')
+            }
+        },
+        tilesetTexture = tilesetTexture,
+        closeTileset = { tilesetTexture = null },
         createStateMachine = { relative, attach ->
             run {
                 check(project.activationRevision == activation && current?.assets == assetRoot) {
@@ -124,26 +209,7 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
             }
             if(chooser.showOpenDialog(null)==JFileChooser.APPROVE_OPTION) importPaths(chooser.selectedFiles.map { it.toPath() })
         },importPaths=importPaths,
-        browse={display,imageOnly,accept ->
-            val chooser=EditorFileChooser(assetRoot.toFile()).apply {
-                dialogTitle=if(imageOnly) "Choose project texture or import image" else "Choose project asset or import file"
-                fileSelectionMode=JFileChooser.FILES_ONLY
-                if(imageOnly) fileFilter=javax.swing.filechooser.FileNameExtensionFilter("Images","png","jpg","jpeg","bmp","tga","gif","psd","hdr","pic","pnm","ppm","pgm")
-            }
-            if(chooser.showOpenDialog(null)==JFileChooser.APPROVE_OPTION) {
-                val selected=chooser.selectedFile.toPath()
-                val folder=if(imageOnly) "Textures" else if(selected.fileName.toString().endsWith(".lua",true)) "Scripts" else browser?.folder.orEmpty()
-                run {
-                    val destination=withContext(Dispatchers.IO) {
-                        // Default folders are organizational: a project may remove them.
-                        if(Files.isDirectory(assetRoot.resolve(folder))) folder else ""
-                    }
-                    val imported=importOne(selected,destination)
-                    if(current?.file==opened.file) imported.path?.let(accept)
-                    null
-                }
-            }
-        },
+        browse=browse,
         reveal={
             val selected=browser?.selected ?: browser?.folder.orEmpty()
             run {
@@ -172,19 +238,12 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
                 if (project.activationRevision == activation) {
                     val scopeText = "Saved files only: scenes, entity templates, and the project startup scene setting."
                     if (results.isEmpty()) {
-                        EditorDialogs.showMessageDialog(owner, arrayOf(path, scopeText, "No direct references found."),
-                            "Find References", JOptionPane.INFORMATION_MESSAGE)
+                        EditorPrompts.message("Find References", "$path\n$scopeText\nNo direct references found.")
                     } else {
-                        val sources = JList(results.map { it.source }.toTypedArray()).apply {
-                            selectionMode = javax.swing.ListSelectionModel.SINGLE_SELECTION
-                            visibleRowCount = results.size.coerceAtMost(10)
-                            selectedIndex = 0
-                        }
-                        val choice = EditorDialogs.showOptionDialog(owner, arrayOf(path, scopeText, JScrollPane(sources)),
-                            "Find References", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null,
-                            arrayOf("Open", "Close"), "Open")
-                        if (choice == 0 && project.activationRevision == activation) {
-                            results.getOrNull(sources.selectedIndex)?.let { reference ->
+                        val choice = EditorPrompts.pickFromList("Find References", "$path\n$scopeText",
+                            results.map { it.source }, "Open")
+                        if (choice != null && project.activationRevision == activation) {
+                            results.getOrNull(choice)?.let { reference ->
                                 val documentPath = reference.documentPath
                                 if (documentPath == null) openProjectSettings()
                                 else openDocument(assetRoot.resolve(documentPath))
@@ -212,14 +271,16 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
         },
         repair={
             val selected=browser?.selected
-            if(selected!=null && EditorDialogs.showConfirmDialog(null,
-                    "Assign a NEW UUID to $selected? References to its old identity will need repair.","Repair asset identity",JOptionPane.YES_NO_OPTION)==JOptionPane.YES_OPTION)
+            if(selected!=null && EditorPrompts.confirm("Repair Asset Identity",
+                    "Assign a NEW UUID to $selected? References to its old identity will need repair.","Assign New UUID",danger=true))
                 run { withContext(Dispatchers.IO) { AssetIdentity.repair(opened.root,assetRoot,selected) };"Assigned new asset UUID" }
         },busy=busy || project.busy,message=message,
         createFolder={
             if(!busy && !project.busy) {
                 val folder=browser?.folder.orEmpty()
-                val name=EditorDialogs.showInputDialog(null,"New folder name")
+                val name=EditorPrompts.input("New Folder","Name",confirm="Create") {
+                    runCatching { sle.editor.project.validateProjectFolderName(it) }.exceptionOrNull()?.message
+                }
                 if(name!=null) run {
                     withContext(Dispatchers.IO) {
                         sle.editor.project.validateProjectFolderName(name)
@@ -234,9 +295,9 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
                 val references=withContext(Dispatchers.IO) { store.references(selected) }
                 val sources=references.map { it.source }.distinct()
                 val warning=if(sources.isEmpty()) "No saved UUID references found." else "Referenced by:\n"+sources.take(20).joinToString("\n")+if(sources.size>20) "\n…" else ""
-                val confirmed=EditorDialogs.showConfirmDialog(null,
+                val confirmed=EditorPrompts.confirm("Delete Project Asset",
                     "Move $selected to project trash?\n$warning\nReferenced documents may stop loading. Dynamic Lua/XML/module paths are not checked.\nRecover Deleted… can restore it; retain .sle/trash until recovery is no longer needed.",
-                    "Delete project asset",JOptionPane.YES_NO_OPTION,JOptionPane.WARNING_MESSAGE)==JOptionPane.YES_OPTION
+                    "Move to Trash",danger=true)
                 if(confirmed) {
                     require(current?.file==opened.file && mutable()) { "Project or workspace changed" }
                     withContext(Dispatchers.IO) { store.delete(selected,allowReferenced=true) };"Moved $selected to .sle/trash"
@@ -245,8 +306,8 @@ internal fun projectAssetControls(project: ProjectWorkspaceState,browser: AssetB
         },recover={managed { store ->
             val receipts=withContext(Dispatchers.IO) { store.deletions() }
             if(receipts.isEmpty()) "No recoverable deletions" else {
-                val choices=receipts.map { "${it.original} (${it.token})" }.toTypedArray()
-                val choice=EditorDialogs.showInputDialog(null,"Select deleted asset to restore", "Recover deleted asset",JOptionPane.QUESTION_MESSAGE,null,choices,choices.first())
+                val choices=receipts.map { "${it.original} (${it.token})" }
+                val choice=EditorPrompts.select("Recover Deleted Asset","Asset",choices,choices.first(),confirm="Restore")
                 val index=choices.indexOf(choice)
                 if(index>=0) {
                     require(current?.file==opened.file && mutable()) { "Project or workspace changed" }

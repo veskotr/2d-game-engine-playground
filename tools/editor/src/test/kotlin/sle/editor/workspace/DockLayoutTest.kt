@@ -3,6 +3,21 @@ package sle.editor.workspace
 import kotlin.test.*
 
 class DockLayoutTest {
+    @Test fun tilesetEditorOpensOnDemandAndSurvivesOlderSavedLayouts() {
+        val current = standardPanels()
+        val id = PanelId("tilesetEditor")
+        assertTrue(current.any { it.id == id }, "Tileset Editor must be a registered tool")
+        val previous = current.filterNot { it.id == id }
+        val saved = WorkspaceLayoutCodec(PanelRegistry(previous)).encode(defaultDockLayout(previous))
+        val codec = WorkspaceLayoutCodec(PanelRegistry(current))
+        val layout = codec.decode(saved)
+        assertTrue(id in layout.hidden)
+        val opened = restorePanel(layout, id)
+        val detached = movePanel(opened, id, DockTarget.Detached(LogicalBounds(80f, 80f, 900f, 650f)))
+        assertEquals(detached, codec.decode(codec.encode(detached)))
+        assertEquals(emptyList(), validateLayout(detached, current.map { it.id }.toSet()))
+    }
+
     private val panels = standardPanels() + PanelDescriptor(PanelId("future"), "Future", PanelMinimum(120f, 80f))
     private val ids = panels.map { it.id }.toSet()
     private fun p(id: String) = PanelId(id)
@@ -10,15 +25,23 @@ class DockLayoutTest {
         assertEquals(emptyList(), validateLayout(layout, ids))
         return layout
     }
-    @Test fun olderLayoutsKeepTheNewTilePaletteHiddenBesideAssets() {
+    @Test fun defaultLayoutDocksTheTilePaletteWithDetails() {
+        val layout = checked(defaultDockLayout(panels))
+        val details = layout.tabs().single { p("inspector") in it.panels }
+        assertEquals(details.group, layout.hidden.getValue(p("tilePalette")).group)
+        val opened = checked(restorePanel(layout, p("tilePalette")))
+        assertEquals(listOf(p("inspector"), p("tilePalette")), opened.tabs().single { it.group == details.group }.panels)
+    }
+
+    @Test fun olderLayoutsKeepTheNewTilePaletteHiddenBesideDetails() {
         val previous = panels.filter { it.id != p("tilePalette") }
         val saved = WorkspaceLayoutCodec(PanelRegistry(previous)).encode(defaultDockLayout(previous))
         val codec = WorkspaceLayoutCodec(PanelRegistry(panels))
         val restored = checked(codec.decode(saved))
-        val assets = restored.tabs().single { p("assets") in it.panels }
-        assertEquals(assets.group, restored.hidden.getValue(p("tilePalette")).group)
+        val details = restored.tabs().single { p("inspector") in it.panels }
+        assertEquals(details.group, restored.hidden.getValue(p("tilePalette")).group)
         val opened = checked(restorePanel(restored, p("tilePalette")))
-        assertTrue(p("tilePalette") in opened.tabs().single { it.group == assets.group }.panels)
+        assertTrue(p("tilePalette") in opened.tabs().single { it.group == details.group }.panels)
         val detached = checked(movePanel(opened, p("tilePalette"),
             DockTarget.Detached(LogicalBounds(100f, 100f, 490f, 620f))))
         assertEquals(detached, codec.decode(codec.encode(detached)))

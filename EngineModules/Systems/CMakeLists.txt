@@ -23,6 +23,7 @@ add_library(sle_engine STATIC
     src/SceneLoader.cpp
     src/TiledMapLoader.cpp
     src/TileLayerLoader.cpp
+    src/TilemapLoader.cpp
     src/TileCollisionSystem.cpp
     src/CameraSystem.cpp
     src/Runtime.cpp

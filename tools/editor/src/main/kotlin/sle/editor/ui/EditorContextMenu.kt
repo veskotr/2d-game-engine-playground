@@ -18,10 +18,11 @@ import javax.swing.plaf.basic.BasicPopupMenuUI
 import java.awt.MouseInfo
 import javax.swing.*
 import sle.editor.model.EntityWorkspaceState
+import sle.editor.model.addEditorComponent
+import sle.editor.model.fitShapeToSprite
 import sle.editor.model.SceneWorkspaceState
 import sle.editor.viewport.GizmoShape
 import sle.editor.command.menuEntry
-import javax.swing.filechooser.FileNameExtensionFilter
 
 internal data class EditorMenuEntry(
     val label: String,
@@ -98,7 +99,7 @@ internal fun buildEditorPopup(entries: List<EditorMenuEntry>, appearance: MenuAp
             icon=EditorIcons.menuIcon(entry.icon,entry.label,appearance)
             disabledIcon=icon
             iconTextGap=(8*appearance.scale).roundToInt()
-            border=BorderFactory.createEmptyBorder((7*appearance.scale).roundToInt(),10,(7*appearance.scale).roundToInt(),12)
+            border=BorderFactory.createEmptyBorder(appearance.rowPadding,10,appearance.rowPadding,12)
         }
     }
     return JPopupMenu().apply {
@@ -161,52 +162,67 @@ private fun componentGroup(type: String): String = when {
     else -> "Other"
 }
 
+/** Persistent buttons survive untouched field focus/blur. Popup actions also require their original edit context. */
+internal fun entityEditAction(state: EntityWorkspaceState, editable: () -> Boolean = { true },
+    strictContext: Boolean = false, action: () -> Unit): () -> Unit {
+    val document = state.document
+    val version = state.editContextVersion
+    val timeline = state.timeline
+    return {
+        val scene = timeline as? SceneWorkspaceState
+        if (editable() && state.document === document && (!strictContext || state.editContextVersion == version) &&
+            state.timeline === timeline && (scene == null || scene.entity(document.key) === state)) action()
+    }
+}
+
 /** Component types not yet attached, grouped by area. New shapes start fitted to the sprite. */
-internal fun addComponentEntries(state: EntityWorkspaceState): List<EditorMenuEntry> {
+internal fun addComponentEntries(state: EntityWorkspaceState, editable: () -> Boolean = { true }): List<EditorMenuEntry> {
     val hidden = setOf("WorldTransform", "ChunkMap")
     val groups = state.catalog.keys.filter { it !in state.document.components && it !in hidden }.sorted().groupBy(::componentGroup)
     return groups.map { (group, types) ->
         EditorMenuEntry(group, children = types.map { type ->
-            EditorMenuEntry(componentDisplayName(type)) {
+            EditorMenuEntry(componentDisplayName(type), enabled = editable(), action = entityEditAction(state, editable, strictContext = true) {
                 try {
-                    state.endGesture()
-                    state.addComponent(type)
-                    fitShapeToSprite(state, type)
+                    val added = state.document.addEditorComponent(type, state.catalog)
+                    val candidate = added.fitShapeToSprite(type) ?: added
+                    state.publishPropertyCandidate(candidate, "Add $type")
                     state.selectedComponent = null
                     state.inspectorSections.setExpanded(state.document.key, type, true)
                 } catch (failure: Exception) { state.error = failure.message ?: "Could not add $type" }
-            }
+            })
         })
     }
 }
 
-/** Sizes a collider/zone to the entity's sprite, if both exist. Returns false when nothing to fit. */
-internal fun fitShapeToSprite(state: EntityWorkspaceState, type: String): Boolean {
-    val sprite = state.document.components["SpriteRenderer"] as? kotlinx.serialization.json.JsonObject ?: return false
-    val shape = state.document.components[type] as? kotlinx.serialization.json.JsonObject ?: return false
-    val size = sprite["size"] as? kotlinx.serialization.json.JsonObject ?: return false
-    val offset = sprite["offset"]
-    val width = (size["x"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return false
-    val height = (size["y"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return false
-    if ("radius" in shape) state.setValue(type, listOf("radius"), kotlinx.serialization.json.JsonPrimitive(maxOf(width, height) / 2))
-    else if ("size" in shape) state.setValue(type, listOf("size"), size) else return false
-    if ("offset" in shape && offset != null) state.setValue(type, listOf("offset"), offset)
-    return true
+/** Fits all geometry atomically; invalid input leaves the authored shape and history untouched. */
+internal fun fitShapeToSprite(state: EntityWorkspaceState, type: String, editable: () -> Boolean = { true }): Boolean {
+    if (!editable()) return false
+    return try {
+        val candidate = state.document.fitShapeToSprite(type) ?: return false
+        val fields = state.catalog[type]?.fields.orEmpty()
+        if (fields.any { (path, descriptor) -> descriptor.readOnly &&
+                path.firstOrNull() in setOf("size", "radius", "offset") }) return false
+        state.publishPropertyCandidate(candidate, "Fit $type to sprite")
+        true
+    } catch (failure: IllegalArgumentException) {
+        state.error = failure.message ?: "Could not Fit $type"
+        false
+    }
 }
 
-internal fun entityCreationMenu(state: EntityWorkspaceState, embedded: Boolean = false, projectAssets: sle.editor.project.assets.ProjectAssetCommands?=null): List<EditorMenuEntry> {
+internal fun entityCreationMenu(state: EntityWorkspaceState, embedded: Boolean = false, projectAssets: sle.editor.project.assets.ProjectAssetCommands?=null, editable: () -> Boolean = { true }): List<EditorMenuEntry> {
     fun attempt(action: () -> Unit) {
         try { state.endGesture(); action() } catch (failure: Exception) { state.error = failure.message ?: "Operation failed" }
     }
-    val components = addComponentEntries(state)
+    val components = addComponentEntries(state, editable)
     return buildList {
         add(EditorMenuEntry("Add Component", enabled = components.isNotEmpty(), children = components))
         add(EditorMenuEntry("Import", children = listOf(EditorMenuEntry("Assets…") {
             if(projectAssets!=null) projectAssets.importFiles() else {
-            val chooser = EditorFileChooser(EditorFileLocations.folder(EditorFileLocations.Kind.Asset)).apply { dialogTitle = "Import assets"; isMultiSelectionEnabled = true }
-            if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-                EditorFileLocations.remember(EditorFileLocations.Kind.Asset, chooser.selectedFile)
-                attempt { chooser.selectedFiles.forEach { state.importAsset(it.toPath()) } }
+            val files = EditorFilePicker.openMany("Import Assets", EditorFileLocations.folder(EditorFileLocations.Kind.Asset))
+            if (files.isNotEmpty()) {
+                EditorFileLocations.remember(EditorFileLocations.Kind.Asset, files.first())
+                attempt { files.forEach { state.importAsset(it.toPath()) } }
             }
             }
         })))
@@ -220,7 +236,39 @@ internal fun entityCreationMenu(state: EntityWorkspaceState, embedded: Boolean =
 internal fun canApplyToPrefab(state: SceneWorkspaceState) = state.projectApplyPrefab!=null && state.selection.size==1 && state.linkedInstance(state.selectedKey)!=null
 internal fun applySelectionToPrefab(state: SceneWorkspaceState) { state.selectedKey?.let { key -> state.projectApplyPrefab?.invoke(key) } }
 
-internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, onEditEntity: ((String)->Unit)? = null, position: sle.editor.viewport.Vec2?=null): List<EditorMenuEntry> {
+/**
+ * What Create → Tile Layer offers: the project's readable tilesets as (menu label, tileset
+ * reference) and the actions behind them. Null when no project scene is open.
+ */
+internal data class TileLayerCreation(
+    val tilesets: List<Pair<String, String>>,
+    /** Adds a layer using the tileset reference, makes it active and opens the Tile Palette. */
+    val create: (String) -> Unit,
+    /** New Tileset…: the same flow as the Asset Browser's button. */
+    val newTileset: () -> Unit,
+    val newMap: (() -> Unit)? = null,
+    val existingMap: (() -> Unit)? = null,
+    val convertLegacy: (() -> Unit)? = null,
+)
+internal val LocalTileLayerCreation = compositionLocalOf<TileLayerCreation?> { null }
+internal const val TILE_LAYER_UNAVAILABLE = "Open a project scene to add tile layers"
+
+private fun tileLayerMenu(tileLayers: TileLayerCreation?, attempt: (() -> Unit) -> Unit, editableNow: () -> Boolean): EditorMenuEntry =
+    if (tileLayers?.newMap != null) EditorMenuEntry("Tilemap", children = listOfNotNull(
+        EditorMenuEntry("New Tilemap…") { attempt { if (editableNow()) tileLayers.newMap.invoke() } },
+        tileLayers.existingMap?.let { place -> EditorMenuEntry("Place Existing Tilemap…") { attempt { if (editableNow()) place() } } },
+        tileLayers.convertLegacy?.let { convert -> EditorMenuEntry("Convert Legacy Tile Layers…") { attempt { if (editableNow()) convert() } } },
+    ))
+    else if (tileLayers == null) EditorMenuEntry("Tilemap", false, help = TILE_LAYER_UNAVAILABLE)
+    else EditorMenuEntry("Tile Layer", children = tileLayers.tilesets.map { (label, reference) ->
+        EditorMenuEntry(label, help = "Add a tile layer that paints with $label") {
+            attempt { if (editableNow()) tileLayers.create(reference) }
+        }
+    } + listOfNotNull(EditorMenuEntry.Separator.takeIf { tileLayers.tilesets.isNotEmpty() },
+        EditorMenuEntry("New Tileset…", help = "Slice a texture into a tileset", action = tileLayers.newTileset)))
+
+internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, onEditEntity: ((String)->Unit)? = null, position: sle.editor.viewport.Vec2?=null, editableNow: () -> Boolean = { editable },
+    tileLayers: TileLayerCreation? = null): List<EditorMenuEntry> {
     fun attempt(action: () -> Unit) {
         if(!editable) return
         try { state.selected?.endGesture(); action() } catch (failure: Exception) { state.error = failure.message ?: "Scene operation failed" }
@@ -230,7 +278,7 @@ internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, on
     return listOf(
         // Ordinary entities are edited in the Inspector; components can also be added from here.
         // Components are added to one entity; multi-object editing is a later roadmap item.
-        (state.selected?.takeIf { editable && state.selection.size==1 }?.let(::addComponentEntries) ?: emptyList()).let { components ->
+        (state.selected?.takeIf { editable && state.selection.size==1 }?.let { addComponentEntries(it, editableNow) } ?: emptyList()).let { components ->
             EditorMenuEntry("Add Component",components.isNotEmpty(),children=components,
                 help=if(state.selection.size>1) SINGLE_ENTITY_REASON else null)
         },
@@ -254,14 +302,13 @@ internal fun sceneCreationMenu(state: SceneWorkspaceState, editable: Boolean, on
                 EditorMenuEntry("At Scene Root") { attempt { state.addCamera(position=position) } },
                 EditorMenuEntry("As Child", state.selected != null) { attempt { state.addCamera(true,position) } },
             )),
+            tileLayerMenu(tileLayers, ::attempt, editableNow),
         )),
         EditorMenuEntry("Import", editable, listOf(EditorMenuEntry("Entity Template…") {
-            val chooser = EditorFileChooser(EditorFileLocations.folder(EditorFileLocations.Kind.Prefab)).apply {
-                fileFilter = FileNameExtensionFilter("Entity Templates (*.sleprefab, *.json)", "sleprefab", "json")
-            }
-            if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-                EditorFileLocations.remember(EditorFileLocations.Kind.Prefab, chooser.selectedFile)
-                attempt { state.importPrefab(chooser.selectedFile.toPath()) }
+            EditorFilePicker.open("Import Entity Template", EditorFileLocations.folder(EditorFileLocations.Kind.Prefab),
+                EditorFilePicker.Filter("Entity templates", "sleprefab", "json"))?.let { file ->
+                EditorFileLocations.remember(EditorFileLocations.Kind.Prefab, file)
+                attempt { state.importPrefab(file.toPath()) }
             }
         })),
         EditorMenuEntry("New", editable, listOf(EditorMenuEntry("Scene") {

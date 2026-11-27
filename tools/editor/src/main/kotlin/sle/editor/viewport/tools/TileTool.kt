@@ -24,11 +24,13 @@ internal class TilePaintingState(private val cancel: () -> Unit) {
         private set
     var mode by mutableStateOf(TilePaintMode.Brush)
         private set
+    /** Asset path of the tileset the Tile Palette offers for new layers; a newly created tileset takes it. */
+    var newLayerTileset by mutableStateOf<String?>(null)
 
-    private var document: Pair<java.nio.file.Path?, String>? = null
+    private var document: Triple<java.nio.file.Path?, String, String?>? = null
 
     fun configure(layer: String?, next: TilePalette?, scene: SceneWorkspaceState? = null) {
-        val identity = scene?.let { it.file to it.key }
+        val identity = scene?.let { Triple(it.file, it.key, it.selectedKey) }
         if (layerId == layer && palette == next && document == identity) return
         document = identity
         cancel()

@@ -21,12 +21,19 @@ internal data class AdoptedAssets(val source: String,val assets: Map<Path,String
 // Only component asset fields are interpreted. Names, script variables and entity keys are data.
 internal fun projectDocumentAssetFields(document: JsonObject, resolve: (String) -> String): JsonObject {
     fun fields(value: JsonElement,field: String=""): JsonElement = when(value) {
-        is JsonObject -> if(field=="variables" || field == "targetEntities" || field == "parameters") value else JsonObject(value.mapValues { (key,child) -> fields(child,if(field=="stateClipMap") "clipAsset" else key) })
+        is JsonObject -> if(field=="variables" || field == "targetEntities" || field == "parameters") value
+            else if (field == "Tilemap") JsonObject(value.mapValues { (name, child) ->
+                if (name == "asset" && child is JsonPrimitive && child.isString && child.content.isNotBlank()) JsonPrimitive(resolve(child.content)) else child
+            }) else JsonObject(value.mapValues { (key,child) -> fields(child,if(field=="stateClipMap") "clipAsset" else key) })
         is JsonArray -> JsonArray(value.map { fields(it,field) })
         is JsonPrimitive -> if(value.isString && value.content.isNotBlank() && PrefabPackages.isAssetField(field)) JsonPrimitive(resolve(value.content)) else value
     }
     return JsonObject(document.mapValues { (key,value) -> if(key=="entities") JsonArray(value.jsonArray.map { entity ->
-        JsonObject(entity.jsonObject.mapValues { (field,child) -> if(field=="components") fields(child) else child })
+        JsonObject(entity.jsonObject.mapValues { (field,child) -> if(field=="components") JsonObject(child.jsonObject.mapValues { (type, component) ->
+            if (type == "Tilemap" && component is JsonObject) JsonObject(component.mapValues { (name, value) ->
+                if (name == "asset" && value is JsonPrimitive && value.isString && value.content.isNotBlank()) JsonPrimitive(resolve(value.content)) else value
+            }) else fields(component)
+        }) else child })
     }) else if(key=="prefabs") JsonArray(value.jsonArray.map { item ->
         val instance=item.jsonObject
         JsonObject(instance.mapValues { (field,child) -> when(field) {

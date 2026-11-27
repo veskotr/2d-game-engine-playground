@@ -78,6 +78,7 @@ namespace sle::entity
             entityKeys.erase(key);
         }
         registry.destroyEntity(entity);
+        std::erase_if(tilemapPlacements, [&](const auto& map) { return map.entityId == entity.getID(); });
         if (entity == sceneEntity) sceneEntity = {};
     }
 
@@ -167,6 +168,7 @@ namespace sle::entity
         registry.parentMap.clear();
         childrenMap.clear();
         tileLayers.clear();
+        tilemapPlacements.clear();
 
         // Scene teardown should fully reset per-scene event state.
         // Clearing queued events prevents stale deferred events from reaching
@@ -199,6 +201,7 @@ namespace sle::entity
         swap(registry, staged.registry);
         swap(roots, staged.roots);
         swap(tileLayers, staged.tileLayers);
+        swap(tilemapPlacements, staged.tilemapPlacements);
         swap(childrenMap, staged.childrenMap);
         swap(keyedEntities, staged.keyedEntities);
         swap(entityKeys, staged.entityKeys);

@@ -37,17 +37,8 @@ internal suspend fun runPrefabWorkflowSmoke(window: JFrame,canvas: ()->EngineCan
         for(step in 1..steps) { robot.mouseMove(from.x+(to.x-from.x)*step/steps,from.y+(to.y-from.y)*step/steps);delay(25) }
     }
     fun descendants(component: Component): List<Component> = listOf(component)+(if(component is Container) component.components.flatMap(::descendants) else emptyList())
-    fun answer(value: Int) = Thread {
-        repeat(250) {
-            var done=false
-            SwingUtilities.invokeAndWait {
-                Window.getWindows().filter { it.isShowing }.flatMap(::descendants).filterIsInstance<JOptionPane>().firstOrNull()?.let { it.value=value;done=true }
-            }
-            if(done) return@Thread
-            Thread.sleep(20)
-        }
-        error("Prompt did not appear")
-    }.apply { isDaemon=true;start() }
+    /** Answers the next discard prompt: true discards, false keeps the draft. */
+    fun answer(discard: Boolean) = answerPrompts("Discard", { it.answer(if(discard) 0 else 1) })
     fun popup(): JPopupMenu? = MenuSelectionManager.defaultManager().selectedPath.filterIsInstance<JPopupMenu>().firstOrNull { it.isShowing }
     suspend fun contextChoose(at: Point,label: String) {
         robot.mouseMove(at.x,at.y);robot.mousePress(InputEvent.BUTTON3_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON3_DOWN_MASK)
@@ -153,13 +144,13 @@ internal suspend fun runPrefabWorkflowSmoke(window: JFrame,canvas: ()->EngineCan
     }
     // Closing with unsaved changes asks; No keeps the tab, Yes discards and returns to the scene.
     prefab.rename("Unsaved Entity Template Edit");check(prefab.dirty)
-    answer(JOptionPane.NO_OPTION);manager.hidePanel(prefabPanel);delay(200)
+    answer(false);manager.hidePanel(prefabPanel);delay(200)
     check(prefabPanel !in manager.layout.hidden && prefab.dirty && workspace.prefabSession) { "Declined close lost the entity template tab" }
     manager.movePanel(prefabPanel,DockTarget.Detached(LogicalBounds(120f,120f,640f,480f)))
     await("Entity template tab did not detach") { manager.hostFor(prefabPanel)?.let { manager.boundWindows()[it]?.isShowing }==true }
-    answer(JOptionPane.NO_OPTION);manager.closeHost(manager.hostFor(prefabPanel)!!);delay(200)
+    answer(false);manager.closeHost(manager.hostFor(prefabPanel)!!);delay(200)
     check(prefabPanel !in manager.layout.hidden && prefab.dirty) { "Closing the detached window discarded the entity template" }
-    answer(JOptionPane.YES_OPTION);manager.closeHost(manager.hostFor(prefabPanel)!!)
+    answer(true);manager.closeHost(manager.hostFor(prefabPanel)!!)
     await("Confirmed close did not return to the scene") { prefabPanel in manager.layout.hidden && !workspace.prefabSession && workspace.selectedTab==2 }
     check(!prefab.dirty && prefab.file==null)
     check(!Files.readString(prefabs.resolve("Dragged.prefab.json")).contains("Unsaved Entity Template Edit"))

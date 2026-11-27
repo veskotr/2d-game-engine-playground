@@ -110,7 +110,7 @@ class WorkspaceLayoutCodec(private val registry: PanelRegistry) {
             }
             val hiddenPanels = (missing - visible.toSet()).associateWith { id ->
                 val neighbor = when (id.value) {
-                    "tilePalette" -> PanelId("assets")
+                    "tilePalette" -> PanelId("inspector")
                     else -> PanelId("scene")
                 }
                 val host = layout.hosts.firstOrNull { it.root?.tabs()?.any { tab -> neighbor in tab.panels } == true }

@@ -1,7 +1,7 @@
 package sle.editor.project
 
-import sle.editor.ui.EditorDialogs
-import sle.editor.ui.EditorFileChooser
+import sle.editor.ui.dialog.EditorPrompts
+import sle.editor.ui.EditorFilePicker
 import androidx.compose.runtime.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
@@ -12,8 +12,6 @@ import sle.editor.model.*
 import sle.editor.project.assets.AssetBrowserState
 import sle.editor.ui.*
 import java.nio.file.*
-import javax.swing.JFileChooser
-import javax.swing.filechooser.FileNameExtensionFilter
 
 internal data class ProjectDocumentCommands(
     val openPath: (Path)->Unit,
@@ -73,6 +71,8 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
         val sceneRevision=revision(ProjectDocumentKind.Scene)
         val expected=if(kind==ProjectDocumentKind.Scene) scene!!.projectDocument else prefab!!.projectDocument
         return writer@{
+            check(sameProject() && identity(kind) == target) { "The document or project changed before save" }
+            if (kind == ProjectDocumentKind.Scene) withContext(Dispatchers.IO) { scene?.saveTilemaps() }
             val packaged=path.fileName.toString().endsWith(".slescene",true) || path.fileName.toString().endsWith(".sleprefab",true)
             // Project documents reference assets by UUID, so files from opened/imported packages
             // (extracted to a temporary folder) or picked outside the project are copied in first.
@@ -170,20 +170,18 @@ internal fun projectDocumentControls(project: ProjectWorkspaceState,browser: Ass
         val assetsRoot=opened.root.resolve(opened.document.assetRoot).toAbsolutePath().normalize()
         val start=file?.parent?.toAbsolutePath()?.normalize()?.takeIf { it.startsWith(assetsRoot) && Files.isDirectory(it) }
             ?: folder.takeIf { Files.isDirectory(it) } ?: assetsRoot
-        val chooser=EditorFileChooser(start.toFile())
         val suffix=if(export) { if(kind==ProjectDocumentKind.Scene) ".slescene" else ".sleprefab" } else kind.suffix
-        chooser.fileFilter=if(export) FileNameExtensionFilter("Portable package (*$suffix)",suffix.drop(1))
-            else FileNameExtensionFilter("Project ${if(kind==ProjectDocumentKind.Scene) "scene" else "entity template"} (*$suffix)","json")
-        if(!save) chooser.addChoosableFileFilter(FileNameExtensionFilter("Portable packages","slescene","sleprefab"))
-        if(save) {
+        val noun=if(kind==ProjectDocumentKind.Scene) "Scene" else "Entity Template"
+        val chosen=if(save) {
             val name=if(kind==ProjectDocumentKind.Scene) scene?.name else prefab?.document?.name
-            chooser.selectedFile=java.io.File(prefabFileName(name.orEmpty()).removeSuffix(".prefab.json")+suffix)
-        }
-        if((if(save) chooser.showSaveDialog(null) else chooser.showOpenDialog(null))!=JFileChooser.APPROVE_OPTION) return false
-        var path=chooser.selectedFile.toPath()
+            EditorFilePicker.save(if(export) "Export $noun Package" else "Save $noun",start.toFile(),
+                prefabFileName(name.orEmpty()).removeSuffix(".prefab.json")+suffix,
+                EditorFilePicker.Filter(if(export) "Portable package" else "Project ${noun.lowercase()}",if(export) suffix.drop(1) else "json"),extension=null)
+        } else EditorFilePicker.open("Open $noun",start.toFile(),EditorFilePicker.Filter("Project documents and packages","json","slescene","sleprefab"))
+        var path=(chosen ?: return false).toPath()
         if(save && !path.fileName.toString().endsWith(suffix,true)) path=path.resolveSibling(path.fileName.toString()+suffix)
         if(save) {
-            if(export && Files.exists(path) && EditorDialogs.showConfirmDialog(null,"Replace ${path.fileName}?","Export package",javax.swing.JOptionPane.YES_NO_OPTION)!=javax.swing.JOptionPane.YES_OPTION) return false
+            if(export && Files.exists(path) && !EditorPrompts.confirm("Export Package","Replace ${path.fileName}?","Replace",danger=true)) return false
             save(kind,path,export)
         } else openFile(path,kind)
         return true

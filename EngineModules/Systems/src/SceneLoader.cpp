@@ -7,6 +7,7 @@
 #include <sle/core/Log.hpp>
 #include "SpriteTexture.hpp"
 #include "TileLayerLoader.hpp"
+#include "TilemapLoader.hpp"
 #include <sle/scene/components/RigidBodyComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
 #include "ComponentRegistry.hpp"
@@ -63,6 +64,7 @@ sle::core::Result<bool> SceneLoader::loadData(const nlohmann::json& data, sle::e
     try
     {
         std::vector<entity::TileLayer> tileLayers;
+        std::vector<entity::TilemapPlacement> tilemapPlacements;
         if (hasTileLayers)
             tileLayers = detail::loadTileLayers(root["tileLayers"], assetLookup, textureFilter, allowMissingTiles, true);
         if (hasSceneComponents) {
@@ -119,6 +121,12 @@ sle::core::Result<bool> SceneLoader::loadData(const nlohmann::json& data, sle::e
                     // loading a texture. Both JSON and Lua invoke these same codecs.
                     (void)codec->second.validate(registry, entity, patch.values);
                     codec->second.set(registry, entity, patch.values);
+                    if (name == "Tilemap") {
+                        const auto asset = patch.values.value("asset", "");
+                        if (asset.empty()) throw std::invalid_argument("Tilemap asset is required");
+                        tilemapPlacements.push_back({entity.getID(), asset,
+                            detail::loadTilemap(asset, assetLookup, textureFilter, allowMissingTiles, true)});
+                    }
                     if (patch.legacyMass)
                         registry.getComponent<components::RigidBodyComponent>(entity)->mass = *patch.legacyMass;
                     if (patch.texture) {
@@ -155,6 +163,7 @@ sle::core::Result<bool> SceneLoader::loadData(const nlohmann::json& data, sle::e
         }
         const auto linked = references.resolveLinks();
         if (linked.ok() && hasTileLayers) scene.getTileLayers() = std::move(tileLayers);
+        if (linked.ok()) scene.getTilemapPlacements() = std::move(tilemapPlacements);
         return linked;
     }
     catch (const std::exception& ex) {

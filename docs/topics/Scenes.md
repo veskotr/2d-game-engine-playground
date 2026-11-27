@@ -12,6 +12,46 @@ contain `entities`, a `tiledMap` path relative to the scene file, top-level
 `components`, and/or `prefabs`. Each
 entity has a `components` object; the existing component field names are unchanged.
 
+## Tilemap assets and placement
+
+New native maps are registered `*.tilemap.json` assets. Their format is
+`sle-tilemap`, version 1, with `name`, `grid`, `tilesets`, `streaming`, and
+`layers`. `grid` contains integer pixel `cellWidth`/`cellHeight` and numeric
+`pixelsPerUnit`. Each tileset entry has a map-local integer `key` and an
+`asset` reference (`project-asset://<uuid>`). Layers contain UUID `id`, `name`,
+nonnegative unique `drawOrder`, `visible`, `locked`, `collision`, and sparse
+`cells`. A cell has signed integer `x`/`y`, integer tileset `set`, and tile UUID
+`tile`; several tilesets may contribute to the same layer.
+
+Place a map using an ordinary entity with `Transform` and
+`Tilemap: {"asset": "project-asset://<uuid>", "sortingOffset": 0}`. Only the
+map moves. Every layer starts at map-local `(0, 0)`; layers have no transforms.
+The hierarchy-composed entity position translates map geometry. Rotation and
+scale are ignored with a runtime warning, and locked in the editor. The signed
+sorting offset is added to each layer order and clamped to the renderer's
+unsigned range. Collision bodies follow translation without replacing unchanged
+fixtures. Repeated placements have independent collision identities.
+
+`streaming` stores `mode`, `chunkCells`, `loadRadius`, and `unloadRadius`.
+Phase 3 uses `always`: all native-map collision remains active outside the camera
+view. `aroundFocus` is retained but currently warns and loads the whole map;
+focus streaming and caching are phase 4. The configured positive `chunkCells`
+is used for runtime partitioning, including negative grid coordinates.
+
+Create → Tilemap offers New Tilemap, Place Existing Tilemap, and explicit
+conversion of legacy inline layers. Selecting a placement exposes its shared
+layers in the existing palette. Painting uses map-local coordinates; scene Undo
+and Redo include map edits, and scene Save writes dirty referenced maps first.
+Draft previews use immutable temporary map snapshots. Saves reject changed source
+bytes or asset identities. Export follows scene → map → tileset → atlas references.
+Standalone scene/prefab packages cannot bundle map dependencies; use project export.
+
+Legacy conversion moves a common origin to the placing entity. Integral offsets
+can be rebased into cell coordinates, preserving the single map origin. Different
+grids/scales, nonintegral offsets, and overflowing coordinates are rejected without
+changing the legacy scene. Runtime loading of inline layers and Tiled maps remains
+available. Maps are bounded to 16 MiB, 256 tilesets, 4096 layers, and 262144 cells.
+
 ## Native project tile layers
 
 The [tilemap room walkthrough](../../examples/tilemap_room/README.md) covers
@@ -30,32 +70,51 @@ anchored at the cell's lower-left corner. Draw order uses the existing sprite
 sorting layers. `visible` defaults to true. `locked` defaults to false and
 `collisionEnabled` defaults to true. The editor uses the lock flag to prevent painting and erasing.
 
-A registered `*.tileset.json` asset uses `format: "sle-tileset"` and `version: 1`.
-It declares positive integer `tileWidth` and `tileHeight` in pixels and a
-`spritesheet` project asset reference of the form `project-asset://<uuid>`. This
-UUID identifies the image and its spritesheet sidecar. Each entry in `tiles`
-declares a stable UUID `id`, a display `name`, and a `region` UUID from the
-sidecar. Use the same `project-asset://<uuid>` form for the layer's `tileset`
-reference.
+A registered `*.tileset.json` asset uses `format` set to `"sle-tileset"` and
+`version` 1 or 2. Both versions require positive integer `tileWidth` and
+`tileHeight` in pixels and a `spritesheet` project asset reference of the form
+`project-asset://<uuid>`. This UUID identifies the image and its spritesheet
+sidecar. Each entry in `tiles` declares a stable UUID `id`, a display `name`,
+and a `region` UUID from the sidecar. Use the same `project-asset://<uuid>` form
+for the layer's `tileset` reference.
 
-In the Asset Browser, select a tileset and open **Tile Collision…** in its
-details. Choose a tile to preview, and toggle the tiles you want in the batch.
-**None**, **Full Cell**, **Generate from Alpha**, and **Preview vertices**
-stage changes in the dialog. **Apply** saves all staged tiles as one edit.
-Use **Undo** and **Redo** in the dialog to restore the saved values.
+Version 2 requires a `grid` object. Its `margin` and `spacing` are two-element
+arrays of nonnegative integers in X, Y order, and `columns` is a positive integer.
+Each tile can include `tags` (unique nonblank strings), `properties` (an object
+with string, finite number or boolean values), and `animation` (reserved, with
+only `null` accepted). Tile names, tags and property names must be nonblank
+and are limited to 256 UTF-8 bytes. Each tile can have up to 256 tags and 256
+properties. Property strings are limited to 4096 UTF-8 bytes. Both versions
+allow up to 4096 tiles and 4 MiB per file.
+The editor and runtime reject unsupported fields and invalid value types.
 
-Alpha generation includes pixels at the threshold, which defaults to 128.
-Zero simplification follows pixel boundaries. Positive tolerance can simplify
-a single outline to a convex slope when all shortcuts fit within the tolerance.
-Masks with holes or separate islands retain their exact coverage. Set
-**Pixels per world unit** to match the target layer to preview dimensions
-and validate fixture size at that scale. To edit vertices, enter one
-counterclockwise polygon per line as space-separated `x,y` pairs.
+Double-click a tileset in Assets or use **Open Tileset Editor…** in its details.
+Click or drag in the atlas to select tiles, then edit their metadata or collision.
+Enter tags as a comma-separated list or a JSON string array. The editor displays
+applied tags as an array so commas within a tag remain part of the tag.
+Changes are staged in the tool. Use **Undo** or **Redo** to step through edits,
+**Save** to write them, or **Revert** to reload the tileset from disk. The editor
+retains drafts when you hide or move the tool, or switch assets or projects. It
+prompts you about unsaved tilesets when you exit.
+
+**Reslice** matches tiles by grid row and column and preserves their UUIDs and
+metadata. New slices append needed regions to the spritesheet sidecar on save.
+Use **Add tile…** for an existing spritesheet region. Removing tiles can break
+scene cells that reference their UUIDs. Reslicing or applying metadata upgrades
+a version 1 tileset to version 2 when you save.
 
 An optional tile `collision` object stores `mode` as `none`, `fullCell` or
 `custom` and a `pieces` array. The array is empty for None and Full Cell.
 Custom pieces use arrays of 3 to 8 vertex pairs in lower-left tile-local
 pixels. Tiles without a collision object default to None.
+
+Choose **From Alpha** to generate custom pieces. The threshold defaults to 128,
+and zero simplification follows pixel boundaries. Positive tolerance can
+simplify a single outline to a convex slope when all shortcuts fit within the
+tolerance. Masks with holes or separate islands retain their exact coverage.
+Select a tile and drag its collision vertex handles to adjust the shape. When
+staging collision edits or saving a tileset, the editor checks the geometry at
+each pixels-per-unit scale used by a project scene layer that references it.
 
 During Play, collision-enabled layers attach static Box2D fixtures around the
 game camera, with one chunk of padding on each side. Full Cell uses the layer's
@@ -65,10 +124,15 @@ drawing independently of collision. The physics debug overlay outlines the
 active native fixtures. Terrain contacts affect simulation and carry no entity
 IDs for Lua collision or zone events.
 
-Open **Tile Palette** from the Scene viewport or the **Windows** menu. Add a
-layer from a registered tileset, then search its named thumbnails. Use the
-palette to rename, reorder, show, hide, lock, or change collision on a layer.
-Press **T** with the Scene viewport focused to activate tile painting.
+Make a tileset with **New Tileset…** (texture details or the Assets toolbar)
+and **Create Tileset…** in the spritesheet slicer. The editor writes a v2
+`.tileset.json` next to the texture and opens the Tileset Editor. Add a layer
+with **Create → Tile Layer** (menu bar, Scene view or Hierarchy), which also
+opens the **Tile Palette** beside Details. The palette, also under **Windows**,
+adds layers from a registered tileset and searches its named thumbnails. Use it
+to rename, reorder, show, hide, lock, or change collision on a layer. Press
+**T** with the Scene viewport focused, or click the Tiles tool icon, to
+activate tile painting and open the palette.
 
 The viewport keys **1–6** select Brush, Erase, Rectangle, Eyedropper, Fill, and
 Select. Brush and Erase follow fast strokes across grid cells. Rectangle fills

@@ -33,7 +33,7 @@ internal class ScenePlaybackState(private val canonicalize: (String)->String = :
             val snapshot=canonicalize(scene.serialize())
             scene.entities.forEach { it.endGesture() }
             keepBaseline = KeepPlayBaseline(++playRevision, scene, SceneDocument.parse(snapshot))
-            source=snapshot
+            source=canonicalize(scene.previewSerialize())
             gameView=true
         }
         stepRequested=false

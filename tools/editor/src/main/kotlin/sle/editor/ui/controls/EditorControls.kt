@@ -33,7 +33,12 @@ import sle.editor.ui.theme.*
  * Secondary: restrained fill and subtle outline. Ghost: no resting chrome, fill on
  * hover/press only (toolbars, zoom, dock actions).
  */
-enum class EditorButtonStyle { Primary, Secondary, Ghost }
+/**
+ * The four button variants. Primary: the one action a surface exists for (at most one per
+ * footer or toolbar group). Secondary: other actions. Ghost: low-emphasis and toolbar
+ * actions. Danger: confirming something destructive, such as Delete in a confirmation.
+ */
+enum class EditorButtonStyle { Primary, Secondary, Ghost, Danger }
 
 private data class ControlColors(val background: Color, val border: Color?, val content: Color)
 
@@ -55,6 +60,10 @@ private fun controlColors(style: EditorButtonStyle, enabled: Boolean, selected: 
         EditorButtonStyle.Ghost -> ControlColors(when {
             pressed -> c.pressedBackground; selected -> c.selectedBackground
             hovered -> c.hoverBackground; else -> Color.Transparent },null,c.textPrimary)
+        EditorButtonStyle.Danger -> ControlColors(when {
+            pressed -> lerp(c.error,Color.Black,if(dark) .18f else .22f)
+            hovered -> lerp(c.error,if(dark) Color.White else Color.Black,.1f)
+            else -> c.error },null,c.surface)
     }
 }
 
@@ -69,7 +78,7 @@ private fun Modifier.controlChrome(colors: ControlColors, focused: Boolean): Mod
     return result
 }
 
-private val LocalTooltipsAbove = compositionLocalOf { false }
+internal val LocalTooltipsAbove = compositionLocalOf { false }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -177,9 +186,11 @@ enum class EditorGlyph(internal val iconKey: String? = null) {
     /** Notice levels: drawn in the level's token colour, always beside the notice text. */
     Info("info"), Success("success"), Warning("warning"), Error("error"),
     /** Scene view tools and snapping. */
-    ToolSelect("tool_select"), ToolMove("tool_move"), ToolRotate("tool_rotate"), ToolScale("tool_scale"), Snap("snap"),
+    ToolSelect("tool_select"), ToolMove("tool_move"), ToolRotate("tool_rotate"), ToolScale("tool_scale"), ToolTiles("tilemap"), Snap("snap"),
     /** Rotate/Scale pivot: the active entity's pivot, or the selection center. */
-    PivotActive("pivot"), PivotCenter("center") }
+    PivotActive("pivot"), PivotCenter("center"),
+    /** Overflow: three dots, for the toolbar's more-actions menu. */
+    More }
 
 @Composable
 internal fun EditorGlyphIcon(glyph: EditorGlyph, tint: Color, modifier: Modifier = Modifier,
@@ -210,6 +221,7 @@ internal fun EditorGlyphIcon(glyph: EditorGlyph, tint: Color, modifier: Modifier
             EditorGlyph.Grip -> for(x in listOf(.38f,.62f)) for(y in listOf(.3f,.5f,.7f))
                 drawCircle(tint,stroke*.75f,Offset(x*w,y*h))
             EditorGlyph.ChevronUp -> { line(.3f,.6f,.5f,.4f);line(.5f,.4f,.7f,.6f) }
+            EditorGlyph.More -> for(x in listOf(.25f,.5f,.75f)) drawCircle(tint,stroke,Offset(x*w,.5f*h))
             else -> Unit // Supplied icons, handled above.
         }
     }
@@ -340,11 +352,12 @@ internal fun EditorTextField(value: TextFieldValue, onValueChange: (TextFieldVal
 internal fun EditorNumberField(edit: NumberEdit, label: String, modifier: Modifier = Modifier,
     enabled: Boolean = true, readOnly: Boolean = false, help: String? = null,
     presentation: NumberPresentation? = null, authoredValue: Double = 0.0) {
-    var field by remember(edit) { mutableStateOf(TextFieldValue(edit.text)) }
-    if(field.text!=edit.text) field=field.copy(text=edit.text,selection=androidx.compose.ui.text.TextRange(edit.text.length))
     var hadFocus by remember(edit) { mutableStateOf(false) }
+    val display = presentation?.displayText(edit.text, hadFocus) ?: edit.text
+    var field by remember(edit) { mutableStateOf(TextFieldValue(display)) }
+    if(field.text!=display) field=field.copy(text=display,selection=androidx.compose.ui.text.TextRange(display.length))
     var stepKey by remember(edit) { mutableStateOf<Key?>(null) }
-    EditorTextField(field,{field=it;edit.updateText(it.text,enabled && !readOnly)},label,modifier,enabled,readOnly,edit.invalid,help,numeric=true,
+    EditorTextField(field,{ if (it.text != field.text) edit.updateText(it.text,enabled && !readOnly); field=it },label,modifier,enabled,readOnly,edit.invalid,help,numeric=true,
         onFocusChange={focused ->
             if(enabled && !readOnly && focused!=hadFocus) {if(focused) edit.focus() else edit.blur()}
             if (!focused) stepKey = null
@@ -431,6 +444,38 @@ internal fun EditorPropertyRow(label: String, modifier: Modifier = Modifier, hel
             Row(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(m.gap),verticalAlignment=Alignment.CenterVertically,content=content)
         }
     }
+}
+
+/**
+ * A form row: the label in a fixed-width column ([EditorMetrics.formLabel]) and the field
+ * filling the rest at one field height, so every row of a form lines up. Narrow panels stack
+ * the label above the field.
+ */
+@Composable
+internal fun EditorFormRow(label: String, modifier: Modifier = Modifier, help: String? = null,
+    content: @Composable RowScope.() -> Unit) {
+    val m=LocalEditorMetrics.current
+    val labelStyle=LocalEditorTypography.current.body
+    val labelColor=LocalEditorColors.current.textSecondary
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        if(maxWidth<m.formLabel*2) Column(verticalArrangement=Arrangement.spacedBy(m.gap/2)) {
+            EditorTooltip(help ?: label) { Text(label,color=labelColor,style=labelStyle,maxLines=1,overflow=TextOverflow.Ellipsis) }
+            Row(Modifier.fillMaxWidth().heightIn(min=m.field),horizontalArrangement=Arrangement.spacedBy(m.gap),verticalAlignment=Alignment.CenterVertically,content=content)
+        } else Row(Modifier.fillMaxWidth().heightIn(min=m.field),verticalAlignment=Alignment.CenterVertically) {
+            EditorTooltip(help ?: label,Modifier.width(m.formLabel)) {
+                Text(label,Modifier.padding(end=m.gap*2),color=labelColor,style=labelStyle,maxLines=1,overflow=TextOverflow.Ellipsis)
+            }
+            Row(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(m.gap),verticalAlignment=Alignment.CenterVertically,content=content)
+        }
+    }
+}
+
+/** Groups form rows under a heading; sections are separated by space, not boxes. */
+@Composable
+internal fun EditorSectionHeader(title: String, modifier: Modifier = Modifier) {
+    val m=LocalEditorMetrics.current
+    Text(title,modifier.fillMaxWidth().padding(top=m.gap,bottom=m.gap/2),color=LocalEditorColors.current.textPrimary,
+        style=LocalEditorTypography.current.heading,maxLines=1,overflow=TextOverflow.Ellipsis)
 }
 
 @Composable

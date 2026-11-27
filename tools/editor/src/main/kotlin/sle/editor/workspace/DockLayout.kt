@@ -59,10 +59,11 @@ fun defaultDockLayout(panels: List<PanelDescriptor>): DockLayout {
         split(DockAxis.Horizontal, .75f, tabs("center", center), tabs("inspector", named("inspector"))))
     // Default only: a compact asset strip (toolbar + a few rows). Saved layouts keep their ratios.
     val root = split(DockAxis.Vertical, .74f, top, tabs("assets", named("assets") + named("console") + named("luaProfiler")))
-    // Unavailable and temporary panels start hidden; showing one restores it as a center tab.
+    // Unavailable and temporary panels start hidden; showing one restores it as a center tab, except
+    // the Tile Palette, which joins Details on the right like other editors' paint palettes.
     return DockLayout(main, listOf(DockHost(main, root, bounds)), hidden = panels.filter { !it.available || it.temporary }
         .associate { panel ->
-            val destination = if (panel.id.value == "tilePalette") root?.tabs()?.firstOrNull { it.group == GroupId("assets") } else null
+            val destination = if (panel.id.value == "tilePalette") root?.tabs()?.firstOrNull { it.group == GroupId("inspector") } else null
             panel.id to PanelPlacement(main, destination?.group ?: GroupId("center"),
                 destination?.panels?.size ?: center.size, bounds)
         })

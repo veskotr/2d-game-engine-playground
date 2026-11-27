@@ -1,6 +1,7 @@
 package sle.editor.model
 
 import sle.editor.bridge.NativeEngine
+import sle.editor.viewport.Vec2
 
 import kotlinx.serialization.json.*
 import java.nio.charset.StandardCharsets.UTF_8
@@ -16,6 +17,9 @@ internal data class EntityDocument(
     val key: String = UUID.randomUUID().toString(),
     val name: String = "New Entity",
     val components: JsonObject = JsonObject(emptyMap()),
+    /** Viewport-only hierarchy context; authored collider units exclude the entity's own scale. */
+    val parentWorldScale: Vec2 = Vec2(1.0, 1.0),
+    val tilemapWorldBounds: sle.editor.viewport.Bounds? = null,
 ) {
     fun addComponent(type: String, defaults: JsonObject): EntityDocument {
         require(type !in components) { "$type is already attached" }
@@ -25,6 +29,9 @@ internal data class EntityDocument(
     fun removeComponent(type: String) = copy(components = JsonObject(components - type))
 
     fun setValue(component: String, path: List<String>, value: JsonElement): EntityDocument {
+        require("Tilemap" !in components || component != "Transform" || path.firstOrNull() !in listOf("rotation", "scale")) {
+            "Tilemaps support translation only"
+        }
         require(component in components && path.isNotEmpty()) { "Component/field does not exist" }
         fun replace(current: JsonElement, remaining: List<String>): JsonElement {
             val objectValue = current.jsonObject

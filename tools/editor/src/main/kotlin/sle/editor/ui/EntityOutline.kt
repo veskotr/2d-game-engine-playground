@@ -15,11 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun EntityOutline(state: EntityWorkspaceState,modifier: Modifier=Modifier) {
+internal fun EntityOutline(state: EntityWorkspaceState,modifier: Modifier=Modifier, editable: () -> Boolean = { true }) {
     val projectAssets=sle.editor.project.assets.LocalProjectAssets.current
     val components=state.document.components.keys.toList()
     LaunchedEffect(components) { if(state.selectedComponent !in components) state.selectedComponent=null }
-    Column(modifier.editorContextMenu { entityCreationMenu(state,projectAssets=projectAssets) }) {
+    Column(modifier.editorContextMenu { entityCreationMenu(state,projectAssets=projectAssets,editable=editable) }) {
         EditorPanelHeader(state.document.name.ifBlank { "(Unnamed entity)" })
         EditorTreeRow("All components",state.selectedComponent==null,{state.selectedComponent=null})
         EditorSeparator()

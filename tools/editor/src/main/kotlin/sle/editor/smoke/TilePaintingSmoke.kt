@@ -23,6 +23,8 @@ internal suspend fun runTilePaintingSmoke(
     canvas: () -> EngineCanvas?,
     tools: ViewportToolState,
     playback: ScenePlaybackState,
+    /** The Tile Palette panel is the active tab of its group. */
+    paletteOpen: () -> Boolean,
     openPalette: suspend () -> Unit,
 ) {
     val fixture = Path.of("tests/data/tilemap")
@@ -89,6 +91,10 @@ internal suspend fun runTilePaintingSmoke(
     await("Scene viewport did not get focus") { view.isFocusOwner }
     key(KeyEvent.VK_T)
     await("Tile shortcut did not activate") { tools.active == ViewportToolId.Tiles }
+    // T also opens the Tile Palette beside Details, which resizes the viewport; wait for its next frame.
+    await("Tile shortcut did not open the palette") { paletteOpen() }
+    delay(150)
+    await("Viewport did not settle after the palette opened") { view.previewCamera() != null && view.authoringReady() }
     stroke(first, last)
     await("Brush did not cross the negative chunk boundary") { scene.tileLayer(layer)?.cells?.size == 3 && view.authoringReady() }
     check(scene.tileLayer(layer)?.cells?.keys == (-33..-31).map { TileCell(it, 2) }.toSet())

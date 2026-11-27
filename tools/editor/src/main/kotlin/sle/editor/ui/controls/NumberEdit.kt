@@ -69,6 +69,19 @@ internal class NumberPresentation(
     val hasSlider get() = ui.slider && min != null && max != null && min < max &&
         (!integer || step != null && min.stripTrailingZeros().scale() <= 0 && max.stripTrailingZeros().scale() <= 0)
 
+    /** Presentation never feeds a rounded token back into the document owner. */
+    fun displayText(text: String, focused: Boolean): String {
+        if (focused || integer || NumberOptions().parse(text) == null) return text
+        val value = text.toBigDecimalOrNull() ?: return text
+        if (value.signum() == 0) return "0"
+        val rounded = ui.precision?.coerceIn(0, 16)?.let {
+            value.setScale(it, RoundingMode.HALF_UP).takeUnless { result -> result.signum() == 0 }
+        } ?: value.round(java.math.MathContext(6, RoundingMode.HALF_UP))
+        val compact = rounded.stripTrailingZeros()
+        val exponent = compact.precision().toLong() - compact.scale() - 1
+        return if (exponent in -4..5) compact.toPlainString() else compact.toString()
+    }
+
     fun sliderPosition(value: Double): Float {
         if (!hasSlider || !value.isFinite()) return 0f
         val start = checkNotNull(min)

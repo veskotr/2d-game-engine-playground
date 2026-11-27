@@ -2,8 +2,8 @@
 
 Open `Room.sleproject` in the SLE Editor and open **Room.scene.json** from
 the Asset Browser. The room has a terrain layer with solid, sloped and
-perforated tiles, plus a separate decoration layer. Open **Tiles…** in the
-Scene viewport to paint more cells. Use **Play** to see the startup camera's view.
+perforated tiles, plus a separate decoration layer. Press **T** or click
+**Tile Palette** in the Scene toolbar to paint more cells. Use **Play** to see the startup camera's view.
 
 ## Make a room from the PNG
 
@@ -14,19 +14,22 @@ Scene viewport to paint more cells. Use **Play** to see the startup camera's vie
    and spacing. Click **Add grid regions**. The editor names the four
    regions Slice 1–4. From left to right they correspond to Solid, Slope,
    Perforated and Decoration.
-3. Copy [Room.tileset.json](Assets/Room.tileset.json) into the new project's
-   Assets folder. Set its `spritesheet` to `project-asset://` followed by
-   the imported PNG's UUID. Update each tile's `region` with its
-   corresponding UUID from the PNG's details. Keep the tile IDs in the
-   template and refresh the Asset Browser to register the new tileset.
-4. Select the tileset and open **Tile Collision…**. Set Solid to **Full Cell**.
-   For Perforated, select **Generate from Alpha** with threshold 128 and
-   zero simplification, then inspect the opening in the preview. The Slope
-   template has one smooth triangular collider. Use **Preview vertices** to
-   adjust it, or generate from alpha to see the stepped pixel outline. Set
-   Decoration to **None** and click **Apply** to save the staged changes.
-5. Create or open a project scene. Open **Tiles…**, choose the room tileset,
-   and click **Add Tile Layer**. Paint with the brush or rectangle tool.
+3. Optionally rename the regions to Solid, Slope, Perforated and Decoration
+   in Manual rectangle mode; tiles take their names from the regions. Back
+   in Grid mode, click **Create Tileset…** and accept `Room.tileset.json`.
+   The editor writes one tile per cell, next to the PNG. (You can also start
+   from **New Tileset…** in the PNG's details or the Assets toolbar.)
+4. The Tileset Editor opens on creation. Double-click the tileset in Assets
+   to open it again. Set Solid to **Full Cell**. For Perforated, choose
+   **From Alpha** with threshold 128 and zero simplification, then inspect the
+   opening in the preview. For Slope, choose **From Alpha** to generate
+   the stepped pixel outline and drag the handles to adjust it. The
+   bundled room uses a smooth triangular collider for Slope. Set Decoration
+   to **None** and click
+   **Save** to write the staged changes.
+5. Create or open a project scene. Choose **Create → Tile Layer → Room**.
+   The editor adds the layer and opens the Tile Palette beside Details.
+   Paint with the brush or rectangle tool.
    Add a second layer for decoration and clear its **Collision** checkbox.
    Undo and redo one stroke, then save and reopen the scene.
 6. Set the scene as the project startup scene and position its camera to

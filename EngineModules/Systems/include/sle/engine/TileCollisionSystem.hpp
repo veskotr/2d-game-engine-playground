@@ -10,6 +10,8 @@
 namespace sle {
 namespace core { class Camera2D; }
 namespace physics { class PhysicsWorld; }
+namespace entity { class Scene; }
+namespace detail { struct TileLayerView; }
 
 class TileCollisionSystem
 {
@@ -20,9 +22,11 @@ public:
     TileCollisionSystem& operator=(const TileCollisionSystem&) = delete;
 
     void update(std::span<const entity::TileLayer> layers, const core::Camera2D& camera);
+    void update(entity::Scene& scene, const core::Camera2D& camera);
     void clear();
 
 private:
+    void updateViews(std::span<const detail::TileLayerView> layers, const core::Camera2D& camera);
     using Key = std::pair<std::string, entity::TileCoordinate>;
     struct Group
     {

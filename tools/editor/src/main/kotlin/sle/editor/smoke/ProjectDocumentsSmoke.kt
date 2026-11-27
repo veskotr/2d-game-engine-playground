@@ -54,30 +54,10 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
         robot.mousePress(InputEvent.BUTTON1_DOWN_MASK);robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK);delay(100)
     }
     fun descendants(component: Component): List<Component> = listOf(component)+(if(component is Container) component.components.flatMap(::descendants) else emptyList())
-    fun answer(value: Int) = Thread {
-        repeat(250) {
-            var done=false
-            SwingUtilities.invokeAndWait {
-                Window.getWindows().filter { it.isShowing }.flatMap(::descendants).filterIsInstance<JOptionPane>().firstOrNull()?.let { it.value=value;done=true }
-            }
-            if(done) return@Thread
-            Thread.sleep(20)
-        }
-        error("Discard prompt did not appear")
-    }.apply { isDaemon=true;start() }
-    fun choose(path: Path) = Thread {
-        repeat(250) {
-            var done=false
-            SwingUtilities.invokeAndWait {
-                Window.getWindows().filter { it.isShowing }.flatMap(::descendants).filterIsInstance<JFileChooser>().firstOrNull()?.let {
-                    it.selectedFile=path.toAbsolutePath().toFile();it.approveSelection();done=true
-                }
-            }
-            if(done) return@Thread
-            Thread.sleep(20)
-        }
-        error("Save chooser did not appear")
-    }.apply { isDaemon=true;start() }
+    /** Answers the next discard prompt: true discards, false keeps the draft. */
+    fun answer(discard: Boolean) = answerPrompts("Discard", { it.answer(if(discard) 0 else 1) })
+    /** The next file picker returns [path]; native OS dialogs cannot be driven by a smoke. */
+    fun choose(path: Path) = sle.editor.ui.EditorFilePicker.answerNext { listOf(path.toAbsolutePath().toFile()) }
     val reports=Path.of(System.getProperty("sle.smokeReport")).parent
     val first=withContext(Dispatchers.IO) {
         val p=ProjectFiles.create(Files.createTempDirectory(reports,"project-documents-").resolve("Source Game"),"Source Game")
@@ -139,7 +119,7 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     click("AssetFolder:Scenes");click("AssetFile:Scenes/shared.scene.json",true)
     await("Browser scene open failed") { !project.busy && scene.projectDocument!=null && canvas().authoringReady() }
     val sceneKey=scene.key;scene.rename("Retain dirty draft")
-    answer(JOptionPane.NO_OPTION);click("AssetFile:Scenes/shared.scene.json",true)
+    answer(false);click("AssetFile:Scenes/shared.scene.json",true)
     check(scene.name=="Retain dirty draft" && scene.dirty)
     withContext(Dispatchers.IO) { Files.writeString(scenePath,source.replace("Shared Scene","External Scene")) }
     val beforeConflict=notices.recent.firstOrNull()
@@ -147,7 +127,7 @@ internal suspend fun runProjectDocumentsSmoke(window: JFrame,canvas: ()->EngineC
     await("External conflict not surfaced") { !project.busy && notices.postedAfter(beforeConflict).any { it.level==sle.editor.ui.NoticeLevel.Error && "changed" in it.text } }
     check(scene.name=="Retain dirty draft" && scene.dirty)
     check(withContext(Dispatchers.IO) { Files.readString(scenePath) }.contains("External Scene"))
-    answer(JOptionPane.YES_OPTION);click("AssetFile:Scenes/shared.scene.json",true)
+    answer(true);click("AssetFile:Scenes/shared.scene.json",true)
     await("Explicit reopen failed") { !project.busy && scene.name=="External Scene" && !scene.dirty }
     check(scene.key==sceneKey)
     playback.play(scene)

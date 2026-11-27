@@ -203,10 +203,13 @@ internal data class SavedPackageInventory(
             for ((path, id) in ids) {
                 if (id in tilesets || path.endsWith(".tileset.json", true)) {
                     val tileset = readJson(path, 4L * 1024 * 1024)
-                    require(tileset["format"] == JsonPrimitive("sle-tileset") && tileset["version"] == JsonPrimitive(1)) {
+                    require(tileset["format"] == JsonPrimitive("sle-tileset") && tileset["version"] in listOf(JsonPrimitive(1), JsonPrimitive(2))) {
                         "Unsupported tileset: $path"
                     }
                     uuid(path, tileset.getValue("spritesheet").jsonPrimitive.content)
+                } else if (path.endsWith(".tilemap.json", true)) {
+                    val map = sle.editor.model.TilemapDocument.parse(readJson(path, 16L * 1024 * 1024).toString())
+                    map.tilesets.values.forEach { uuid(path, it) }
                 } else if (path.endsWith(".tmj", true)) {
                     val map = readJson(path, 16L * 1024 * 1024)
                     for (entry in (map["tilesets"] as? JsonArray).orEmpty()) {

@@ -86,18 +86,11 @@ internal suspend fun runProjectDistributionSmoke(window: JFrame,canvas: ()->Engi
             }
             error("$description did not open")
         }
-        if (choice != null) answer("Dirty document prompt") { visible ->
-            visible.filterIsInstance<JButton>().firstOrNull { it.text == choice }?.let {
-                it.doClick()
-                true
-            } ?: false
-        }
-        if (targets) answer("Export target prompt") { visible ->
-            visible.filterIsInstance<JButton>().firstOrNull { it.text == "Both" }?.let {
-                it.doClick()
-                true
-            } ?: false
-        }
+        fun prompt(label: String) = sle.editor.ui.dialog.EditorPrompts.current
+            ?.takeIf { handle -> promptWindow(handle) != null && handle.request.buttons.any { it.label == label } }
+            ?.let { it.answer(label); true } ?: false
+        if (choice != null) answer("Dirty document prompt") { prompt(choice) }
+        if (targets) answer("Export target prompt") { prompt("Both") }
         for ((title, path) in folders) {
             answer(title) { visible ->
                 visible.filterIsInstance<JFileChooser>().firstOrNull { it.dialogTitle == title }?.let {

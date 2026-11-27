@@ -76,7 +76,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     private data class Saved(val document: SceneDocument,val assets: Map<Path,String>)
     private fun snapshot() = Saved(document(),allAssets())
     private var saved by mutableStateOf(snapshot())
-    private data class Structure(val entities: List<EntityWorkspaceState>,val name: String,val parents: Map<String,String>,val poses: Map<String,JsonElement?>,val cameraFlags: Map<String,JsonElement?>,val poseChanges: Set<String> = emptySet(),val cameraChanges: Set<String> = emptySet(),val links: List<PrefabInstance> = emptyList())
+    private data class Structure(val entities: List<EntityWorkspaceState>,val name: String,val parents: Map<String,String>,val poses: Map<String,JsonElement?>,val cameraFlags: Map<String,JsonElement?>,val poseChanges: Set<String> = emptySet(),val cameraChanges: Set<String> = emptySet(),val links: List<PrefabInstance> = emptyList(),val inlineLayers: JsonArray? = null)
     /** One timeline for structure and every entity's component edits, in the order they happened. */
     override val history=History().apply {
         restoreSelection={ recorded -> selection.restore(recorded,entities.map { it.document.key }.toSet()) }
@@ -100,13 +100,43 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         }
         return entities.map { it.document.key }.filter { it in chosen && !ancestorSelected(it) }
     }
-    val dirty get() = snapshot()!=saved || entities.any { it.fieldErrors.isNotEmpty() }
+    val dirty get() = snapshot()!=saved || entities.any { it.fieldErrors.isNotEmpty() } || referencedTilemaps().any { it.dirty }
     val canUndo get()=history.canUndo
     val canRedo get()=history.canRedo
     fun document() = SceneDocument(key,name,entities.map { it.document },parents,prefabInstances,tileLayers)
     fun serialize() = document().serialize()
 
-    fun tileLayerDocuments() = tileLayerList
+    private val mapDrafts = mutableStateMapOf<Path, TilemapDraft>()
+    private fun mapDraft(document: EntityDocument): TilemapDraft? {
+        val asset = (document.components["Tilemap"] as? JsonObject)?.get("asset")?.jsonPrimitive?.content ?: return null
+        if (asset.isBlank() || asset.startsWith("project-asset://")) return null
+        val path = Path.of(asset).toAbsolutePath().normalize()
+        return mapDrafts[path] ?: runCatching { TilemapDraft.open(path) }.getOrNull()?.also { mapDrafts[path] = it }
+    }
+    fun activeTilemap() = selected?.document?.let(::mapDraft)
+    fun referencedTilemaps() = entities.mapNotNull { mapDraft(it.document) }.distinct()
+    fun saveTilemaps() {
+        val pending = referencedTilemaps().filter { it.dirty }
+        pending.forEach { it.checkSource() }
+        pending.forEach { it.save() }
+    }
+    fun previewSerialize(): String {
+        val preview = document().copy(entities = entities.map { state ->
+            val source = state.document
+            val draft = mapDraft(source)
+            if (draft == null) source else source.copy(components = JsonObject(source.components +
+                ("Tilemap" to JsonObject(source.components.getValue("Tilemap").jsonObject +
+                    ("asset" to JsonPrimitive(draft.previewPath().toString().replace('\\', '/')))))))
+        })
+        return preview.serialize()
+    }
+    private fun editableTileLayers(): JsonArray? {
+        val draft = activeTilemap() ?: return if (selected?.document?.components?.containsKey("Tilemap") == true) JsonArray(emptyList()) else tileLayers
+        val translation = selectedKey?.let { sceneWorldPose(it, entities.map { e -> e.document }, parents).position } ?: Vec2(0.0, 0.0)
+        return draft.document.projectedLayers(draft.path.toString(), translation)
+    }
+    fun tileLayerDocuments() = if (selected?.document?.components?.containsKey("Tilemap") == true)
+        editableTileLayers().orEmpty().map { TileLayerDocument(it.jsonObject) } else tileLayerList
     fun tileLayer(id: String) = tileLayerDocuments().firstOrNull { it.id == id }
 
     private data class TileWorkspaceView(val layer: String?, val selections: Map<String, TileBounds>)
@@ -172,7 +202,54 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         return recordTilePaint(id, delta, "Move Tiles", bounds to destination)
     }
 
+    private fun recordMapChange(map: TilemapDraft, before: TilemapDocument, after: TilemapDocument, label: String,
+        undoView: () -> Unit = {}, redoView: () -> Unit = {}) {
+        if (before == after) return
+        map.document = after
+        history.record(History.Entry(label,
+            undo = {
+                require(map.document == after) { "This shared map changed in another scene; undo its newer edits first" }
+                map.document = before; undoView()
+            },
+            redo = {
+                require(map.document == before) { "This shared map changed in another scene; redo would overwrite newer edits" }
+                map.document = after; redoView()
+            }))
+    }
+
+    fun reloadActiveTilemap() {
+        val map = activeTilemap() ?: return
+        cancelTileGesture?.invoke()
+        val before = map.document
+        map.reload()
+        recordMapChange(map, before, map.document, "Reload Tilemap")
+    }
+
+    fun addMapTileset(reference: String) {
+        val map = activeTilemap() ?: return
+        val before = map.document
+        val after = before.addTileset(reference)
+        if (before == after) return
+        recordMapChange(map, before, after, "Add Tileset to Map")
+    }
+
     fun addTileLayer(tileset: String): String {
+        val map = activeTilemap()
+        if (map != null) {
+            val before = map.document
+            val afterSet = before.addTileset(tileset)
+            val existing = afterSet.projectedLayers(map.path.toString())
+            val layerId = UUID.randomUUID().toString()
+            val order = (existing.maxOfOrNull { it.jsonObject.getValue("drawOrder").jsonPrimitive.int } ?: -1).toLong() + 1
+            require(order <= Int.MAX_VALUE) { "No draw order available" }
+            val newLayer = buildJsonObject {
+                put("id", layerId); put("name", "Tile Layer ${existing.size + 1}"); put("drawOrder", order)
+                put("cells", JsonArray(emptyList()))
+            }
+            val after = afterSet.withProjectedLayers(JsonArray(existing + newLayer))
+            recordMapChange(map, before, after, "Add Tile Layer")
+            return layerId
+        }
         val layers = tileLayerDocuments()
         val id = UUID.randomUUID().toString()
         val usedOrders = layers.map { it.drawOrder }.toSet()
@@ -232,6 +309,16 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         val layer = tileLayer(id)?.takeUnless { it.locked || !it.visible } ?: return false
         val after = cells.filter { (cell, tile) -> layer.cells[cell] != tile }
         if (after.isEmpty()) return false
+        val map = activeTilemap()
+        if (map != null) {
+            val before = map.document
+            val next = before.withProjectedLayers(replacingTileLayer(id, layer.apply(after)))
+            recordMapChange(map, before, next, label,
+                undoView = { selectionChange?.let { selectTiles(id, it.first) } },
+                redoView = { selectionChange?.let { selectTiles(id, it.second) } })
+            selectionChange?.let { selectTiles(id, it.second) }
+            return true
+        }
         val before = after.keys.associateWith { layer.cells[it] }
         fun apply(delta: Map<TileCell, String?>) {
             tileLayers = replacingTileLayer(id, checkNotNull(tileLayer(id)).apply(delta))
@@ -246,11 +333,18 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         return true
     }
 
-    private fun replacingTileLayer(id: String, layer: JsonObject) = JsonArray(tileLayers.orEmpty().map {
+    private fun replacingTileLayer(id: String, layer: JsonObject) = JsonArray(editableTileLayers().orEmpty().map {
         if (it.jsonObject.getValue("id").jsonPrimitive.content == id) layer else it
     })
 
     private fun changeTileLayers(label: String, next: JsonArray) {
+        val map = activeTilemap()
+        if (map != null) {
+            val before = map.document
+            val after = before.withProjectedLayers(next)
+            recordMapChange(map, before, after, label)
+            return
+        }
         val before = tileLayers
         canonicalize(document().copy(tileLayers = next).serialize())
         tileLayers = next
@@ -311,7 +405,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
             redo = { created?.create(); publish(after, afterByKey) }))
     }
     fun allAssets() = extras + entities.flatMap { it.assets.entries }.associate { it.key to it.value }
-    private fun structure() = Structure(entities,name,parents,entities.associate { it.document.key to it.document.components["Transform"] },entities.associate { it.document.key to (it.document.components["Camera2D"] as? JsonObject)?.get("primary") },links=prefabInstances)
+    private fun structure() = Structure(entities,name,parents,entities.associate { it.document.key to it.document.components["Transform"] },entities.associate { it.document.key to (it.document.components["Camera2D"] as? JsonObject)?.get("primary") },links=prefabInstances,inlineLayers=tileLayers)
     private fun requireReferences(states: List<EntityWorkspaceState>) {
         val keys=states.map { it.document.key }.toSet()
         for(state in states) {
@@ -325,7 +419,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         }
     }
     private fun restore(value: Structure) {
-        entities=value.entities;name=value.name;parents=value.parents;prefabInstances=value.links;error=null
+        entities=value.entities;name=value.name;parents=value.parents;prefabInstances=value.links;tileLayers=value.inlineLayers;error=null
     }
     /** One structural step. It keeps the [Structure] snapshots; only the Transform and camera
      * flags the operation itself changed are restored, so other component edits are untouched. */
@@ -364,7 +458,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
     fun rename(value: String) = change("Rename Scene") { name=value }
     private fun exists(key: String?)=key!=null && entities.any { it.document.key==key }
     /** Selects [value] alone; null or an unknown key clears the selection. */
-    fun select(value: String?) { selected?.endGesture();selection.select(value?.takeIf(::exists)) }
+    fun select(value: String?) { if(value != selectedKey) cancelTileGesture?.invoke();selected?.endGesture();selection.select(value?.takeIf(::exists)) }
     /** Ctrl-click: adds or removes [key]. */
     fun toggleSelection(key: String) { if(!exists(key)) return;selected?.endGesture();selection.toggle(key) }
     /** Shift-click: the range from the anchor to [key] in the Hierarchy's [visible] order. */
@@ -372,7 +466,7 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         if(!exists(key)) return;selected?.endGesture();selection.extendTo(key,visible.filter(::exists),additive)
     }
     /** A plain press on an entity that is already selected keeps the set and makes it active. */
-    fun activate(key: String) { if(key in selection && key!=selectedKey) { selected?.endGesture();selection.activate(key) } }
+    fun activate(key: String) { if(key in selection && key!=selectedKey) { cancelTileGesture?.invoke();selected?.endGesture();selection.activate(key) } }
     /** Box select: [keys] (in scene order) replace the selection, or join it when [additive]. The
      * active entity stays active when it is still selected; selection is never an undo step. */
     fun selectBox(keys: List<String>,additive: Boolean) {
@@ -460,6 +554,22 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         val state=EntityWorkspaceState(catalog).apply { resetTo(copy,imported) }
         change("Create ${historyName(copy)}") { entities=entities+state;selection.select(copy.key) }
     }
+    fun placeTilemap(path: Path, position: Vec2? = null, convertLegacy: Boolean = false): String {
+        require(entities.size < MAX_SCENE_ENTITIES) { "Too many scene entities" }
+        val absolute = path.toAbsolutePath().normalize()
+        val draft = mapDrafts[absolute] ?: TilemapDraft.open(absolute).also { mapDrafts[absolute] = it }
+        val doc = EntityDocument(name = draft.document.name, components = buildJsonObject {
+            putJsonObject("Tilemap") { put("asset", absolute.toString().replace('\\', '/')); put("sortingOffset", 0) }
+        }).withPose(ScenePose(position = position ?: Vec2(0.0, 0.0)))
+        val state = EntityWorkspaceState(catalog).apply { resetTo(doc, emptyMap()) }
+        change(if (convertLegacy) "Convert Legacy Tilemap" else "Place Tilemap") {
+            entities = entities + state; selection.select(doc.key)
+            if (convertLegacy) tileLayers = null
+        }
+        activeTileLayer = draft.document.projectedLayers(absolute.toString()).firstOrNull()?.jsonObject?.get("id")?.jsonPrimitive?.content
+        return doc.key
+    }
+
     /** New root entity showing [texture] at its native size, e.g. an image dropped from Assets. */
     fun addSprite(texture: String,name: String,size: Vec2,position: Vec2?) {
         require(entities.size<MAX_SCENE_ENTITIES) { "Scene editor supports at most $MAX_SCENE_ENTITIES entities" }
@@ -475,7 +585,22 @@ internal class SceneWorkspaceState(private val catalog: Map<String,ComponentDefi
         while(queue.isNotEmpty()) { val key=queue.removeFirst();if(result.add(key)) children[key]?.forEach(queue::add) };return result
     }
     fun worldDocument(key: String): EntityDocument = entities.first { it.document.key==key }.document.let {
-        it.withPose(sceneWorldPose(key,entities.map { state -> state.document },parents))
+        val documents=entities.map { state -> state.document }
+        val ancestorScale=parents[key]?.let { parent -> sceneWorldPose(parent,documents,parents).scale } ?: Vec2(1.0,1.0)
+        val pose = sceneWorldPose(key, documents, parents)
+        val map = mapDraft(it)?.document
+        val bounds = map?.let { source ->
+            val size = Vec2(source.cellWidth / source.pixelsPerUnit, source.cellHeight / source.pixelsPerUnit)
+            val points = source.source.getValue("layers").jsonArray.flatMap { layer ->
+                if (layer.jsonObject.getValue("visible").jsonPrimitive.boolean) layer.jsonObject.getValue("cells").jsonArray.flatMap { raw ->
+                    val cell = raw.jsonObject
+                    val lower = pose.position + Vec2(cell.getValue("x").jsonPrimitive.int * size.x, cell.getValue("y").jsonPrimitive.int * size.y)
+                    listOf(lower, lower + size)
+                } else emptyList()
+            }
+            sle.editor.viewport.Bounds.of(points)
+        }
+        it.withPose(pose).copy(parentWorldScale=ancestorScale, tilemapWorldBounds=bounds)
     }
     fun applyWorldDocument(key: String,value: EntityDocument,mergeKey: Any?=null) {
         val state=entities.first { it.document.key==key }

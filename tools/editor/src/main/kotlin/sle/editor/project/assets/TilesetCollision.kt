@@ -37,7 +37,7 @@ internal fun readTileCollision(tile: JsonObject, width: Int = Int.MAX_VALUE, hei
     return TileCollisionShape(mode, pieces)
 }
 
-private fun TileCollisionShape.json(): JsonObject = buildJsonObject {
+internal fun TileCollisionShape.json(): JsonObject = buildJsonObject {
     put("mode", mode.wireName)
     putJsonArray("pieces") {
         for (piece in pieces) addJsonArray {

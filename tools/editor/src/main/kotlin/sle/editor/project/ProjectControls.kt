@@ -1,6 +1,6 @@
 package sle.editor.project
 
-import sle.editor.ui.EditorDialogs
+import sle.editor.ui.dialog.EditorPrompts
 import sle.editor.ui.EditorFileChooser
 import androidx.compose.runtime.*
 import androidx.compose.foundation.layout.*
@@ -23,8 +23,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.nio.file.Path
 import javax.swing.JFileChooser
-import javax.swing.JOptionPane
-import javax.swing.filechooser.FileNameExtensionFilter
 import sle.editor.ui.EditorMenuEntry
 
 internal data class ProjectCommands(
@@ -87,24 +85,24 @@ internal fun projectControls(
             }
             if(chooser.showOpenDialog(null)==JFileChooser.APPROVE_OPTION) {
                 sle.editor.ui.EditorFileLocations.remember(sle.editor.ui.EditorFileLocations.Kind.Project,java.io.File(chooser.selectedFile,"_"))
-                val name=EditorDialogs.showInputDialog(null,"Project name","New Project",JOptionPane.PLAIN_MESSAGE)?.trim()
+                val name=EditorPrompts.input("New Project","Name",confirm="Next") {
+                    runCatching { validateProjectFolderName(it.trim()) }.exceptionOrNull()?.message
+                }?.trim()
                 if(name!=null) try {
                     validateProjectFolderName(name)
-                    val choices = ProjectArtStyle.entries.map { it.label }.toTypedArray()
-                    val selected = EditorDialogs.showInputDialog(null, "Art style", "New Project",
-                        JOptionPane.PLAIN_MESSAGE, null, choices, ProjectArtStyle.Smooth.label)
+                    val choices = ProjectArtStyle.entries.map { it.label }
+                    val selected = EditorPrompts.select("New Project", "Art style", choices, ProjectArtStyle.Smooth.label, confirm = "Create")
                     val style = ProjectArtStyle.entries.firstOrNull { it.label == selected }
                     if (style != null) load { ProjectFiles.create(chooser.selectedFile.toPath().resolve(name), name, style) }
                 } catch(failure: Exception) { state.error=failure.message }
             }
         },
         open={
-            val chooser=EditorFileChooser(state.opened?.root?.parent?.toFile() ?: sle.editor.ui.EditorFileLocations.folder(sle.editor.ui.EditorFileLocations.Kind.Project)).apply {
-                dialogTitle="Open Project";fileFilter=FileNameExtensionFilter("SLE Project (*.sleproject)","sleproject")
-            }
-            if(chooser.showOpenDialog(null)==JFileChooser.APPROVE_OPTION) {
-                sle.editor.ui.EditorFileLocations.remember(sle.editor.ui.EditorFileLocations.Kind.Project,chooser.selectedFile.parentFile)
-                load { ProjectFiles.open(chooser.selectedFile.toPath()) }
+            sle.editor.ui.EditorFilePicker.open("Open Project",
+                state.opened?.root?.parent?.toFile() ?: sle.editor.ui.EditorFileLocations.folder(sle.editor.ui.EditorFileLocations.Kind.Project),
+                sle.editor.ui.EditorFilePicker.Filter("SLE project","sleproject"))?.let { file ->
+                sle.editor.ui.EditorFileLocations.remember(sle.editor.ui.EditorFileLocations.Kind.Project,file.parentFile)
+                load { ProjectFiles.open(file.toPath()) }
             }
         },
         close={

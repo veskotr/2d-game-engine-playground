@@ -2,6 +2,7 @@ package sle.editor.smoke
 
 import sle.editor.model.EntityWorkspaceState
 import sle.editor.viewport.EngineCanvas
+import sle.editor.viewport.GizmoMath
 import sle.editor.viewport.GizmoShape
 import sle.editor.viewport.SnapMath
 import sle.editor.viewport.SnapService
@@ -55,12 +56,32 @@ internal suspend fun runGizmoSmoke(canvas: EngineCanvas, state: EntityWorkspaceS
     val before=state.document
     val box=GizmoShape.from(before,"BoxCollider")!!
     val image=GizmoShape.from(before,"SpriteRenderer")!!
-    move(pixel(image.world(image.offset+Vec2(0.25,0.2))))
+    check(box.scale==Vec2(1.0,1.0) && image.scale==Vec2(-2.0,1.5)) { "Collider units or sprite visual scale changed" }
+    // Own scale affects the sprite, while collider outlines now stay in explicit units.
+    // Pick an interior pixel clear of both outlines and the selected box's handle hit areas.
+    val circleBefore=GizmoShape.from(before,"CircleCollider")!!
+    val spriteClick=(-7..7).flatMap { x -> (-7..7).map { y ->
+        image.world(image.offset+Vec2(image.size.x*x/20,image.size.y*y/20))
+    } }.firstOrNull { world ->
+        val point=pixel(world)
+        box.contains(world) && circleBefore.contains(world) &&
+            GizmoMath.handles(box).all { (pixel(GizmoMath.handleWorld(box,it))-point).length()>14 } &&
+            listOf(Vec2(0.0,0.0),Vec2(-2.0,0.0),Vec2(2.0,0.0),Vec2(0.0,-2.0),Vec2(0.0,2.0)).all {
+                GizmoMath.pick(before,camera,point+it,"BoxCollider")=="SpriteRenderer"
+            }
+    } ?: error("No sprite interior pixel clear of collider outlines/handles: camera=$camera box=$box circle=$circleBefore sprite=$image")
+    move(pixel(spriteClick))
     robot.mousePress(InputEvent.BUTTON1_DOWN_MASK); robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK); delay(140)
-    check(state.selectedTarget=="SpriteRenderer") { "Transparent collider interior intercepted sprite click" }
-    move(pixel(box.world(box.offset+Vec2(box.size.x/2,0.7))))
+    check(state.selectedTarget=="SpriteRenderer") { "Transparent collider interior intercepted sprite click: selected=${state.selectedTarget} point=$spriteClick camera=$camera" }
+    val boxClick=(-8..8).map { y -> box.world(box.offset+Vec2(box.size.x/2,box.size.y*y/20)) }
+        .firstOrNull { world ->
+            val point=pixel(world)
+            GizmoMath.pick(before,camera,point,"SpriteRenderer")=="BoxCollider" &&
+                GizmoMath.handles(image).all { (pixel(GizmoMath.handleWorld(image,it))-point).length()>14 }
+        } ?: error("No box outline pixel clear of the selected sprite's handles")
+    move(pixel(boxClick))
     robot.mousePress(InputEvent.BUTTON1_DOWN_MASK); robot.mouseRelease(InputEvent.BUTTON1_DOWN_MASK); delay(140)
-    check(state.selectedTarget=="BoxCollider") { "Collider outline could not be selected" }
+    check(state.selectedTarget=="BoxCollider") { "Collider outline could not be selected: selected=${state.selectedTarget} point=$boxClick" }
     val corner=box.offset+box.size*0.5
     val opposite=box.world(box.offset-box.size*0.5)
     ImageIO.write(robot.createScreenCapture(Rectangle(canvas.locationOnScreen,canvas.size)),"png",File(System.getProperty("sle.smokeReport")).parentFile.resolve("gizmo-before.png"))
@@ -81,7 +102,8 @@ internal suspend fun runGizmoSmoke(canvas: EngineCanvas, state: EntityWorkspaceS
     check(state.document==beforeCancel) { "Escape did not restore drag start" }
     state.selectedTarget="CircleCollider"; delay(100)
     val circle=GizmoShape.from(state.document,"CircleCollider")!!
-    drag(circle.center+Vec2(circle.worldRadius,0.0),circle.center+Vec2(circle.worldRadius*1.4,0.0))
+    val radiusHandle=GizmoMath.handles(circle).first { it.kind=="radius" && it.x==1 }
+    drag(GizmoMath.handleWorld(circle,radiusHandle),circle.world(circle.offset+Vec2(circle.radius*1.4,0.0)))
     check(abs(GizmoShape.from(state.document,"CircleCollider")!!.radius-circle.radius*1.4)<0.04) { "Circle radius handle failed" }
     state.selectedTarget="SpriteRenderer"; delay(100)
     val sprite=GizmoShape.from(state.document,"SpriteRenderer")!!

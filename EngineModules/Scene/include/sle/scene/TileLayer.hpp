@@ -49,12 +49,22 @@ struct TileLayer
     glm::vec2 origin{};
     glm::vec2 cellSize{1};
     float pixelsPerUnit = 1;
+    int chunkCells = TileChunkSize;
     std::uint32_t drawOrder = 0;
     bool visible = true;
     bool locked = false;
     bool collisionEnabled = true;
     std::map<TileCoordinate, TileChunk> chunks;
     std::map<std::string, TileCollision> collisionByTile;
+};
+
+// Resolved data; authored components contain no runtime resources.
+struct TilemapPlacement
+{
+    std::uint32_t entityId = 0;
+    std::string asset;
+    std::vector<TileLayer> layers;
+    bool warnedTransform = false;
 };
 
 } // namespace sle::entity

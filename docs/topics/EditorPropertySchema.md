@@ -20,7 +20,7 @@ default differs from a JSON null default.
 | `order`, `group` | Order rows within a block and assign a field to a declared group. `groups` is keyed by ID with optional `label` and `order` per group. Ungrouped rows come first. Numbered entries precede unnumbered entries, and ties preserve their incoming order. |
 | `choices` | Ordered, unique JSON scalar values for enums. Keep native string enums in `enums` for older consumers. |
 | `hard` | Numeric `min` and `max` with optional `minExclusive` and `maxExclusive`. Use the codec's shared constraints. Generated steps honor hard limits. Native validation checks direct entry at save time, including integer syntax, float representation, shape and context. |
-| `ui` | Optional `min` and `max` for slider travel, positive `step` for slider increments and Alt+Up/Down, nonnegative `precision` for generated text and slider display, display `unit`, and `slider` to opt in. Suggested ranges never clamp typed values. A caption can identify a unit on rows without sliders. |
+| `ui` | Optional `min` and `max` for slider travel, positive `step` for slider increments and Alt+Up/Down, nonnegative `precision` for generated text, idle numeric text and slider display, display `unit`, and `slider` to opt in. Suggested ranges never clamp typed values. A caption can identify a unit on rows without sliders. |
 | `visibleWhen` | A single-key sibling `path` with either scalar `equals` or a scalar array `in`. A missing or unavailable sibling leaves the field visible. Hidden values stay authored and remain subject to native validation. |
 | `readOnly` | Disables editing and mutation actions while allowing Copy. A read-only vector or object makes its descendants read-only. Host restrictions also apply. |
 | `drawer`, `axisLabels` | Select a compatible registered drawer by stable ID and optionally map vector keys to captions. |
@@ -62,6 +62,7 @@ against the current native build.
 
 | Component | Declared paths | Inferred default paths and controls |
 | --- | --- | --- |
+| Tilemap | `asset`, `sortingOffset` | — |
 | Transform | `position`, `position.*`, `rotation`, `scale`, `scale.*` | — |
 | SpriteRenderer | `texture`, `color`, `color.*`, `size`, `size.*`, `offset`, `offset.*`, `layer`, `visible`, `region`, `region.uv`, `region.uv.*` | — |
 | Camera2D | `enabled`, `primary`, `viewSize`, `viewSize.*`, `zoom` | — |
@@ -126,3 +127,28 @@ with open("catalog.json", encoding="utf-8") as source:
   sliders or prescribed steps.
 - Native order matches the preferred SpriteRenderer and collider rows. The
   editor retains its ordering and caption fallbacks for older catalogs.
+
+Idle floating-point fields use six significant digits unless `ui.precision`
+specifies decimal places. They trim trailing zeros, normalize negative zero,
+and keep small nonzero values visible with scientific notation. Integer tokens
+remain exact. Focus restores the original editable token; formatting never writes
+to the document or adds undo history. Vector axes share one value column, with
+compact axis captions and wrapping based on the available width.
+
+## Collision dimensions and Fit
+
+Collider and event-area dimensions use explicit collision units: physics applies
+ancestor scale, but does not multiply these dimensions by the entity's own
+Transform scale. Sprite dimensions use the full visual scale. Existing authored
+collision values stay unchanged until edited or explicitly fitted.
+
+**Fit** converts sprite dimensions with the entity's own scale:
+`size = abs(sprite.size * Transform.scale)` and
+`offset = sprite.offset * Transform.scale`. Mirroring therefore changes offset
+signs while dimensions remain positive. Missing Transform uses identity scale.
+Parent scale and rotation are left for physics to apply. Circle shapes retain
+the enclosing-circle policy: radius is half the larger scaled dimension.
+
+Fit rejects zero or nonfinite geometry without changing the shape. Dimensions
+and offsets undo together. Adding a collision shape automatically fits it when
+a sprite exists, as part of the same component-add undo step.

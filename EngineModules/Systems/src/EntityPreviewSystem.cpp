@@ -1,5 +1,7 @@
+#include "TilemapPlacement.hpp"
 #include <sle/engine/EntityPreviewSystem.hpp>
 #include <sle/scene/Scene.hpp>
+#include <sle/scene/TransformMath.hpp>
 #include <sle/scene/components/Camera2DComponent.hpp>
 #include <sle/scene/components/WorldTransformComponent.hpp>
 #include <sle/scene/components/SpriteRenderer.hpp>
@@ -23,17 +25,18 @@ void EntityPreviewSystem::frameCamera(entity::Scene& scene, core::Camera2D& came
         const glm::dvec2 center(world.position);
         double radius = 1.0;
         const auto scale = glm::abs(glm::dvec2(world.scale));
-        auto include = [&](glm::vec2 offset, glm::vec2 halfSize) {
-            const auto distance = glm::length(glm::dvec2(offset) * scale) + glm::length(glm::dvec2(halfSize) * scale);
+        auto include = [&](glm::vec2 offset, glm::vec2 halfSize, glm::dvec2 shapeScale) {
+            const auto distance = glm::length(glm::dvec2(offset) * shapeScale) + glm::length(glm::dvec2(halfSize) * shapeScale);
             if (std::isfinite(distance)) radius = std::max(radius, static_cast<double>(distance));
         };
         if (const auto* cameraComponent=registry.getComponent<components::Camera2DComponent>(entity))
             radius=std::max(radius,static_cast<double>(glm::length(cameraComponent->viewSize/(2.0f*cameraComponent->zoom))));
-        if (const auto* sprite = registry.getComponent<components::SpriteRenderer>(entity)) include(sprite->offset,sprite->size*0.5f);
-        if (const auto* c = registry.getComponent<components::BoxColliderComponent>(entity)) include(c->offset,c->size*0.5f);
-        if (const auto* c = registry.getComponent<components::CircleColliderComponent>(entity)) include(c->offset,{c->radius,c->radius});
-        if (const auto* c = registry.getComponent<components::BoxZoneComponent>(entity)) include(c->offset,c->size*0.5f);
-        if (const auto* c = registry.getComponent<components::CircleZoneComponent>(entity)) include(c->offset,{c->radius,c->radius});
+        if (const auto* sprite = registry.getComponent<components::SpriteRenderer>(entity)) include(sprite->offset,sprite->size*0.5f,scale);
+        const auto colliderScale = glm::abs(glm::dvec2(entity::transformMath::currentParentWorld(scene,entity).scale));
+        if (const auto* c = registry.getComponent<components::BoxColliderComponent>(entity)) include(c->offset,c->size*0.5f,colliderScale);
+        if (const auto* c = registry.getComponent<components::CircleColliderComponent>(entity)) include(c->offset,{c->radius,c->radius},colliderScale);
+        if (const auto* c = registry.getComponent<components::BoxZoneComponent>(entity)) include(c->offset,c->size*0.5f,colliderScale);
+        if (const auto* c = registry.getComponent<components::CircleZoneComponent>(entity)) include(c->offset,{c->radius,c->radius},colliderScale);
         if (std::isfinite(center.x) && std::isfinite(center.y)) {
             const glm::dvec2 extent(radius);
             minimum = any ? glm::min(minimum,center-extent) : center-extent;
@@ -41,15 +44,16 @@ void EntityPreviewSystem::frameCamera(entity::Scene& scene, core::Camera2D& came
             any = true;
         }
     });
-    for (const auto& layer : scene.getTileLayers()) {
-        if (!layer.visible) continue;
+    detail::visitTileLayers(scene, [&](const auto& placed) {
+        const auto& layer = *placed.layer;
+        if (!layer.visible) return;
         for (const auto& [coordinate, chunk] : layer.chunks) {
-            const glm::dvec2 lowerLeft(chunk.lowerLeft), upperRight(chunk.upperRight);
+            const glm::dvec2 lowerLeft(chunk.lowerLeft + placed.translation), upperRight(chunk.upperRight + placed.translation);
             minimum = any ? glm::min(minimum, lowerLeft) : lowerLeft;
             maximum = any ? glm::max(maximum, upperRight) : upperRight;
             any = true;
         }
-    }
+    });
     if (!std::isfinite(aspect) || aspect <= 0) aspect = 1.0f;
     const auto center = (minimum+maximum)*0.5;
     const auto extent = maximum-minimum;

@@ -32,6 +32,7 @@ import javax.imageio.ImageIO
 internal data class TilePaletteOption(
     val path: String, val palette: TilePalette?, val error: String? = null,
     val atlas: String? = null, val regions: Map<String, SpriteRegion> = emptyMap(),
+    val tileAtlases: Map<String, String> = emptyMap(),
 )
 
 private fun readStamp(project: OpenedProject, path: String, region: SpriteRegion): TileStampImage? = runCatching {
@@ -62,42 +63,10 @@ private fun readTilePalettes(project: OpenedProject, snapshot: AssetSnapshot): L
             runCatching {
                 val file = assetPath(project.root, project.assets, entry.path)
                 require(Files.size(file) <= 4 * 1024 * 1024) { "Tileset exceeds 4 MiB" }
-                val source = Json.parseToJsonElement(Files.readString(file)).jsonObject
-                require(source.keys == setOf("format", "version", "spritesheet", "tileWidth", "tileHeight", "tiles")) {
-                    "Unsupported tileset fields"
+                val tileset = parseTileset(Files.readString(file), "project-asset://$id", snapshot.pathsById::get) {
+                    snapshot.spriteRegions[it].orEmpty()
                 }
-                require(source["format"]?.jsonPrimitive?.content == "sle-tileset" && source["version"]?.jsonPrimitive?.int == 1) {
-                    "Expected a version 1 SLE tileset"
-                }
-                val width = source.getValue("tileWidth").jsonPrimitive.int
-                val height = source.getValue("tileHeight").jsonPrimitive.int
-                require(width > 0 && height > 0) { "Tile dimensions must be positive" }
-                val reference = source.getValue("spritesheet").jsonPrimitive.content
-                require(reference.startsWith("project-asset://")) { "Tileset spritesheet must use a project asset UUID" }
-                val atlasId = reference.removePrefix("project-asset://")
-                val atlas = requireNotNull(snapshot.pathsById[atlasId]) { "Missing spritesheet $atlasId" }
-                val regions = snapshot.spriteRegions[atlas].orEmpty().associateBy { it.id }
-                val swatchRegions = mutableMapOf<String, SpriteRegion>()
-                val rawTiles = source.getValue("tiles").jsonArray
-                require(rawTiles.size <= 4096) { "Tileset exceeds 4096 tiles" }
-                val tiles = rawTiles.map {
-                    val tile = it.jsonObject
-                    require(tile.keys - "collision" == setOf("id", "name", "region")) { "Unsupported tile fields" }
-                    val tileId = tile.getValue("id").jsonPrimitive.content
-                    require(java.util.UUID.fromString(tileId).toString() == tileId) { "Invalid tile UUID $tileId" }
-                    val regionId = tile.getValue("region").jsonPrimitive.content
-                    val region = requireNotNull(regions[regionId]) { "Tile $tileId has missing region $regionId" }
-                    readTileCollision(tile, region.width, region.height)
-                    swatchRegions[tileId] = region
-                    val name = tile.getValue("name").jsonPrimitive
-                    require(name.isString && name.content.isNotBlank() && name.content.encodeToByteArray().size <= 256) {
-                        "Invalid name for tile $tileId"
-                    }
-                    TileSwatch(tileId, name.content)
-                }
-                require(tiles.map { it.id }.distinct().size == tiles.size) { "Duplicate tile UUIDs" }
-                TilePaletteOption(entry.path, TilePalette("project-asset://$id", width, height, tiles),
-                    atlas = atlas, regions = swatchRegions)
+                TilePaletteOption(entry.path, tileset.palette, atlas = tileset.atlas, regions = tileset.regions)
             }.getOrElse { TilePaletteOption(entry.path, null, it.message ?: "Could not read tileset") }
         }
 
@@ -111,6 +80,24 @@ internal fun rememberTilePaletteOptions(project: OpenedProject, snapshot: AssetS
     return options
 }
 
+private fun mapPaletteOption(scene: SceneWorkspaceState, options: List<TilePaletteOption>?): TilePaletteOption? {
+    val draft = scene.activeTilemap() ?: return null
+    val map = draft.document
+    val regions = mutableMapOf<String, SpriteRegion>()
+    val atlases = mutableMapOf<String, String>()
+    val swatches = map.tilesets.flatMap { (key, reference) ->
+        val option = options?.firstOrNull { it.palette?.reference == reference } ?: return@flatMap emptyList()
+        option.palette!!.tiles.map { tile ->
+            val id = "$key:${tile.id}"
+            option.regions[tile.id]?.let { regions[id] = it }
+            option.atlas?.let { atlases[id] = it }
+            TileSwatch(id, "${tilesetLabel(option.path)} · ${tile.name}")
+        }
+    }
+    return TilePaletteOption(draft.path.toString(), TilePalette(draft.path.toString(), map.cellWidth, map.cellHeight, swatches),
+        regions = regions, tileAtlases = atlases)
+}
+
 private fun activeLayer(scene: SceneWorkspaceState): TileLayerDocument? =
     scene.activeTileLayer?.let(scene::tileLayer) ?: scene.tileLayerDocuments().maxByOrNull { it.drawOrder }
 
@@ -119,14 +106,17 @@ internal fun SyncTilePainting(scene: SceneWorkspaceState, project: OpenedProject
     options: List<TilePaletteOption>?, tools: ViewportToolState) {
     val painting = tools.tilePainting
     val layer = activeLayer(scene)
-    val option = options?.firstOrNull { it.palette?.reference == layer?.tileset }
+    val option = mapPaletteOption(scene, options) ?: options?.firstOrNull { it.palette?.reference == layer?.tileset }
     val atlas = option?.atlas
     val imageIds = painting.brushTileIds().toSet()
     val regions = option?.regions.orEmpty().filterKeys { it in imageIds }
-    val images by key(project.file, atlas, regions, snapshot?.thumbnailRevision) {
+    val images by key(project.file, atlas, option?.tileAtlases, regions, snapshot?.thumbnailRevision) {
         produceState<Map<String, TileStampImage>>(emptyMap()) {
-            if (atlas != null) value = withContext(Dispatchers.IO) {
-                regions.mapNotNull { (id, region) -> readStamp(project, atlas, region)?.let { id to it } }.toMap()
+            value = withContext(Dispatchers.IO) {
+                regions.mapNotNull { (id, region) ->
+                    val source = option?.tileAtlases?.get(id) ?: atlas
+                    source?.let { readStamp(project, it, region) }?.let { id to it }
+                }.toMap()
             }
         }
     }
@@ -136,38 +126,97 @@ internal fun SyncTilePainting(scene: SceneWorkspaceState, project: OpenedProject
     }
 }
 
+private fun tilesetLabel(path: String): String {
+    val name = path.substringAfterLast('/')
+    return if (name.endsWith(".tileset.json", ignoreCase = true)) name.dropLast(".tileset.json".length) else name
+}
+
+/** Readable tilesets as (menu label, reference): the file name, or the whole path when names repeat. */
+internal fun tilesetMenuChoices(options: List<TilePaletteOption>): List<Pair<String, String>> {
+    val valid = options.mapNotNull { option -> option.palette?.let { option.path to it.reference } }
+    val counts = valid.groupingBy { tilesetLabel(it.first) }.eachCount()
+    return valid.map { (path, reference) -> (tilesetLabel(path).takeIf { counts[it] == 1 } ?: path) to reference }
+}
+
+@Composable
+private fun TilesetErrors(options: List<TilePaletteOption>) {
+    options.filter { it.error != null }.forEach {
+        EditorLabel("${it.path} · ${it.error}", color = LocalEditorColors.current.error)
+    }
+}
+
 @Composable
 internal fun TilePaintingControls(scene: SceneWorkspaceState, project: OpenedProject, snapshot: AssetSnapshot?,
-    options: List<TilePaletteOption>?, tools: ViewportToolState, activate: () -> Unit) {
+    options: List<TilePaletteOption>?, tools: ViewportToolState, activate: () -> Unit, newTileset: () -> Unit = {}) {
     val painting = tools.tilePainting
     val palettes = options.orEmpty().mapNotNull { option -> option.palette?.let { option.path to it } }.toMap()
     val layers = scene.tileLayerDocuments().sortedByDescending { it.drawOrder }
     val layer = activeLayer(scene)
-    val palette = palettes.values.firstOrNull { it.reference == layer?.tileset }
+    val mapOption = mapPaletteOption(scene, options)
+    val palette = mapOption?.palette ?: palettes.values.firstOrNull { it.reference == layer?.tileset }
     val metrics = LocalEditorMetrics.current
+    if (options == null) {
+        EditorEmptyState("Scanning project tilesets…")
+        return
+    }
+    if (palettes.isEmpty()) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(metrics.panelPadding),
+            verticalArrangement = Arrangement.spacedBy(metrics.gap)) {
+            EditorLabel("No tilesets yet", style = LocalEditorTypography.current.heading)
+            EditorLabel("A tileset cuts a texture into a grid of tiles. Make one from a spritesheet, then add a tile layer and paint.",
+                color = LocalEditorColors.current.textSecondary)
+            EditorButton("New Tileset…", newTileset, primary = true,
+                help = "Slice a texture into a tileset")
+            TilesetErrors(options)
+        }
+        return
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(metrics.panelPadding),
         verticalArrangement = Arrangement.spacedBy(metrics.gap)) {
-        var newPalette by remember { mutableStateOf<String?>(null) }
-        val selected = newPalette?.takeIf(palettes::containsKey) ?: palettes.keys.firstOrNull()
-        EditorSelect("Tileset for new layer", selected ?: "No tilesets", palettes.keys.toList(),
-            { newPalette = it }, enabled = palettes.isNotEmpty())
-        EditorButton("Add Tile Layer", {
-            runCatching { scene.addTileLayer(palettes.getValue(checkNotNull(selected)).reference) }
-                .onSuccess { activate(); scene.activeTileLayer = it; painting.selectMode(TilePaintMode.Brush) }
-                .onFailure { scene.error = it.message }
-        }, enabled = selected != null)
+        scene.activeTilemap()?.let { map ->
+            EditorFormRow("Map", help = "Shared asset; changes affect every placement") {
+                EditorLabel(map.document.name + if (map.dirty) " *" else "", Modifier.weight(1f))
+                EditorButton("Reload", {
+                    if (!map.dirty || sle.editor.ui.dialog.EditorPrompts.confirm("Reload Tilemap", "Discard the map draft and read its saved asset?", "Reload", danger = true)) {
+                        runCatching { scene.reloadActiveTilemap() }.onFailure { scene.error = it.message }
+                    }
+                }, style = EditorButtonStyle.Ghost)
+            }
+        }
+        val selected = painting.newLayerTileset?.takeIf(palettes::containsKey) ?: palettes.keys.first()
+        EditorFormRow("Tileset", help = "Tileset for new layers") {
+            EditorSelect("Tileset", selected, palettes.keys.toList(), { painting.newLayerTileset = it },
+                Modifier.weight(1f), showLabel = false)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(metrics.gap)) {
+            if (scene.activeTilemap() != null) EditorButton("Add Tileset", {
+                runCatching { scene.addMapTileset(palettes.getValue(selected).reference) }.onFailure { scene.error = it.message }
+            }, style = EditorButtonStyle.Ghost)
+            EditorButton("Add Tile Layer", {
+                runCatching { scene.addTileLayer(palettes.getValue(selected).reference) }
+                    .onSuccess { activate(); scene.activeTileLayer = it; painting.selectMode(TilePaintMode.Brush) }
+                    .onFailure { scene.error = it.message }
+            }, primary = layers.isEmpty())
+            EditorButton("New Tileset…", newTileset, style = EditorButtonStyle.Ghost, help = "Slice a texture into a tileset")
+        }
+        if (layers.isEmpty()) EditorLabel("Add a tile layer to start painting.", color = LocalEditorColors.current.textSecondary)
         val layerChoices = layers.associateBy { "${it.name} (${it.drawOrder})" }
-        EditorSelect("Layer", layerChoices.entries.firstOrNull { it.value.id == layer?.id }?.key ?: "No layers",
-            layerChoices.keys.toList(), { scene.activeTileLayer = layerChoices[it]?.id }, enabled = layers.isNotEmpty())
+        EditorFormRow("Layer", help = "The layer you paint on") {
+            EditorSelect("Layer", layerChoices.entries.firstOrNull { it.value.id == layer?.id }?.key ?: "No layers",
+                layerChoices.keys.toList(), { scene.activeTileLayer = layerChoices[it]?.id }, Modifier.weight(1f),
+                enabled = layers.isNotEmpty(), showLabel = false)
+        }
         if (layer != null) {
             EditorCheckBox("Lock layer", layer.locked, { locked ->
                 runCatching { scene.setTileLayerLocked(layer.id, locked) }
                     .onFailure { scene.error = it.message }
             })
             var name by remember(layer.id, layer.name) { mutableStateOf(TextFieldValue(layer.name)) }
-            EditorTextField(name, { name = it }, "Layer name", onCommit = {
-                runCatching { scene.renameTileLayer(layer.id, name.text) }.onFailure { scene.error = it.message }
-            })
+            EditorFormRow("Name", help = "Layer name") {
+                EditorTextField(name, { name = it }, "Layer name", Modifier.weight(1f), onCommit = {
+                    runCatching { scene.renameTileLayer(layer.id, name.text) }.onFailure { scene.error = it.message }
+                })
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(metrics.gap)) {
                 EditorButton("Move Up", { scene.reorderTileLayer(layer.id, 1) },
                     enabled = layer != layers.first(), help = "Draw this layer in front of the next layer")
@@ -196,14 +245,14 @@ internal fun TilePaintingControls(scene: SceneWorkspaceState, project: OpenedPro
             var buildingStamp by remember(palette.reference) { mutableStateOf(false) }
             EditorCheckBox("Build Stamp", buildingStamp, { buildingStamp = it },
                 help = "Click tiles in left-to-right stamp order")
-            val atlasOption = options?.firstOrNull { it.palette?.reference == palette.reference }
+            val atlasOption = mapOption ?: options?.firstOrNull { it.palette?.reference == palette.reference }
             if (tiles.isEmpty()) EditorLabel("No matching tiles")
             LazyRow(horizontalArrangement = Arrangement.spacedBy(metrics.gap)) {
                 items(tiles.entries.toList(), key = { it.value.id }) { (label, tile) ->
                     val region = atlasOption?.regions?.get(tile.id)
                     val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
-                        null, project.file, atlasOption?.atlas, region, snapshot?.thumbnailRevision) {
-                        val atlas = atlasOption?.atlas
+                        null, project.file, atlasOption?.tileAtlases?.get(tile.id) ?: atlasOption?.atlas, region, snapshot?.thumbnailRevision) {
+                        val atlas = atlasOption?.tileAtlases?.get(tile.id) ?: atlasOption?.atlas
                         value = if (atlas == null || region == null) null else withContext(Dispatchers.IO) {
                             readStamp(project, atlas, region)?.let { image ->
                                 BufferedImage(image.imageWidth, image.imageHeight, BufferedImage.TYPE_INT_ARGB).apply {
@@ -245,13 +294,9 @@ internal fun TilePaintingControls(scene: SceneWorkspaceState, project: OpenedPro
                     enabled = scene.tileSelection(layer.id) != null)
             }
         }
-        EditorSeparator()
-        when {
-            options == null -> EditorLabel("Scanning project tilesets…")
-            options.isEmpty() -> EditorLabel("Add a registered .tileset.json asset to the project first")
-            else -> options.orEmpty().firstOrNull { it.error != null }?.let {
-                EditorLabel("${it.path} · ${it.error}", color = LocalEditorColors.current.error)
-            }
+        if (options.any { it.error != null }) {
+            EditorSeparator()
+            TilesetErrors(options)
         }
     }
 }

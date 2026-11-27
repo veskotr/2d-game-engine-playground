@@ -4,7 +4,6 @@ import androidx.compose.runtime.*
 import java.nio.file.Files
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.Path
-import javax.swing.JOptionPane
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -16,7 +15,7 @@ import kotlinx.serialization.json.*
 import sle.editor.bridge.NativeEngine
 import sle.editor.command.*
 import sle.editor.project.OpenedProject
-import sle.editor.ui.EditorDialogs
+import sle.editor.ui.dialog.EditorPrompts
 import sle.editor.viewport.ViewportMode
 
 internal class ProjectLuaCommand(
@@ -152,11 +151,11 @@ internal fun rememberProjectLuaScripts(
     fun prompt(target: OpenedProject): Boolean {
         val allow = "Trust Editor Scripts"
         val deny = "Keep Disabled"
-        return EditorDialogs.showOptionDialog(null,
+        // Keep Disabled is the Enter default: trusting scripts must be a deliberate click.
+        return EditorPrompts.choose("Trust Project Editor Scripts",
             "Allow Lua editor scripts from ${target.document.name} (${target.file})? " +
                 "These scripts can add editor controls, propose scene edits, and create project assets.",
-            "Trust Project Editor Scripts", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE,
-            null, arrayOf(allow, deny), deny) == 0
+            listOf(allow, deny), default = 1, cancel = null) == 0
     }
 
     fun identity(target: OpenedProject) = target.file to target.document.id

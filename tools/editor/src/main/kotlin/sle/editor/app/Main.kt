@@ -117,6 +117,8 @@ private fun launchEditor(args: Array<String>) = application {
     val documentSmoke="--project-documents-smoke" in args
     val assetSmoke="--asset-browser-smoke" in args
     val tileSmoke="--tile-painting-smoke" in args
+    val freshTileSmoke="--fresh-tilemap-smoke" in args
+    val tilesetSmoke="--tileset-editor-smoke" in args
     val projectSmoke="--project-smoke" in args
     val sandboxSmoke="--smoke-test" in args
     val authoringUiSmoke="--authoring-ui-smoke" in args
@@ -128,7 +130,7 @@ private fun launchEditor(args: Array<String>) = application {
     val appearanceSmoke="--editor-appearance-smoke" in args
     val walkSmoke="--l1-walk-smoke" in args
     val previewSmoke=authoringUiSmoke || switchingSmoke
-    val testing=layoutPhase || dockingSmoke || sandboxSmoke || previewSmoke || gizmoSmoke || sceneSmoke || cameraSmoke || menuSmoke || projectSmoke || assetSmoke || documentSmoke || runtimeSmoke || appearanceSmoke || walkSmoke || tileSmoke
+    val testing=layoutPhase || dockingSmoke || sandboxSmoke || previewSmoke || gizmoSmoke || sceneSmoke || cameraSmoke || menuSmoke || projectSmoke || assetSmoke || documentSmoke || runtimeSmoke || appearanceSmoke || walkSmoke || tileSmoke || freshTileSmoke || tilesetSmoke
     val windowState=rememberWindowState(width=1280.dp,height=900.dp)
     val authoring=remember {
         runCatching { EntityWorkspaceState(readComponentCatalog()).apply {
@@ -153,6 +155,7 @@ private fun launchEditor(args: Array<String>) = application {
     var observedDocumentCommands by remember { mutableStateOf<sle.editor.project.ProjectDocumentCommands?>(null) }
     var observedAssetCommands by remember { mutableStateOf<sle.editor.project.assets.ProjectAssetCommands?>(null) }
     var observedAssets by remember { mutableStateOf<AssetBrowserState?>(null) }
+    var observedTileLayers by remember { mutableStateOf<sle.editor.ui.TileLayerCreation?>(null) }
     val assetBounds=remember { mutableMapOf<String,androidx.compose.ui.geometry.Rect>() }
     var projectActions by remember { mutableStateOf<ProjectCommands?>(null) }
     val scene=remember { authoring.map { workspace -> SceneWorkspaceState(workspace.catalog).apply {
@@ -179,6 +182,23 @@ private fun launchEditor(args: Array<String>) = application {
     val appIcon=androidx.compose.ui.res.painterResource("sle/editor/branding/sle-256.png")
     val project=workspace.project
     val manager=workspace.windows
+    val tilesetWorkspace=remember { sle.editor.project.assets.TilesetEditorWorkspace() }
+    var createdTileset by remember { mutableStateOf<Pair<java.nio.file.Path,String>?>(null) }
+    fun liveTilesetScales(asset: sle.editor.project.assets.TilesetEditorAsset): List<Double> {
+        if(project.opened?.root?.toAbsolutePath()?.normalize()!=asset.project) return emptyList()
+        return scene.getOrNull()?.tileLayerDocuments().orEmpty()
+            .filter { it.collisionEnabled && it.tileset=="project-asset://${asset.id}" }.map { it.pixelsPerUnit }
+    }
+    fun confirmTilesetExit(): Boolean {
+        val dirty=tilesetWorkspace.dirtyAssets
+        if(dirty.isEmpty()) return true
+        val choice=sle.editor.ui.dialog.EditorPrompts.choose("Unsaved Tilesets",
+            "Save changes to ${dirty.joinToString { it.relative }}?",listOf("Save All","Discard"),default=0)
+        if(choice<0) return false
+        if(choice==1) return true
+        return runCatching { dirty.forEach { tilesetWorkspace.save(it,liveTilesetScales(it)) };true }
+            .getOrElse { workspace.notices.error(it.message ?: "Could not save tilesets");false }
+    }
     val assetBrowserVisible=PanelId("assets") !in manager.layout.hidden
     val requestedProject=args.indexOf("--project").takeIf { it>=0 }?.let { args.getOrNull(it+1) }
     val requestedScene=args.indexOf("--scene").takeIf { it>=0 }?.let { args.getOrNull(it+1) }
@@ -296,7 +316,7 @@ private fun launchEditor(args: Array<String>) = application {
         }
     }
     val watchdog=remember {
-        if (testing) Timer(if(documentSmoke || walkSmoke) 150_000 else if(distributionSmoke || dockingSmoke || appearanceSmoke || assetSmoke || tileSmoke) 90_000 else 30_000) {
+        if (testing) Timer(if(documentSmoke || walkSmoke) 150_000 else if(distributionSmoke || dockingSmoke || appearanceSmoke || assetSmoke || tileSmoke || freshTileSmoke || tilesetSmoke) 90_000 else 30_000) {
             System.err.println("EDITOR_SMOKE_FAIL: viewport timed out")
             exitProcess(1)
         }.apply { isRepeats=false; start() } else null
@@ -307,7 +327,7 @@ private fun launchEditor(args: Array<String>) = application {
         "SLE Editor ${EditorVersion.text}"+(engine?.let { " · engine $it" } ?: "")
     }
     Window(
-        onCloseRequest={ if (manager.requestExit { (testing && !dockingSmoke) || (!project.busy && confirmDiscard(authoring.getOrNull()) && confirmDiscardScene(scene.getOrNull()) && workspace.saveProjectEditorState()) }) { watchdog?.stop(); exitApplication() } },
+        onCloseRequest={ if (manager.requestExit { (testing && !dockingSmoke) || (!project.busy && confirmDiscard(authoring.getOrNull()) && confirmDiscardScene(scene.getOrNull()) && confirmTilesetExit() && workspace.saveProjectEditorState()) }) { watchdog?.stop(); exitApplication() } },
         title=project.opened?.let { "$editorTitle — ${it.document.name}" } ?: editorTitle,
         state=windowState,
         icon=appIcon,
@@ -366,13 +386,37 @@ private fun launchEditor(args: Array<String>) = application {
                     watchdog?.stop();exitApplication()
                 } catch(failure: Throwable) { canvas?.stopRendering();failure.printStackTrace();exitProcess(1) }
             }
+            if (tilesetSmoke) {
+                try {
+                    window.isAlwaysOnTop=true;window.toFront()
+                    while(readyFrames<5 || projectActions==null) delay(30)
+                    sle.editor.smoke.runTilesetEditorSmoke(window,projectActions!!.openPath,project,
+                        {observedAssets},{observedAssetCommands},tilesetWorkspace,manager,{canvas},assetBounds)
+                    watchdog?.stop();exitApplication()
+                } catch(failure: Throwable) { canvas?.stopRendering();failure.printStackTrace();exitProcess(1) }
+            }
+            if (freshTileSmoke) {
+                try {
+                    window.isAlwaysOnTop = true
+                    window.toFront()
+                    while (readyFrames < 5 || projectActions == null) delay(30)
+                    sle.editor.smoke.runFreshTilemapSmoke(window, projectActions!!.openPath, project, scene.getOrThrow(),
+                        { canvas }, workspace.tools, { observedAssets }, { observedAssetCommands }, { observedTileLayers },
+                        paletteBesideDetails = {
+                            manager.layout.tabs().any { PanelId("inspector") in it.panels && it.active == PanelId("tilePalette") }
+                        }, bounds = shellBounds)
+                    watchdog?.stop()
+                    exitApplication()
+                } catch (failure: Throwable) { canvas?.stopRendering(); failure.printStackTrace(); exitProcess(1) }
+            }
             if (tileSmoke) {
                 try {
                     window.isAlwaysOnTop = true
                     window.toFront()
                     while (readyFrames < 5 || projectActions == null) delay(30)
                     sle.editor.smoke.runTilePaintingSmoke(projectActions!!.openPath, project, scene.getOrThrow(),
-                        { canvas }, workspace.tools, scenePlayback) {
+                        { canvas }, workspace.tools, scenePlayback,
+                        { manager.layout.tabs().any { it.active == PanelId("tilePalette") } }) {
                         repeat(100) { if ("Tile Palette" !in shellBounds) delay(30) }
                         val point = shellBounds.getValue("Tile Palette").center
                         val origin = window.contentPane.locationOnScreen
@@ -563,7 +607,7 @@ private fun launchEditor(args: Array<String>) = application {
             if (tileProject != null && tileScene != null) {
                 sle.editor.ui.SyncTilePainting(tileScene, tileProject, assets?.snapshot, tileOptions, workspace.tools)
             }
-            SideEffect { if(assetSmoke || documentSmoke || runtimeSmoke || appearanceSmoke) observedAssets=assets }
+            SideEffect { if(assetSmoke || documentSmoke || runtimeSmoke || appearanceSmoke || freshTileSmoke || tilesetSmoke) observedAssets=assets }
             val recentDirectory=remember { if(testing) java.nio.file.Files.createTempDirectory("sle-smoke-recents") else null }
             val projectScripts = rememberProjectLuaScripts(project.opened, project.activationRevision, recentDirectory) {
                 engineSession.owner.console.commandMessage(it, ConsoleSeverity.ERROR)
@@ -619,13 +663,38 @@ private fun launchEditor(args: Array<String>) = application {
                 engineSession.owner.setEditorAssetRoot(opened?.let { it.root.resolve(it.document.assetRoot) },
                     opened?.document?.settings ?: sle.editor.project.ProjectSettings())
             }
+            fun openTilesetAsset(relative: String) {
+                if(project.busy || !scenePlayback.editing || project.opened?.file!=tileProject?.file) return
+                val opened=project.opened ?: return
+                val snapshot=assets?.snapshot ?: return
+                runCatching {
+                    tilesetWorkspace.open(opened.root,opened.assets,relative,snapshot)
+                    manager.focusPanel(PanelId("tilesetEditor"))
+                }.onFailure { notices.error(it.message ?: "Could not open tileset") }
+            }
             val assetCommands=projectAssetControls(project,assets,window,canMutate={
                 scenePlayback.editing && scene.getOrNull()?.let { it.file==null && !it.dirty && it.entities.isEmpty() && it.allAssets().isEmpty() }!=false &&
                     authoring.getOrNull()?.let { it.file==null && !it.dirty && it.assets.isEmpty() }!=false
             },onTextureFilterChanged=engineSession.owner::refreshPreview,
                 openDocument={ documents?.openPath?.invoke(it) },
-                openProjectSettings=commands.settings)
-            SideEffect { if(assetSmoke) observedAssetCommands=assetCommands }
+                openProjectSettings=commands.settings,
+                onTilesetCreated={ relative -> workspace.tools.tilePainting.newLayerTileset=relative;tileProject?.root?.let { createdTileset=it to relative } },
+                openTileset=::openTilesetAsset)
+            LaunchedEffect(createdTileset,assets?.snapshot) {
+                val created=createdTileset
+                if(created!=null && project.opened?.root!=created.first) createdTileset=null
+                else if(created!=null && assets?.snapshot?.idsByPath?.containsKey(created.second)==true) {
+                    openTilesetAsset(created.second);createdTileset=null
+                }
+            }
+            SideEffect { if(assetSmoke || freshTileSmoke || tilesetSmoke) observedAssetCommands=assetCommands }
+            assetCommands?.tilesetTexture?.let { texture ->
+                key(texture) {
+                    sle.editor.project.assets.SpritesheetDialog(texture,assets?.snapshot?.spriteRegions?.get(texture).orEmpty(),
+                        assetCommands,{ id -> Modifier.onGloballyPositioned { if(freshTileSmoke) shellBounds[id]=it.boundsInWindow() } },
+                        assetCommands.closeTileset)
+                }
+            }
             val creationScope = rememberCoroutineScope()
             val currentScriptTarget by rememberUpdatedState(inspector)
             val currentScriptAssets by rememberUpdatedState(assets)
@@ -643,7 +712,73 @@ private fun launchEditor(args: Array<String>) = application {
                         }
                     }
                 }
+            fun openTilemapPalette() {
+                workspace.tools.activate(sle.editor.viewport.tools.ViewportToolId.Tiles)
+                showScene(false)
+                manager.showPanel(PanelId("tilePalette"))
+            }
+            fun createMap(convert: Boolean = false) {
+                val opened = tileProject ?: return
+                val target = tileScene ?: return
+                if (project.busy || !scenePlayback.editing || scene.getOrNull() !== target || project.opened !== opened) return
+                runCatching {
+                    val palettes = tileOptions.orEmpty().mapNotNull { it.palette }
+                    val conversion = if (convert) sle.editor.model.convertLegacyTilemap(target.name,
+                        requireNotNull(target.document().tileLayers), palettes) else null
+                    val first = palettes.firstOrNull()
+                    val map = conversion?.map ?: sle.editor.model.TilemapDocument.empty("Tilemap", first?.width ?: 16, first?.height ?: 16)
+                    val file = sle.editor.ui.EditorFilePicker.save(if (convert) "Convert Legacy Tilemap" else "New Tilemap",
+                        opened.assets.toFile(), "${map.name}.tilemap.json", sle.editor.ui.EditorFilePicker.Filter("Tilemap", "tilemap.json"), "tilemap.json") ?: return
+                    check(scene.getOrNull() === target && project.opened === opened && !project.busy && scenePlayback.editing) { "The scene or project changed" }
+                    val path = file.toPath().toAbsolutePath().normalize()
+                    require(path.startsWith(opened.assets.toAbsolutePath().normalize())) { "Create tilemaps beneath project Assets" }
+                    require(path.fileName.toString().endsWith(".tilemap.json", true)) { "Use .tilemap.json" }
+                    val relative = opened.assets.toAbsolutePath().normalize().relativize(path).toString().replace('\\', '/')
+                    sle.editor.project.assets.ProjectAssetOperations(opened).createFile(relative, map.serialize().encodeToByteArray())
+                    target.history.group(if (convert) "Convert Legacy Tilemap" else "Create Tilemap") {
+                        target.placeTilemap(path, conversion?.translation, convert)
+                        if (!convert && first != null) target.activeTileLayer = target.addTileLayer(first.reference)
+                    }
+                    assets?.refresh()
+                    openTilemapPalette()
+                }.onFailure { target.error = it.message }
+            }
+            fun placeExistingMap() {
+                val opened = tileProject ?: return; val target = tileScene ?: return
+                if (project.busy || !scenePlayback.editing || scene.getOrNull() !== target || project.opened !== opened) return
+                runCatching {
+                    val file = sle.editor.ui.EditorFilePicker.open("Place Tilemap", opened.assets.toFile(),
+                        sle.editor.ui.EditorFilePicker.Filter("Tilemap", "tilemap.json")) ?: return
+                    check(scene.getOrNull() === target && project.opened === opened && !project.busy && scenePlayback.editing) { "The scene or project changed" }
+                    val path = file.toPath().toAbsolutePath().normalize()
+                    require(path.startsWith(opened.assets.toAbsolutePath().normalize())) { "Select a tilemap in project Assets" }
+                    val relative = opened.assets.toAbsolutePath().normalize().relativize(path).toString().replace('\\', '/')
+                    sle.editor.project.assets.assetPath(opened.root, opened.assets, relative)
+                    sle.editor.project.assets.AssetIdentity.ensure(path)
+                    target.placeTilemap(path)
+                    openTilemapPalette()
+                }.onFailure { target.error = it.message }
+            }
+            val tileLayerCreation = if (tileProject == null || tileScene == null) null else sle.editor.ui.TileLayerCreation(
+                sle.editor.ui.tilesetMenuChoices(tileOptions.orEmpty()),
+                create = { reference ->
+                    runCatching { tileScene.addTileLayer(reference) }.onSuccess { layer ->
+                        workspace.tools.activate(sle.editor.viewport.tools.ViewportToolId.Tiles)
+                        tileScene.activeTileLayer = layer
+                        workspace.tools.tilePainting.selectMode(sle.editor.model.TilePaintMode.Brush)
+                        showScene(false)
+                        manager.showPanel(PanelId("tilePalette"))
+                    }.onFailure { tileScene.error = it.message }
+                },
+                newTileset = { assetCommands?.newTileset?.invoke() },
+                newMap = { createMap() }, existingMap = { placeExistingMap() },
+                convertLegacy = if (tileScene.document().tileLayers.isNullOrEmpty()) null else ({ createMap(true) }))
+            SideEffect { if (freshTileSmoke) observedTileLayers = tileLayerCreation }
+            LaunchedEffect(tileScene, tileScene?.selectedKey) {
+                if (tileScene?.selected?.document?.components?.containsKey("Tilemap") == true) manager.showPanel(PanelId("tilePalette"))
+            }
             CompositionLocalProvider(
+                sle.editor.ui.LocalTileLayerCreation provides tileLayerCreation,
                 LocalNewScriptBehavior provides newScriptBehavior,
                 LocalProjectAssets provides assetCommands,
                 sle.editor.ui.LocalEditorNotices provides notices,
@@ -652,8 +787,8 @@ private fun launchEditor(args: Array<String>) = application {
                 },
             ) {
             val editorMenuHandler=editorMenuLauncher {
-                if(mode==ViewportMode.Scene) scene.getOrNull()?.let { sceneCreationMenu(it,scenePlayback.editing,onEditEntity={ key -> editSceneEntity(key) },position=engineSession.owner.contextPosition) } ?: emptyList()
-                else activeEntity?.let { entityCreationMenu(it,linkedEntity!=null,assetCommands) } ?: emptyList()
+                if(mode==ViewportMode.Scene) scene.getOrNull()?.let { sceneCreationMenu(it,scenePlayback.editing,onEditEntity={ key -> editSceneEntity(key) },position=engineSession.owner.contextPosition,editableNow={ scenePlayback.editing && mode==ViewportMode.Scene && scene.getOrNull()===it && !project.busy },tileLayers=tileLayerCreation) } ?: emptyList()
+                else activeEntity?.let { entityCreationMenu(it,linkedEntity!=null,assetCommands,editable={ scenePlayback.editing && mode==ViewportMode.Entity && !project.busy }) } ?: emptyList()
             }
             // One command context for menus, toolbar actions and the keyboard dispatcher.
             val consoleScope = rememberCoroutineScope()
@@ -754,6 +889,7 @@ private fun launchEditor(args: Array<String>) = application {
                     canvas?.frameBounds(bounds)
                 }
                 override fun configureSnap() { snapDialog=true }
+                override fun openTilePalette()=manager.showPanel(PanelId("tilePalette"))
                 override fun runProject()=run()
                 override fun showKeyboardShortcuts()=sle.editor.ui.showKeyboardShortcuts(keymap)
             } }
@@ -812,7 +948,7 @@ private fun launchEditor(args: Array<String>) = application {
             }
             val desiredProject=scenePlayback.project
             val desiredPlayback=if(mode==ViewportMode.Scene) scenePlayback.playback else playback
-            val desiredSource=if(mode==ViewportMode.Scene) scenePlayback.source ?: scene.getOrNull()?.serialize() ?: "{\"entities\":[]}"
+            val desiredSource=if(mode==ViewportMode.Scene) scenePlayback.source ?: scene.getOrNull()?.previewSerialize() ?: "{\"entities\":[]}"
                 else activeEntity?.document?.let { if(linkedEntity!=null) isolatedComponentPreview(it,scene.getOrThrow().entities.map { it.document.key }).serialize() else it.serialize() } ?: fallbackDocument
             val desiredGame=scenePlayback.gameView
             SideEffect {
@@ -887,55 +1023,80 @@ private fun launchEditor(args: Array<String>) = application {
                         }
                     } else {
                         // The heavyweight viewport covers Compose popups that extend below the toolbar.
-                        sle.editor.ui.controls.EditorToolbar(tooltipsAbove = true) {
-                            if (project.opened != null && !entity) {
+                        // One line: tools on the left, view options on the right; what does not fit goes into ⋯.
+                        val toolbarContext = commandContext()
+                        fun commandEntry(command: sle.editor.command.EditorCommand, label: String = command.menuLabel ?: command.label) =
+                            command.menuEntry(toolbarContext, keymap, label, liveContext = { liveCommandContext() })
+                        val toolbarGroups = buildList {
+                            if (project.opened != null && !entity) add(sle.editor.ui.controls.ToolbarGroup("run",
+                                menu = { listOf(commandEntry(sle.editor.command.PlayCommands.runProject)) }) {
                                 val command = sle.editor.command.PlayCommands.runProject
                                 EditorButton(command.label,
                                     onClick = { liveCommandContext().let { if (command.enabled(it)) command.run(it) } },
                                     enabled = command.enabled(commandContext()),
                                     help = keymap.hint(command.id),
                                     modifier = Modifier.onGloballyPositioned { if(documentSmoke || runtimeSmoke) assetBounds["RunProject"]=it.boundsInWindow() })
-                            }
-                            if (mode == ViewportMode.Scene) SceneViewControls({ liveCommandContext() }, keymap)
-                            if(mode==ViewportMode.Sandbox) SandboxControls(playback,!failed) { playback=it }
-                            if(!game) Row(horizontalArrangement=Arrangement.spacedBy(m.borderWidth)) {
-                                if((project.opened!=null && !entity) || mode==ViewportMode.Scene || mode==ViewportMode.Sandbox) sle.editor.ui.controls.EditorToolbarDivider()
-                                sle.editor.ui.controls.EditorGlyphButton("Zoom in",{panelCanvas?.zoomEntity(.8f)},modifier=Modifier.onGloballyPositioned { if(dockingSmoke && !entity) shellBounds["SceneZoomIn"]=it.boundsInWindow() }) { tint ->
-                                    sle.editor.ui.controls.EditorGlyphIcon(sle.editor.ui.controls.EditorGlyph.Plus,tint) }
-                                sle.editor.ui.controls.EditorGlyphButton("Zoom out",{panelCanvas?.zoomEntity(1.25f)}) { tint ->
-                                    sle.editor.ui.controls.EditorGlyphIcon(sle.editor.ui.controls.EditorGlyph.Minus,tint) }
-                                EditorButton("Fit",{panelCanvas?.fitEntity()},help="Fit content",style=sle.editor.ui.controls.EditorButtonStyle.Ghost)
-                            }
-                            if(!game) {
-                                // Scene tools (Q/W) in the Scene view; snapping also applies to the prefab workspace's handles.
-                                sle.editor.ui.controls.EditorToolbarDivider()
+                            })
+                            if (mode == ViewportMode.Scene) add(sle.editor.ui.controls.ToolbarGroup("play", menu = {
+                                with(sle.editor.command.PlayCommands) { listOf(play, pause, step, stop).map { commandEntry(it) } }
+                            }) { SceneViewControls({ liveCommandContext() }, keymap) })
+                            if (mode == ViewportMode.Sandbox) add(sle.editor.ui.controls.ToolbarGroup("sandbox", menu = {
+                                listOf(sle.editor.ui.EditorMenuEntry(if(playback==Playback.Paused) "Resume" else "Run",!failed && playback!=Playback.Running) { playback=Playback.Running },
+                                    sle.editor.ui.EditorMenuEntry("Pause",!failed && playback==Playback.Running) { playback=Playback.Paused },
+                                    sle.editor.ui.EditorMenuEntry("Stop",!failed && playback!=Playback.Stopped) { playback=Playback.Stopped })
+                            }) { SandboxControls(playback,!failed) { playback=it } })
+                            if (!game) add(sle.editor.ui.controls.ToolbarGroup("tools", menu = {
+                                with(sle.editor.command.ToolCommands) {
+                                    (tools + tiles).map { commandEntry(it) } + listOf(sle.editor.ui.EditorMenuEntry.Separator,
+                                        commandEntry(toggleSnap, toggleSnapLabel(toolbarContext)), commandEntry(configureSnap),
+                                        commandEntry(togglePivot, togglePivotLabel(toolbarContext)))
+                                }
+                            }) {
+                                // Scene tools (Q/W/E/R, Tiles) in the Scene view; snapping also applies to the prefab workspace's handles.
+                                val tilesCommand=sle.editor.command.ToolCommands.tiles
                                 sle.editor.ui.ViewportToolControls(if(!entity && mode==ViewportMode.Scene) workspace.tools else null,workspace.snap,
-                                    onConfigure={ snapDialog=true },onToolBounds={ id,bounds -> if(sceneSmoke) shellBounds["Tool"+id.name]=bounds })
-                            }
-                            if (!entity && !game && mode == ViewportMode.Scene) {
-                                val opened = project.opened
-                                val state = scene.getOrNull()
-                                if (opened != null && state != null) {
-                                    val command = sle.editor.command.ToolCommands.tiles
+                                    onConfigure={ snapDialog=true },onToolBounds={ id,bounds -> if(sceneSmoke || freshTileSmoke) shellBounds["Tool"+id.name]=bounds },
+                                    tiles=if(project.opened!=null && scene.getOrNull()!=null) ({ liveCommandContext().let { if(tilesCommand.enabled(it)) tilesCommand.run(it) } }) else null,
+                                    tilesEnabled=tilesCommand.enabled(commandContext()) && !project.busy)
+                            })
+                            val tileState = scene.getOrNull()
+                            if (!entity && !game && mode == ViewportMode.Scene && project.opened != null && tileState != null) {
+                                val command = sle.editor.command.ToolCommands.tiles
+                                add(sle.editor.ui.controls.ToolbarGroup("tiles", menu = { listOf(commandEntry(command, "Tile Palette")) }) {
                                     EditorButton("Tile Palette", {
                                         liveCommandContext().let { if (command.enabled(it)) command.run(it) }
                                         manager.showPanel(PanelId("tilePalette"))
                                     }, enabled = command.enabled(commandContext()) && !project.busy,
                                         help = keymap.hint(command.id, "Open the tile palette"),
                                         modifier = Modifier.onGloballyPositioned { if (tileSmoke) shellBounds["Tile Palette"] = it.boundsInWindow() },
-                                        primary = workspace.tools.active == sle.editor.viewport.tools.ViewportToolId.Tiles)
-                                    val activeLayer = workspace.tools.tilePainting.layerId?.let(state::tileLayer)
+                                        style = sle.editor.ui.controls.EditorButtonStyle.Ghost,
+                                        selected = workspace.tools.active == sle.editor.viewport.tools.ViewportToolId.Tiles)
+                                    val activeLayer = workspace.tools.tilePainting.layerId?.let(tileState::tileLayer)
                                     if (workspace.tools.active == sle.editor.viewport.tools.ViewportToolId.Tiles) {
                                         if (activeLayer?.locked == true) EditorLabel("${activeLayer.name} is locked")
                                         else if (activeLayer?.visible == false) EditorLabel("${activeLayer.name} is hidden")
                                     }
-                                }
+                                })
                             }
-                            if(!game && scenePlayback.editing) inspector?.let {
-                                sle.editor.ui.controls.EditorToolbarDivider()
-                                GizmoControls(it,entityOnly=!entity)
-                            }
+                            val gizmoTarget = inspector
+                            if (!game && scenePlayback.editing && gizmoTarget != null) add(sle.editor.ui.controls.ToolbarGroup("gizmo", menu = {
+                                listOf(commandEntry(sle.editor.command.EditCommands.undo, sle.editor.command.EditCommands.undoLabel(toolbarContext)),
+                                    commandEntry(sle.editor.command.EditCommands.redo, sle.editor.command.EditCommands.redoLabel(toolbarContext)))
+                            }) { GizmoControls(gizmoTarget,entityOnly=!entity) })
+                            if (!game) add(sle.editor.ui.controls.ToolbarGroup("view", end = true, menu = {
+                                listOf(sle.editor.ui.EditorMenuEntry("Zoom In") { panelCanvas?.zoomEntity(.8f) },
+                                    sle.editor.ui.EditorMenuEntry("Zoom Out") { panelCanvas?.zoomEntity(1.25f) },
+                                    sle.editor.ui.EditorMenuEntry("Fit") { panelCanvas?.fitEntity() })
+                            }) {
+                                sle.editor.ui.controls.EditorGlyphButton("Zoom in",{panelCanvas?.zoomEntity(.8f)},modifier=Modifier.onGloballyPositioned { if(dockingSmoke && !entity) shellBounds["SceneZoomIn"]=it.boundsInWindow() }) { tint ->
+                                    sle.editor.ui.controls.EditorGlyphIcon(sle.editor.ui.controls.EditorGlyph.Plus,tint) }
+                                sle.editor.ui.controls.EditorGlyphButton("Zoom out",{panelCanvas?.zoomEntity(1.25f)}) { tint ->
+                                    sle.editor.ui.controls.EditorGlyphIcon(sle.editor.ui.controls.EditorGlyph.Minus,tint) }
+                                EditorButton("Fit",{panelCanvas?.fitEntity()},help="Fit content",style=sle.editor.ui.controls.EditorButtonStyle.Ghost)
+                            })
                         }
+                        // The heavyweight viewport covers Compose popups that extend below the toolbar.
+                        sle.editor.ui.controls.EditorToolbarRow(toolbarGroups, tooltipsAbove = true)
                         sle.editor.ui.controls.EditorSeparator()
                         if(failed) EditorLabel(status,Modifier.padding(horizontal=m.panelPadding,vertical=m.gap),color=MaterialTheme.colors.error)
                         if(!ready && !failed) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -967,10 +1128,10 @@ private fun launchEditor(args: Array<String>) = application {
             Surface(Modifier.fillMaxSize(),color=sle.editor.ui.theme.LocalEditorColors.current.background) {
                 Column {
                     val context = commandContext()
-                    val baseMenus=editorApplicationMenus(context,onScale={uiScale=it},keymap=keymap,
+                    val baseMenus=editorApplicationMenus(context,onScale={uiScale=it},keymap=keymap,liveContext={ liveCommandContext() },tileLayers=tileLayerCreation,
                         onTheme={ workspace.appearance.update(appearance.copy(mode=it)) },
                         onDensity={ workspace.appearance.update(appearance.copy(density=it)) },
-                        onExit={if(manager.requestExit { !project.busy && confirmDiscard(authoring.getOrNull()) && confirmDiscardScene(scene.getOrNull()) && workspace.saveProjectEditorState() }) exitApplication()},
+                        onExit={if(manager.requestExit { !project.busy && confirmDiscard(authoring.getOrNull()) && confirmDiscardScene(scene.getOrNull()) && confirmTilesetExit() && workspace.saveProjectEditorState() }) exitApplication()},
                         projectEntries=projectFileMenu(project,commands,scenePlayback.editing)+listOf(
                             sle.editor.ui.EditorMenuEntry("Export Game…",project.opened!=null && !project.busy,action=distribution.exportGame),
                             sle.editor.ui.EditorMenuEntry("Export Content Update…",project.opened!=null && !project.busy,action=distribution.exportUpdate),
@@ -981,6 +1142,7 @@ private fun launchEditor(args: Array<String>) = application {
                         when (panel.value) {
                             "entity" -> workspace.prefabSession
                             "tilePalette" -> tileProject != null && tileScene != null
+                            "tilesetEditor" -> tileProject != null
                             else -> false
                         }
                     }.let { (label, entries) ->
@@ -1010,9 +1172,9 @@ private fun launchEditor(args: Array<String>) = application {
                                 sle.editor.ui.LiveHierarchy(engineSession.owner.liveInspection, engineSession.owner::selectLiveEntity)
                             } else Box(Modifier.fillMaxSize().assetDropTarget { path,_ -> dropAsset(path,null) }) {
                                 if(mode==ViewportMode.Scene) scene.getOrNull()?.let { state ->
-                                    SceneWorkspace(state,onEditEntity={editSceneEntity(it)},onEntityBounds={key,bounds -> if(sceneSmoke || menuSmoke || documentSmoke || walkSmoke) treeNodeBounds[key]=bounds},editable=scenePlayback.editing)
-                                } else if(linkedEntity!=null) SceneTree(scene.getOrThrow(),Modifier.fillMaxSize(),onEditEntity={editSceneEntity(it)})
-                                else activeEntity?.let { EntityOutline(it,Modifier.fillMaxSize()) }
+                                    SceneWorkspace(state,onEditEntity={editSceneEntity(it)},onEntityBounds={key,bounds -> if(sceneSmoke || menuSmoke || documentSmoke || walkSmoke) treeNodeBounds[key]=bounds},editable=scenePlayback.editing,editableNow={ liveCommandContext().let { it.scene === state && it.editable && !it.gameRunning && !it.projectBusy } })
+                                } else if(linkedEntity!=null) SceneTree(scene.getOrThrow(),Modifier.fillMaxSize(),onEditEntity={editSceneEntity(it)},editableNow={ liveCommandContext().let { it.editable && !it.gameRunning && !it.projectBusy } })
+                                else activeEntity?.let { EntityOutline(it,Modifier.fillMaxSize(),editable={ liveCommandContext().let { it.editable && !it.gameRunning && !it.projectBusy } }) }
                             }
                         },
                         PanelId("inspector") to {
@@ -1042,7 +1204,7 @@ private fun launchEditor(args: Array<String>) = application {
                         PanelId("assets") to {
                             if(assets==null) EditorEmptyState("No project open","Open or create a project to browse its assets.",brand=true)
                             else AssetBrowserPanel(assets,project.opened?.document?.assetRoot ?: "Assets",Modifier.fillMaxSize(),commands=assetCommands,onOpen={ relative -> project.opened?.let { documents?.openPath?.invoke(it.root.resolve(it.document.assetRoot).resolve(relative)) } },
-                                dragPath={ relative -> project.opened?.let { it.root.resolve(it.document.assetRoot).resolve(relative) } },onBounds={id,bounds -> if(assetSmoke || documentSmoke || runtimeSmoke) assetBounds[id]=bounds},
+                                dragPath={ relative -> project.opened?.let { it.root.resolve(it.document.assetRoot).resolve(relative) } },onBounds={id,bounds -> if(assetSmoke || documentSmoke || runtimeSmoke || tilesetSmoke) assetBounds[id]=bounds},
                                 onOpenScript={ relative, id -> openScriptSource { scriptSources.openAsset(relative, id) } },
                                 tileLayerScales = { id ->
                                     scene.getOrNull()?.tileLayerDocuments().orEmpty()
@@ -1051,6 +1213,23 @@ private fun launchEditor(args: Array<String>) = application {
                                 entityDrop=if(scene.getOrNull()?.projectCreatePrefab==null) null else { relative,payload ->
                                     project.opened?.let { dropEntity(it.root.resolve(it.document.assetRoot).resolve(relative),payload) }
                                 })
+                        },
+                        PanelId("tilesetEditor") to {
+                            val asset=tilesetWorkspace.current(project.opened?.root)
+                            sle.editor.project.assets.TilesetEditorPanel(asset,
+                                enabled=asset!=null && !project.busy && assetCommands?.busy!=true && scenePlayback.editing,
+                                save={
+                                    check(asset!=null && tilesetWorkspace.current(project.opened?.root)===asset) { "The active project changed." }
+                                    tilesetWorkspace.save(asset,liveTilesetScales(asset))
+                                    assets?.refresh();engineSession.owner.refreshPreview()
+                                    notices.success("Saved ${asset.relative}")
+                                }, revert={
+                                    check(asset!=null && tilesetWorkspace.current(project.opened?.root)===asset) { "The active project changed." }
+                                    tilesetWorkspace.open(asset.project,asset.assets,asset.relative,checkNotNull(assets?.snapshot),reload=true)
+                                }, setCollisions={ updates ->
+                                    check(asset!=null && tilesetWorkspace.current(project.opened?.root)===asset) { "The active project changed." }
+                                    tilesetWorkspace.setCollisions(asset,updates,liveTilesetScales(asset))
+                                }, measured={ id -> Modifier.onGloballyPositioned { if(tilesetSmoke) assetBounds[id]=it.boundsInWindow() } })
                         },
                         PanelId("tilePalette") to {
                             when {
@@ -1061,7 +1240,7 @@ private fun launchEditor(args: Array<String>) = application {
                                 else -> sle.editor.ui.TilePaintingControls(tileScene, tileProject, assets?.snapshot,
                                     tileOptions, workspace.tools, activate = {
                                         workspace.tools.activate(sle.editor.viewport.tools.ViewportToolId.Tiles)
-                                    })
+                                    }, newTileset = { assetCommands?.newTileset?.invoke() })
                             }
                         },
                         PanelId("console") to {

@@ -129,17 +129,14 @@ internal suspend fun runAssetBrowserSmoke(
     println("Asset browser smoke: thumbnail displayed, regenerated, and refreshed after source replacement")
     val thumbnailPath = "Textures/thumbnail-smoke.png"
     initial.select(thumbnailPath)
+    var referenceItems: List<String> = emptyList()
+    val references = answerPrompts("Find References", { prompt ->
+        referenceItems = prompt.request.items
+        prompt.answer("Open")
+    })
     checkNotNull(assetCommands()).findReferences(thumbnailPath)
-    var referenceDialog: JOptionPane? = null
-    await("Find References dialog did not open") {
-        referenceDialog = Window.getWindows().filter { it.isShowing }
-            .flatMap { descendants(it) }.filterIsInstance<JOptionPane>().firstOrNull()
-        referenceDialog != null
-    }
-    val pane = checkNotNull(referenceDialog)
-    val sources = descendants(pane).filterIsInstance<JList<*>>().single()
-    check(sources.model.size == 1 && sources.model.getElementAt(0) == "Scenes/Thumbnail.scene.json")
-    pane.value = "Open"
+    await("Find References dialog did not open") { !references.isAlive }
+    check(referenceItems == listOf("Scenes/Thumbnail.scene.json")) { "Find References listed $referenceItems" }
     await("Find References did not open the referring scene") {
         scene.file == first.assets.resolve("Scenes/Thumbnail.scene.json")
     }
@@ -166,17 +163,7 @@ internal suspend fun runAssetBrowserSmoke(
             }
             check(chooser!=null) { "Import chooser did not open" }
             if(collision) {
-                var answered=false
-                repeat(250) {
-                    if(!answered) {
-                        SwingUtilities.invokeAndWait {
-                            val option=Window.getWindows().filter { it.isShowing }.flatMap { descendants(it) }.filterIsInstance<JOptionPane>().firstOrNull()
-                            if(option!=null) { option.value="Rename";answered=true }
-                        }
-                        if(!answered) Thread.sleep(20)
-                    }
-                }
-                check(answered) { "Import collision prompt did not open" }
+                answerPrompts("Import collision", press("Rename")).join()
             }
         } catch(failure: Throwable) { failure.printStackTrace() }
     }.apply { isDaemon=true;start() }
@@ -194,13 +181,13 @@ internal suspend fun runAssetBrowserSmoke(
     check(withContext(Dispatchers.IO) { Files.readString(first.assets.resolve("Scripts/ExternalBundle/modules/util.lua")) }=="return {}")
     var selectedAsset: Path?=null
     val existingScript=first.assets.resolve("Scripts/ExternalBundle/main.lua")
-    chooseImport(path=existingScript)
+    sle.editor.ui.EditorFilePicker.answerNext { listOf(existingScript.toAbsolutePath().toFile()) }
     assetCommands()!!.browse("",false) { selectedAsset=it }
     await("Project script Browse did not reuse existing source") { selectedAsset!=null }
     check(selectedAsset!!.toRealPath()==existingScript.toRealPath())
     check(initial.snapshot!!.idsByPath["Scripts/ExternalBundle/main.lua"]==importedId)
     selectedAsset=null
-    chooseImport(path=Path.of("assets/textures/tile2.png"))
+    sle.editor.ui.EditorFilePicker.answerNext { listOf(Path.of("assets/textures/tile2.png").toAbsolutePath().toFile()) }
     assetCommands()!!.browse("",true) { selectedAsset=it }
     await("Texture Browse did not copy to project storage") { selectedAsset!=null && has("Textures/tile2.png") }
     check(selectedAsset!!.toRealPath()==first.assets.resolve("Textures/tile2.png").toRealPath())
@@ -223,26 +210,6 @@ internal suspend fun runAssetBrowserSmoke(
     chooseFilter(AssetTextureFilter.Nearest, 2)
     println("PROJECT_TEXTURE_FILTER_UI_SMOKE_PASS nearest/linear/default/dirty-draft")
     // Actual managed-operation buttons and native prompts, with UUID/recovery checks.
-    fun answerPrompts(vararg answers: Any?): Thread = Thread {
-        for(answer in answers) {
-            var answered=false
-            repeat(350) {
-                if(!answered) {
-                    SwingUtilities.invokeAndWait {
-                        val option=Window.getWindows().filter { it.isShowing }.flatMap { descendants(it) }.filterIsInstance<JOptionPane>().firstOrNull()
-                        if(option!=null) {
-                            if(option.wantsInput) option.inputValue=answer ?: option.initialSelectionValue
-                            option.value=if(option.wantsInput) JOptionPane.OK_OPTION else answer
-                            answered=true
-                        }
-                    }
-                    if(!answered) Thread.sleep(20)
-                }
-            }
-            check(answered) { "Managed-operation prompt did not open" }
-            Thread.sleep(200)
-        }
-    }.apply { isDaemon=true;start() }
     val texturePath = "Textures/tile2.png"
     fun key(code: Int) { robot.keyPress(code); robot.keyRelease(code) }
     suspend fun enterField(id: String, text: String) {
@@ -309,10 +276,10 @@ internal suspend fun runAssetBrowserSmoke(
     scene.newScene()
     await("Scene draft did not replace the saved scene") { scene.file==null && !scene.dirty }
     click("AssetFolder:Data")
-    answerPrompts("Managed");click("AssetNewFolder")
+    answerPrompts("New Folder",press("Create","Managed"));click("AssetNewFolder")
     await("Managed folder missing") { has("Data/Managed") && assetCommands()?.busy==false }
     click("AssetFile:Data/Managed")
-    answerPrompts("Renamed",JOptionPane.OK_OPTION);click("AssetRename")
+    answerPrompts("Rename",press("Rename","Renamed"),press("Move"));click("AssetRename")
     await("Managed rename missing") { has("Data/Renamed") && !has("Data/Managed") && assetCommands()?.busy==false }
     // Collapse expanded Data so Scripts stays inside the dock's short tree viewport.
     initial.toggle("Data");delay(150)
@@ -324,7 +291,7 @@ internal suspend fun runAssetBrowserSmoke(
     val blocker=Thread { synchronized(AssetIdentity) { locked.countDown();release.await() } }.apply { isDaemon=true;start() }
     withContext(Dispatchers.IO) { check(locked.await(5,java.util.concurrent.TimeUnit.SECONDS)) }
     try {
-        answerPrompts("Data/Bundle",JOptionPane.OK_OPTION);click("AssetMove")
+        answerPrompts("Move",press("Move","Data/Bundle"),press("Move"));click("AssetMove")
         await("Managed move was not queued") { project.busy }
         check(!window.isEnabled) { "Managed mutation left authoring/playback input enabled while waiting for asset lock" }
     } finally { release.countDown() }
@@ -333,9 +300,9 @@ internal suspend fun runAssetBrowserSmoke(
     check(initial.snapshot!!.idsByPath["Data/Bundle/main.lua"]==importedId)
     click("AssetFolder:Data")
     click("AssetFile:Data/Bundle")
-    answerPrompts(JOptionPane.YES_OPTION);click("AssetDelete")
+    answerPrompts("Delete",press("Move to Trash"));click("AssetDelete")
     await("Managed delete missing") { !has("Data/Bundle") && assetCommands()?.busy==false }
-    answerPrompts(null);click("AssetRecover")
+    answerPrompts("Recover",press("Restore"));click("AssetRecover")
     await("Managed recovery missing") { has("Data/Bundle/main.lua") && assetCommands()?.busy==false }
     check(initial.snapshot!!.idsByPath["Data/Bundle/main.lua"]==importedId)
     // Return the fixture so the rest of the browser regression keeps its original paths.

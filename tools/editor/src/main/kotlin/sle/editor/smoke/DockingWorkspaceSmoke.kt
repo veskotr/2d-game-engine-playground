@@ -63,8 +63,11 @@ internal suspend fun runDockingWorkspaceSmoke(
     val originalAppearance=workspace.appearance.value
     workspace.appearance.update(originalAppearance.copy(density=sle.editor.ui.theme.EditorDensity.Comfortable))
     delay(400) // Let native minimum size catch up after merging the split groups.
-    home.setSize(360,700);delay(400)
-    check(home.width<=400) { "Overflow fixture did not shrink: ${home.width}" }
+    // A newly registered tool may need more room than the old 360px fixture.
+    // Exercise tab overflow at the smallest width the current panel set permits.
+    val narrowWidth=home.minimumSize.width.coerceAtLeast(360)
+    home.setSize(narrowWidth,700);delay(400)
+    check(home.width<=narrowWidth+40) { "Overflow fixture did not shrink: ${home.width}" }
     manager.focusPanel(PanelId("hierarchy"));delay(200)
     workspace.prefabSession=true // The temporary Prefab tab only stays while a prefab is open.
     manager.focusPanel(PanelId("entity"))
@@ -162,9 +165,8 @@ internal suspend fun runDockingWorkspaceSmoke(
         repeat(250) {
             if(canceled.get()) return@Thread
             javax.swing.SwingUtilities.invokeAndWait {
-                val option=java.awt.Window.getWindows().filter { it.isShowing }
-                    .flatMap(::descendants).filterIsInstance<javax.swing.JOptionPane>().firstOrNull()
-                if(option!=null) { option.value=javax.swing.JOptionPane.NO_OPTION;canceled.set(true) }
+                val prompt=sle.editor.ui.dialog.EditorPrompts.current?.takeIf { promptWindow(it)!=null }
+                if(prompt!=null) { prompt.answer(1);canceled.set(true) }
             }
             Thread.sleep(20)
         }

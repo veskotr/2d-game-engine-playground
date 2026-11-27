@@ -15,9 +15,13 @@ internal object ToolCommands {
     private fun sceneView(ctx: CommandContext) = ctx.mode == ViewportMode.Scene && ctx.playback?.gameView != true && !ctx.viewportFailed
     private fun sceneReason(ctx: CommandContext) = if(sceneView(ctx)) null else "Show the Scene view to use its tools"
 
-    private fun tool(id: ViewportToolId) = EditorCommand(CommandId("tools.${id.name.lowercase()}"), "${id.label} Tool", icon = if (id == ViewportToolId.Tiles) null else "tool_${id.name.lowercase()}",
+    private fun tool(id: ViewportToolId) = EditorCommand(CommandId("tools.${id.name.lowercase()}"), "${id.label} Tool", icon = if (id == ViewportToolId.Tiles) "tilemap" else "tool_${id.name.lowercase()}",
         defaultChords = listOf(id.chord), scopes = sceneScopes,
-        enabled = { sceneView(it) && it.tools != null && (id != ViewportToolId.Tiles || it.projectOpen && it.editable) }, disabledReason = ::sceneReason) { ctx -> ctx.tools?.activate(id) }
+        enabled = { sceneView(it) && it.tools != null && (id != ViewportToolId.Tiles || it.projectOpen && it.editable) }, disabledReason = ::sceneReason) { ctx ->
+        ctx.tools?.activate(id)
+        // The Tiles tool paints from the palette, so choosing it always brings the palette up.
+        if (id == ViewportToolId.Tiles) ctx.actions.openTilePalette()
+    }
     val select = tool(ViewportToolId.Select)
     val move = tool(ViewportToolId.Move)
     val rotate = tool(ViewportToolId.Rotate)

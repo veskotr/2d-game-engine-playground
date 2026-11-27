@@ -2,6 +2,13 @@
 
 Follow the [tilemap room walkthrough](../../examples/tilemap_room/README.md) to import a PNG, paint a room and export it.
 
+Create a tileset in Assets with **New Tileset…**, then set up the grid and choose
+**Create Tileset…**. The editor writes a v2 tileset and opens the dockable
+**Tileset Editor**. Double-click a tileset in Assets to reopen it. Select tiles in
+the atlas to edit names, tags, custom properties and collision, then click **Save**.
+**Reslice** keeps tile UUIDs for matching rows and columns. The editor and
+runtime continue to load v1 tilesets. See the [tileset format](../../docs/topics/Scenes.md#native-project-tile-layers).
+
 Kotlin/JVM Compose Desktop authoring tool using SLE's native renderer and runtime.
 
 Terminology: the editor calls prefabs **Entity Templates** and the Inspector the **Details**
@@ -119,12 +126,20 @@ without project data or JNI. The foundation exposes `LocalEditorColors`,
 Use these tokens in subsequent UI migrations; load icons through `EditorIcons`.
 Roboto headings and body text use bundled licensed resources; numeric inputs retain
 monospace. Compose controls and Swing menus/dialogs share this font choice.
-Editor confirmations, input prompts and file choosers go through `EditorDialogs` and
-`EditorFileChooser` (`ui/EditorDialogAppearance.kt`): they keep `JOptionPane` /
-`JFileChooser` results and filters, but style only their own dialog roots instead of
-changing global `UIManager` defaults. Use them for new editor dialogs and pass
-`null` (or a component) as parent: `EditorDialogOwner` makes the active editor
-window the owner, so dialogs always open in front of it. `EditorFileChooser` uses
+Dialogs share one shell, `EditorDialogLayout` (`ui/dialog/EditorDialog.kt`): a
+padded body over a footer with the primary action rightmost and Cancel beside it.
+Esc runs Cancel and Enter runs the default action. Confirmations, messages, choices,
+text input (with inline validation), single-value selects and list picks go through
+the typed, blocking `EditorPrompts` calls, which open the shell in a modal window owned
+by the active editor window (`EditorDialogOwner`). Smokes answer a prompt through
+`EditorPrompts.current` and the `answerPrompts` helper.
+
+File pickers use the operating system's dialog through `EditorFilePicker`
+(`java.awt.FileDialog`); smokes queue answers with `EditorFilePicker.answerNext`.
+Folder pickers and Import… (files and folders together) still use the themed
+`EditorFileChooser` (`ui/EditorDialogAppearance.kt`), because `FileDialog` cannot pick
+folders on Windows. It styles only its own dialog root, not global `UIManager`
+defaults. `EditorFileChooser` uses
 `EditorFileChooserUI` (Metal layout without the system places bar, editor folder/
 file/action icons, slim scrollbars) instead of the system look-and-feel installed
 by Compose. On Windows, `EditorWindowChrome` themes every editor window caption
@@ -132,8 +147,9 @@ by Compose. On Windows, `EditorWindowChrome` themes every editor window caption
 best effort and otherwise leaves the OS caption. Drive/computer icons in choosers
 still come from the OS shell. Final dark/light visual acceptance is still pending.
 Workspace tabs, hierarchy and asset folders share compact theme controls and density
-metrics. Viewport commands wrap into one band; narrow tab strips scroll to the active
-tab. In the asset dock, the toolbar scrolls, Type/Size columns hide as width decreases,
+metrics. The Scene and Game toolbar (`EditorToolbarRow`) stays on one line: tool groups
+on the left, view options on the right, and groups that do not fit move into a ⋯ menu,
+view options first. Narrow tab strips scroll to the active tab. In the asset dock, the toolbar scrolls, Type/Size columns hide as width decreases,
 and **Details** exposes metadata and file actions below the list. Wide docks retain
 the sidebar. Resize Assets with the existing dock splitter. Saved placements remain
 compatible. Selection handles follow the theme's `selectionOutline`; the native C++
@@ -145,10 +161,15 @@ fields, checkbox/select, property rows, sections, panel headers, tooltips and tr
 rows. They consume theme metrics, semantic colors and `LocalEditorTypography`
 (body, secondary, heading, toolbar, brand, numeric in `ui/theme/EditorTypography.kt`);
 feature code should not set font sizes, control heights or colors itself.
-`EditorButtonStyle` has three emphases: **Primary** (filled green, the main action
-such as Play), **Secondary** (default; restrained fill and subtle outline) and
-**Ghost** (no resting chrome; zoom, undo/redo, navigation and dock actions).
-Property rows use 36% labels and fill the value column, stacking below 240dp;
+`EditorButtonStyle` has exactly four variants: **Primary** (filled green, the one
+action a surface exists for, such as Play or a dialog's confirm button), **Secondary**
+(default; restrained fill and subtle outline), **Ghost** (no resting chrome; zoom,
+undo/redo, navigation and dock actions) and **Danger** (filled error color, only to
+confirm something destructive, such as Delete or Discard).
+Forms use `EditorFormRow`: a fixed label column (`EditorMetrics.formLabel`) and one
+field height per density, so labels and fields line up down the form; group rows
+under `EditorSectionHeader` rather than boxes. Inspector property rows still use 36%
+labels and fill the value column, stacking below 240dp;
 labels display humanized keys (`linearDamping` → "Linear damping"). Swing menus
 and dialogs size text with `editorAwtFont` from the same tokens and the UI scale
 only (Java2D applies OS DPI). Roboto is the UI face; Handjet is reserved for
@@ -627,7 +648,14 @@ fixtures and reports to a temporary folder and uses the installed game runtimes.
 .\gradlew.bat run --args="--context-menu-smoke"
 .\gradlew.bat run --args="--project-smoke"
 .\gradlew.bat run --args="--asset-browser-smoke"
+.\gradlew.bat run --args="--tile-painting-smoke"
+.\gradlew.bat run --args="--fresh-tilemap-smoke"
+.\gradlew.bat run --args="--tileset-editor-smoke"
 ```
+
+`--tileset-editor-smoke` creates a v2 tileset in a temporary project, edits and
+saves metadata and collision, checks UUIDs across reslicing, and exercises the
+Tileset Editor in docked and detached windows.
 
 `--l1-walk-smoke` drives the editor-core walk (plan `docs/plans/editor-core-l1.md`,
 Session 7) with Robot: selection and marquee, W/E/R drags with snapping and Ctrl inversion,
@@ -832,3 +860,15 @@ Run `.\gradlew.bat build run --args=--layout-persistence-smoke` for fresh-proces
 standalone/project isolation, native minimized restore, reset/corruption recovery,
 and simulated display changes. Physical monitor unplug/reconnect and mixed-DPI
 native transitions still require manual checks.
+
+### Shared tilemap assets
+
+Use **Create → Tilemap → New Tilemap…** to save a `.tilemap.json` beneath Assets,
+or **Place Existing Tilemap…** to reuse one. The hierarchy contains the placing
+entity. Its Transform moves all layers together; layers have no independent origin.
+Selecting it opens the palette. **Add Tileset** permits mixed tilesets on one layer.
+Painting and scene transforms share Undo/Redo; saving the scene saves dirty maps.
+External source/identity conflicts fail safely. Use **Convert Legacy Tile Layers…**
+for compatible old scenes, and project export to include map dependencies.
+The existing `--fresh-tilemap-smoke` now covers creation, painting, save/reopen,
+movement and repeated placement and prints `TILEMAP_PLACEMENT_SMOKE_PASS` as well.

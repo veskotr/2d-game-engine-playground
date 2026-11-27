@@ -74,10 +74,7 @@ class EditorDialogAppearanceTest {
         assertEquals("audio",EditorFileChooserUI.fileKind("jump.ogg"))
         assertEquals("resource",EditorFileChooserUI.fileKind("notes.txt"))
     }
-    @Test fun messageIconsAndCaptionColorsAreEditorOwned() {
-        assertNull(EditorActionIcon.forMessage(JOptionPane.PLAIN_MESSAGE))
-        for(type in listOf(JOptionPane.ERROR_MESSAGE,JOptionPane.WARNING_MESSAGE,JOptionPane.INFORMATION_MESSAGE,JOptionPane.QUESTION_MESSAGE))
-            assertTrue(EditorActionIcon.forMessage(type) is EditorActionIcon)
+    @Test fun captionColorsAreEditorOwned() {
         assertEquals(0x332211,EditorWindowChrome.colorRef(androidx.compose.ui.graphics.Color(0xFF112233)))
     }
     @Test fun dialogOwnerPrefersExplicitParent() {
